@@ -1,6 +1,6 @@
 // Funkverkehr: Sprechwunsch-Warteschlange und Funkprotokoll.
 import { useEffect, useRef } from 'react';
-import { formatClock, formatDuration, shortCallsign } from '../../../shared/catalog';
+import { formatClock, formatDuration, radioName } from '../../../shared/catalog';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
 
@@ -40,7 +40,7 @@ export function RadioPanel({ ctx }: { ctx: GameCtx }) {
           {queue.map((u) => (
             <div key={u.id} className="speak-row">
               <span className="blink-dot" />
-              <b>{shortCallsign(u.callsign)}</b>
+              <b>{radioName(u.callsign)}</b>
               <span className="muted small">Status 5 seit {formatDuration(state.time - u.speak!.since)}</span>
               <button
                 className="primary small-btn"
@@ -55,7 +55,7 @@ export function RadioPanel({ ctx }: { ctx: GameCtx }) {
           ))}
           {waitingHospital.map((u) => (
             <div key={u.id} className="speak-row hospital">
-              <b>{shortCallsign(u.callsign)}</b>
+              <b>{radioName(u.callsign)}</b>
               <select
                 defaultValue=""
                 onChange={(e) => e.target.value && conn.send({ a: 'assignHospital', unitId: u.id, hospitalId: e.target.value })}
@@ -82,8 +82,8 @@ export function RadioPanel({ ctx }: { ctx: GameCtx }) {
         {state.radio.map((m) => (
           <div key={m.id} className={`radio-line ${m.kind} ${m.from === scn.ilsName ? 'out' : 'in'}`}>
             <span className="muted">{formatClock(state.clockStart, m.t)}</span>{' '}
-            <b>{m.from === scn.ilsName ? 'ILS' : shortCallsign(m.from)}</b>
-            {m.to !== scn.ilsName && <> → {shortCallsign(m.to)}</>}: {m.text}
+            <b>{m.from === scn.ilsName ? 'ILS' : radioName(m.from)}</b>
+            {m.to !== scn.ilsName && <> → {radioName(m.to)}</>}: {m.text}
           </div>
         ))}
       </div>

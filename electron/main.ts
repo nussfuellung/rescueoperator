@@ -1,6 +1,7 @@
 // Electron-Hauptprozess: Fenster, Leitstellen-Bibliothek, Host-Server.
-import { app, BrowserWindow, dialog, ipcMain, net, session, shell } from 'electron';
-import { mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync, statSync } from 'node:fs';
+import { app, BrowserWindow, dialog, ipcMain, net, session, shell, systemPreferences } from 'electron';
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync, statSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import { join } from 'node:path';
 import { recomputeHouseNumbers } from '../shared/geo';
 import { generateScenario } from '../shared/mapgen';
@@ -26,6 +27,17 @@ const fileFor = (id: string) => join(libDir(), `${id.replace(/[^a-zA-Z0-9_-]/g, 
 
 function listScenarios() {
   const dir = libDir();
+  // Musterleitstelle ILS Würzburg einmalig in die Bibliothek legen (nicht erneut, wenn gelöscht)
+  const marker = join(dir, '.wuerzburg-installiert');
+  if (!existsSync(marker)) {
+    try {
+      const scn = gunzipSync(readFileSync(join(__dirname, '../assets/ils-wuerzburg.json.gz')));
+      writeFileSync(fileFor('scn_ils_wuerzburg'), scn);
+      writeFileSync(marker, new Date().toISOString());
+    } catch (e) {
+      console.error('Musterleitstelle fehlt', e);
+    }
+  }
   let files = readdirSync(dir).filter((f) => f.endsWith('.json'));
   if (!files.length) {
     const scn = generateScenario({ seed: 4711, towns: 8, name: 'Musterland' });
@@ -161,8 +173,17 @@ ipcMain.handle('net:fetchText', async (_e, url: string, body?: string) => {
   return text;
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   handleModelProtocol();
+  // Mikrofon für die Spracheingabe ausdrücklich erlauben (eigene Oberfläche, keine fremden Seiten)
+  const ownPage = (url: string) => url.startsWith('file:') || url.startsWith('http://localhost') || url === '' || url.startsWith('about:blank');
+  session.defaultSession.setPermissionRequestHandler((wc, permission, cb, details) => {
+    void permission;
+    const url = details.requestingUrl ?? wc.getURL();
+    cb(ownPage(url) || permission === 'clipboard-sanitized-write');
+  });
+  session.defaultSession.setPermissionCheckHandler((_wc, permission, origin) => ownPage(origin ?? '') || permission !== 'media');
+  if (process.platform === 'darwin') await systemPreferences.askForMediaAccess('microphone').catch(() => false);
   // Kartenkacheln von OpenStreetMap verlangen eine Kennung und einen Referer
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://*.openstreetmap.org/*', 'https://*.openstreetmap.de/*'] }, (details, cb) => {
     details.requestHeaders['User-Agent'] = UA;

@@ -1,6 +1,6 @@
 // Autoritative Spielsimulation: Notrufe, Einsätze, Fahrzeuge, Funk, Wertung.
 import { FMS_TEXT, HILFSFRIST_MS, shortCallsign } from '../shared/catalog';
-import { RoadGraph, dist, nearestTown, polylineLength, reverseGeocode } from '../shared/geo';
+import { RoadGraph, dist, nearestTown, reverseGeocode } from '../shared/geo';
 import { mulberry32 } from '../shared/mapgen';
 import { computeProposal, coverage } from '../shared/dispatch';
 import type { Action } from '../shared/protocol';
@@ -113,7 +113,7 @@ export class Game {
   private answerSum = 0;
   private hilfsSum = 0;
   private penalized = new Set<string>();
-  private speeds = new Map<string, number>();
+  private routeTimes = new Map<string, { times: number[]; t: number }>();
 
   constructor(scn: Scenario, opts: { seed?: number; events?: GameEvents } = {}) {
     this.scn = scn;
@@ -854,42 +854,45 @@ export class Game {
   // ---------- Bewegung ----------
   private startRoute(u: UnitState, to: Vec, emergency: boolean) {
     const r = this.graph.route(u, to);
+    const factor = (emergency ? 1.2 : 1) * (this.typeOf(u)?.speedFactor ?? 1);
     if (!r) {
       u.route = [{ x: u.x, y: u.y }, { x: to.x, y: to.y }];
-      u.eta = this.time + (dist(u, to) / 10) * 1000;
+      this.routeTimes.set(u.id, { times: [0, dist(u, to) / 10], t: 0 });
     } else {
       u.route = r.points;
-      const factor = (emergency ? 1.2 : 1) * (this.typeOf(u)?.speedFactor ?? 1);
-      u.eta = this.time + (r.seconds / factor) * 1000;
+      // Fahrzeit je Punkt: auf der Autobahn schnell, in der Altstadt langsam
+      this.routeTimes.set(u.id, { times: r.times.map((t) => t / factor), t: 0 });
     }
+    const rt = this.routeTimes.get(u.id)!;
+    u.eta = this.time + rt.times[rt.times.length - 1] * 1000;
     u.routeIdx = 0;
-    const secs = Math.max(1, (u.eta - this.time) / 1000);
-    this.speeds.set(u.id, polylineLength(u.route) / secs);
   }
 
   private move(u: UnitState, dtMs: number): boolean {
     if (!u.route) return false;
-    let remaining = (this.speeds.get(u.id) ?? 10) * (dtMs / 1000);
-    while (remaining > 0 && u.routeIdx < u.route.length - 1) {
-      const target = u.route[u.routeIdx + 1];
-      const d = dist(u, target);
-      if (d > 0.01) u.heading = Math.atan2(target.y - u.y, target.x - u.x);
-      if (d <= remaining) {
-        u.x = target.x;
-        u.y = target.y;
-        u.routeIdx++;
-        remaining -= d;
-      } else {
-        u.x += ((target.x - u.x) / d) * remaining;
-        u.y += ((target.y - u.y) / d) * remaining;
-        remaining = 0;
-      }
-    }
-    if (u.routeIdx >= u.route.length - 1) {
+    const rt = this.routeTimes.get(u.id);
+    if (!rt) {
       u.route = undefined;
-      u.eta = undefined;
       return true;
     }
+    rt.t += dtMs / 1000;
+    while (u.routeIdx < u.route.length - 1 && rt.times[u.routeIdx + 1] <= rt.t) u.routeIdx++;
+    if (u.routeIdx >= u.route.length - 1) {
+      const end = u.route[u.route.length - 1];
+      u.x = end.x;
+      u.y = end.y;
+      u.route = undefined;
+      u.eta = undefined;
+      this.routeTimes.delete(u.id);
+      return true;
+    }
+    const a = u.route[u.routeIdx];
+    const b = u.route[u.routeIdx + 1];
+    const span = rt.times[u.routeIdx + 1] - rt.times[u.routeIdx] || 1;
+    const f = Math.max(0, Math.min(1, (rt.t - rt.times[u.routeIdx]) / span));
+    u.x = a.x + (b.x - a.x) * f;
+    u.y = a.y + (b.y - a.y) * f;
+    if (dist(a, b) > 0.01) u.heading = Math.atan2(b.y - a.y, b.x - a.x);
     return false;
   }
 

@@ -53,7 +53,7 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
   const { proposal, free } = useMemo(() => {
     const proposal = sw && !inc.firstArrival ? computeProposal(scn, graph, state.units, inc, sw.aao) : [];
     const start = graph.nearestNode(inc);
-    const { time } = graph.dijkstra(start);
+    const { time } = graph.dijkstra(start, true);
     const free = state.units
       .filter((u) => !u.incidentId && [1, 2].includes(u.baseStatus))
       .map((u) => {

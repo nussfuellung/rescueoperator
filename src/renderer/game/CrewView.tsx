@@ -1,6 +1,6 @@
 // Ansicht für Spieler, die ein Fahrzeug besetzen: FMS-Bedienteil, Einsatzdaten, Funk.
 import { useState } from 'react';
-import { FMS_COLOR, FMS_TEXT, formatClock, formatDuration, shortCallsign } from '../../../shared/catalog';
+import { FMS_COLOR, FMS_TEXT, formatClock, formatDuration, shortCallsign, radioName } from '../../../shared/catalog';
 import type { FmsStatus } from '../../../shared/types';
 import { conn } from '../net';
 import { MapView } from '../MapView';
@@ -120,7 +120,7 @@ export function CrewView({ ctx }: { ctx: GameCtx }) {
             {myRadio.slice(-40).map((m) => (
               <div key={m.id} className={`radio-line ${m.kind}`}>
                 <span className="muted">{formatClock(state.clockStart, m.t)}</span>{' '}
-                <b>{m.from === scn.ilsName ? 'ILS' : shortCallsign(m.from)}</b>: {m.text}
+                <b>{m.from === scn.ilsName ? 'ILS' : radioName(m.from)}</b>: {m.text}
               </div>
             ))}
           </div>

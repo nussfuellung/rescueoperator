@@ -1,7 +1,7 @@
 // Offline-Spracherkennung (Vosk im Browser) für Notrufgespräche und Funk.
 import { useEffect, useSyncExternalStore } from 'react';
 import { getSettings, subscribeSettings } from '../settings';
-import { onSpeaking } from './tts';
+import { onSpeaking, stopSpeaking } from './tts';
 import type { Model, KaldiRecognizer } from 'vosk-browser';
 
 export type SttStatus = 'aus' | 'lädt' | 'bereit' | 'fehler';
@@ -21,6 +21,10 @@ interface Snapshot {
   partial: string;
   level: number;
   targetId?: string;
+  /** zuletzt erkannter Satz und wohin er ging */
+  lastHeard?: { text: string; target?: string; at: number };
+  /** Name des benutzten Mikrofons */
+  device?: string;
 }
 
 class SpeechInput {
@@ -34,6 +38,8 @@ class SpeechInput {
   private pttHeld = false;
   private ttsSpeaking = false;
   private loadingUrl?: string;
+  private source?: MediaStreamAudioSourceNode;
+  private proc?: ScriptProcessorNode;
 
   constructor() {
     onSpeaking((s) => {
@@ -63,11 +69,7 @@ class SpeechInput {
       this.model?.terminate();
       const { createModel } = await import('vosk-browser');
       this.model = await createModel(modelUrl);
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 },
-      });
       this.ctx = new AudioContext();
-      const source = this.ctx.createMediaStreamSource(this.stream);
       const rec = new this.model.KaldiRecognizer(this.ctx.sampleRate);
       this.recognizer = rec;
       rec.on('result', (m) => {
@@ -75,27 +77,55 @@ class SpeechInput {
         this.set({ partial: '' });
         // Einzelne Silben und Geräusche ignorieren
         const clean = text.replace(/\[unk\]/g, '').trim();
-        if (clean.length >= 3 && /[a-zäöüß]{2}/i.test(clean)) this.activeTarget()?.onText(clean);
+        if (clean.length < 3 || !/[a-zäöüß]{2}/i.test(clean)) return;
+        const t = this.activeTarget();
+        this.set({ lastHeard: { text: clean, target: t?.id, at: Date.now() } });
+        t?.onText(clean);
       });
       rec.on('partialresult', (m) => {
         const p = (m as { result: { partial: string } }).result.partial;
         if (p !== this.snap.partial) this.set({ partial: p });
       });
-      const proc = this.ctx.createScriptProcessor(4096, 1, 1);
-      proc.onaudioprocess = (e) => {
-        const data = e.inputBuffer.getChannelData(0);
-        let peak = 0;
-        for (let i = 0; i < data.length; i += 16) peak = Math.max(peak, Math.abs(data[i]));
-        if (Math.abs(peak - this.snap.level) > 0.05) this.set({ level: peak });
-        if (this.snap.listening) rec.acceptWaveform(e.inputBuffer);
-      };
-      source.connect(proc);
-      proc.connect(this.ctx.destination);
+      await this.openMic();
       this.set({ status: 'bereit' });
       this.update();
     } catch (e) {
-      this.set({ status: 'fehler', error: String((e as Error).message ?? e) });
+      this.set({ status: 'fehler', error: explain(e) });
     }
+  }
+
+  /** Mikrofon (neu) öffnen, z. B. nach Gerätewechsel */
+  async openMic() {
+    if (!this.ctx || !this.recognizer) return;
+    this.stream?.getTracks().forEach((t) => t.stop());
+    this.source?.disconnect();
+    this.proc?.disconnect();
+    const deviceId = getSettings().micDeviceId;
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) },
+      });
+    } catch (e) {
+      // Gewähltes Gerät gibt es nicht mehr: Standardmikrofon nehmen
+      if (!deviceId) throw e;
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
+    }
+    const rec = this.recognizer;
+    this.source = this.ctx.createMediaStreamSource(this.stream);
+    const proc = this.ctx.createScriptProcessor(4096, 1, 1);
+    this.proc = proc;
+    proc.onaudioprocess = (e) => {
+      const data = e.inputBuffer.getChannelData(0);
+      let peak = 0;
+      for (let i = 0; i < data.length; i += 16) peak = Math.max(peak, Math.abs(data[i]));
+      if (Math.abs(peak - this.snap.level) > 0.03) this.set({ level: peak });
+      if (this.snap.listening) rec.acceptWaveform(e.inputBuffer);
+    };
+    this.source.connect(proc);
+    proc.connect(this.ctx.destination);
+    // Ohne Nutzeraktion startet der Audio-Kontext manchmal angehalten
+    if (this.ctx.state === 'suspended') await this.ctx.resume().catch(() => {});
+    this.set({ device: this.stream.getAudioTracks()[0]?.label || 'Standardmikrofon' });
   }
 
   unload() {
@@ -123,6 +153,12 @@ class SpeechInput {
 
   setPtt(held: boolean) {
     this.pttHeld = held;
+    if (held) {
+      // Wer spricht, unterbricht die Sprachausgabe
+      stopSpeaking();
+      this.ttsSpeaking = false;
+      if (this.ctx?.state === 'suspended') void this.ctx.resume();
+    }
     this.update();
   }
 
@@ -131,15 +167,25 @@ class SpeechInput {
     const s = getSettings();
     const want =
       this.snap.status === 'bereit' &&
-      !!t &&
-      !this.ttsSpeaking &&
-      (this.pttHeld || (s.sttMode === 'continuous' && !!t.continuous));
+      (!this.ttsSpeaking || this.pttHeld) &&
+      // Sprechtaste hört immer zu (auch ohne Ziel, damit man sieht, was erkannt wird)
+      (this.pttHeld || (s.sttMode === 'continuous' && !!t?.continuous));
     if (want !== this.snap.listening || t?.id !== this.snap.targetId) {
       // Beim Loslassen den Rest als Endergebnis abholen
       if (!want && this.snap.listening) this.recognizer?.retrieveFinalResult();
       this.set({ listening: want, targetId: t?.id });
     }
   }
+}
+
+/** Verständliche Fehlermeldung für Mikrofon- und Modellprobleme */
+function explain(e: unknown): string {
+  const err = e as { name?: string; message?: string };
+  if (err?.name === 'NotAllowedError' || err?.name === 'SecurityError')
+    return 'Mikrofonzugriff verweigert. Unter Windows: Einstellungen → Datenschutz und Sicherheit → Mikrofon → „Desktop-Apps Zugriff auf das Mikrofon erlauben“ einschalten.';
+  if (err?.name === 'NotFoundError' || err?.name === 'OverconstrainedError') return 'Kein Mikrofon gefunden. Ist ein Headset oder Mikrofon angeschlossen?';
+  if (err?.name === 'NotReadableError') return 'Das Mikrofon wird gerade von einem anderen Programm benutzt (z. B. Teams oder Discord).';
+  return String(err?.message ?? e);
 }
 
 export const speechInput = new SpeechInput();

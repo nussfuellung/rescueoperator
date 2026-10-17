@@ -78,7 +78,6 @@ export function EditorScreen({ onBack }: { onBack: () => void }) {
         </table>
         <div className="menu-buttons">
           <button
-            className="primary"
             onClick={() => {
               const seed = Math.floor(Math.random() * 1e6);
               const scn = generateScenario({ seed, towns: 8, name: `Landkreis ${seed % 1000}` });
@@ -86,7 +85,7 @@ export function EditorScreen({ onBack }: { onBack: () => void }) {
               setEditing(scn);
             }}
           >
-            Neue Leitstelle (Karte generieren)
+            Fantasiekarte generieren (ohne Internet)
           </button>
           <button className="primary" onClick={() => setOsm(true)}>
             Neue Leitstelle aus echter Karte (OpenStreetMap)

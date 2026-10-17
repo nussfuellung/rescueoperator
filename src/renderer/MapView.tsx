@@ -56,6 +56,12 @@ export function MapView(props: Props) {
   const propsRef = useRef(props);
   propsRef.current = props;
   const view = useRef({ cx: 0, cy: 0, scale: 0.05, init: false });
+  // Zwischengespeicherte Grundkarte (Straßen ändern sich selten, Fahrzeuge ständig)
+  const layer = useRef<HTMLCanvasElement | null>(null);
+  const layerKey = useRef('');
+  const layerTiles = useRef(false);
+  // Weich gleitende Fahrzeugpositionen zwischen den Server-Updates
+  const glide = useRef(new Map<string, { fx: number; fy: number; tx: number; ty: number; t0: number }>());
 
   // Straßenbeschriftungen einmal pro Szenario-Version berechnen
   const labels = useMemo(() => {
@@ -149,6 +155,13 @@ export function MapView(props: Props) {
       view.current.cx = (minX + maxX) / 2;
       view.current.cy = (minY + maxY) / 2;
       view.current.scale = Math.min(w / (maxX - minX + 1000), h / (maxY - minY + 1000));
+      // Große echte Karten: auf den größten Ort zoomen statt den ganzen Bereich winzig zu zeigen
+      if (maxX - minX > 30000 && scn.towns[0]) {
+        const big = [...scn.towns].sort((a, b) => b.radius - a.radius)[0];
+        view.current.cx = big.x;
+        view.current.cy = big.y;
+        view.current.scale = Math.min(w, h) / 14000;
+      }
       view.current.init = true;
     };
 
@@ -163,7 +176,7 @@ export function MapView(props: Props) {
       };
       if (allow('unit')) {
         for (const u of [...(p.data?.units ?? [])].reverse()) {
-          if (u.task === 'station' && view.current.scale < 0.12) continue;
+          if (u.task === 'station' && view.current.scale < (scn.stations.length > 40 ? 0.3 : 0.12)) continue;
           if (near(unitDrawPos(u, scn, p.data?.units ?? [], view.current.scale), 14)) return { kind: 'unit', id: u.id };
         }
       }
@@ -261,117 +274,142 @@ export function MapView(props: Props) {
       const v = view.current;
       const now = performance.now();
 
-      ctx.fillStyle = '#e9e5da';
-      ctx.fillRect(0, 0, w, h);
+      const drawBase = (ctx: CanvasRenderingContext2D): boolean => {
+        ctx.fillStyle = '#e9e5da';
+        ctx.fillRect(0, 0, w, h);
 
-      // Echte Karte: Kacheln von OpenStreetMap als Hintergrund
-      const settings = getSettings();
-      const tiles = !!scn.geo && settings.mapTiles && drawTiles(ctx, scn, v, w, h, settings.tileUrl, toScreen);
+        // Echte Karte: Kacheln von OpenStreetMap als Hintergrund
+        const settings = getSettings();
+        const tiles: boolean = !!scn.geo && settings.mapTiles && drawTiles(ctx, scn, v, w, h, settings.tileUrl, toScreen);
 
-      // Orte
-      if (!tiles) {
-        ctx.fillStyle = '#ddd3bf';
-        for (const t of scn.towns) {
-          const [x, y] = toScreen(t);
-          ctx.beginPath();
-          ctx.arc(x, y, t.radius * v.scale * 1.08, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-
-      // Straßen (über Kacheln nur dezent, damit das befahrbare Netz sichtbar bleibt)
-      const segs = segmentsRef.current;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      if (tiles) ctx.globalAlpha = 0.35;
-      const x0 = v.cx - w / 2 / v.scale - 20 / v.scale;
-      const x1 = v.cx + w / 2 / v.scale + 20 / v.scale;
-      const y0 = v.cy - h / 2 / v.scale - 20 / v.scale;
-      const y1 = v.cy + h / 2 / v.scale + 20 / v.scale;
-      const ox = w / 2 - v.cx * v.scale;
-      const oy = h / 2 - v.cy * v.scale;
-      for (const pass of tiles ? (['fill'] as const) : (['casing', 'fill'] as const)) {
-        for (const type of ROAD_ORDER) {
-          const st = ROAD_STYLE[type];
-          // Bei weit herausgezoomten großen Netzen Ortsstraßen ohne Rand zeichnen
-          if (pass === 'casing' && type === 'ortsstrasse' && v.scale < 0.06 && segs[type].length > 20000) continue;
-          const width = Math.max(st.minPx, st.width * v.scale);
-          const arr = segs[type];
-          ctx.beginPath();
-          for (let i = 0; i < arr.length; i += 4) {
-            const ax = arr[i], ay = arr[i + 1], bx = arr[i + 2], by = arr[i + 3];
-            if ((ax < x0 && bx < x0) || (ax > x1 && bx > x1) || (ay < y0 && by < y0) || (ay > y1 && by > y1)) continue;
-            ctx.moveTo(ax * v.scale + ox, ay * v.scale + oy);
-            ctx.lineTo(bx * v.scale + ox, by * v.scale + oy);
+        // Orte
+        if (!tiles) {
+          ctx.fillStyle = '#ddd3bf';
+          for (const t of scn.towns) {
+            const [x, y] = toScreen(t);
+            ctx.beginPath();
+            ctx.arc(x, y, t.radius * v.scale * 1.08, 0, Math.PI * 2);
+            ctx.fill();
           }
-          if (pass === 'casing') {
-            ctx.strokeStyle = st.casing;
-            ctx.lineWidth = width + 2;
-          } else {
-            ctx.strokeStyle = tiles ? '#1f6feb' : st.fill;
-            ctx.lineWidth = tiles ? Math.max(1.5, width * 0.5) : width;
+        }
+
+        // Straßen (über Kacheln nur dezent, damit das befahrbare Netz sichtbar bleibt)
+        const segs = segmentsRef.current;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        if (tiles) ctx.globalAlpha = 0.35;
+        const x0 = v.cx - w / 2 / v.scale - 20 / v.scale;
+        const x1 = v.cx + w / 2 / v.scale + 20 / v.scale;
+        const y0 = v.cy - h / 2 / v.scale - 20 / v.scale;
+        const y1 = v.cy + h / 2 / v.scale + 20 / v.scale;
+        const ox = w / 2 - v.cx * v.scale;
+        const oy = h / 2 - v.cy * v.scale;
+        for (const pass of tiles ? (['fill'] as const) : (['casing', 'fill'] as const)) {
+          for (const type of ROAD_ORDER) {
+            const st = ROAD_STYLE[type];
+            // Bei weit herausgezoomten großen Netzen Ortsstraßen ohne Rand zeichnen
+            if (pass === 'casing' && type === 'ortsstrasse' && v.scale < 0.06 && segs[type].length > 20000) continue;
+            // Ganz weit draußen bei großen echten Karten nur das überörtliche Netz
+            if (type === 'ortsstrasse' && v.scale < 0.02 && segs[type].length > 20000) continue;
+            const width = Math.max(st.minPx, st.width * v.scale);
+            const arr = segs[type];
+            ctx.beginPath();
+            for (let i = 0; i < arr.length; i += 4) {
+              const ax = arr[i], ay = arr[i + 1], bx = arr[i + 2], by = arr[i + 3];
+              if ((ax < x0 && bx < x0) || (ax > x1 && bx > x1) || (ay < y0 && by < y0) || (ay > y1 && by > y1)) continue;
+              ctx.moveTo(ax * v.scale + ox, ay * v.scale + oy);
+              ctx.lineTo(bx * v.scale + ox, by * v.scale + oy);
+            }
+            if (pass === 'casing') {
+              ctx.strokeStyle = st.casing;
+              ctx.lineWidth = width + 2;
+            } else {
+              ctx.strokeStyle = tiles ? '#1f6feb' : st.fill;
+              ctx.lineWidth = tiles ? Math.max(1.5, width * 0.5) : width;
+            }
+            ctx.stroke();
           }
-          ctx.stroke();
         }
-      }
-      ctx.globalAlpha = 1;
+        ctx.globalAlpha = 1;
 
-      // Editor: ausgewählte Straße
-      if (p.editor?.selected?.kind === 'road') {
-        const r = scn.roads.find((x) => x.id === p.editor!.selected!.id);
-        const a = r && scn.nodes.find((n) => n.id === r.a);
-        const b = r && scn.nodes.find((n) => n.id === r.b);
-        if (a && b) {
-          ctx.strokeStyle = '#ff006e';
-          ctx.lineWidth = 4;
-          ctx.beginPath();
-          ctx.moveTo(...toScreen(a));
-          ctx.lineTo(...toScreen(b));
-          ctx.stroke();
+        // Editor: ausgewählte Straße
+        if (p.editor?.selected?.kind === 'road') {
+          const r = scn.roads.find((x) => x.id === p.editor!.selected!.id);
+          const a = r && scn.nodes.find((n) => n.id === r.a);
+          const b = r && scn.nodes.find((n) => n.id === r.b);
+          if (a && b) {
+            ctx.strokeStyle = '#ff006e';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(...toScreen(a));
+            ctx.lineTo(...toScreen(b));
+            ctx.stroke();
+          }
         }
-      }
 
-      // Straßennamen (die Kacheln bringen eigene mit)
-      if (tiles) {
-        // nichts
-      } else if (v.scale > 0.28) {
-        ctx.font = `${Math.min(13, 9 + v.scale * 4)}px "Segoe UI", sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        for (const l of labelsRef.current) {
-          const [x, y] = toScreen(l);
-          if (x < -100 || x > w + 100 || y < -50 || y > h + 50) continue;
-          if (l.len * v.scale < l.name.length * 5) continue;
-          ctx.save();
-          ctx.translate(x, y);
-          ctx.rotate(l.angle);
-          ctx.fillStyle = '#4b4536';
-          ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-          ctx.lineWidth = 3;
-          ctx.strokeText(l.name, 0, 0);
-          ctx.fillText(l.name, 0, 0);
-          ctx.restore();
+        // Straßennamen (die Kacheln bringen eigene mit)
+        if (tiles) {
+          // nichts
+        } else if (v.scale > 0.28) {
+          ctx.font = `${Math.min(13, 9 + v.scale * 4)}px "Segoe UI", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          for (const l of labelsRef.current) {
+            const [x, y] = toScreen(l);
+            if (x < -100 || x > w + 100 || y < -50 || y > h + 50) continue;
+            if (l.len * v.scale < l.name.length * 5) continue;
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(l.angle);
+            ctx.fillStyle = '#4b4536';
+            ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+            ctx.lineWidth = 3;
+            ctx.strokeText(l.name, 0, 0);
+            ctx.fillText(l.name, 0, 0);
+            ctx.restore();
+          }
+        } else if (v.scale > 0.04) {
+          // Überlandstraßen-Nummern als Schilder
+          ctx.font = 'bold 10px "Segoe UI", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          for (const l of labelsRef.current) {
+            if (l.type === 'ortsstrasse') continue;
+            // Nur Straßennummern (B 16, ST 2084) als Schild, keine langen Namen
+            if (l.name.length > 9 || !/\d/.test(l.name)) continue;
+            const [x, y] = toScreen(l);
+            const tw = ctx.measureText(l.name).width + 6;
+            ctx.fillStyle = l.type === 'autobahn' ? '#1d4fa3' : l.type === 'bundesstrasse' ? '#f2c230' : '#fff';
+            ctx.fillRect(x - tw / 2, y - 7, tw, 14);
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x - tw / 2, y - 7, tw, 14);
+            ctx.fillStyle = l.type === 'autobahn' ? '#fff' : '#222';
+            ctx.fillText(l.name, x, y + 0.5);
+          }
         }
-      } else if (v.scale > 0.04) {
-        // Überlandstraßen-Nummern als Schilder
-        ctx.font = 'bold 10px "Segoe UI", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        for (const l of labelsRef.current) {
-          if (l.type === 'ortsstrasse') continue;
-          // Nur Straßennummern (B 16, ST 2084) als Schild, keine langen Namen
-          if (l.name.length > 9 || !/\d/.test(l.name)) continue;
-          const [x, y] = toScreen(l);
-          const tw = ctx.measureText(l.name).width + 6;
-          ctx.fillStyle = l.type === 'autobahn' ? '#1d4fa3' : l.type === 'bundesstrasse' ? '#f2c230' : '#fff';
-          ctx.fillRect(x - tw / 2, y - 7, tw, 14);
-          ctx.strokeStyle = '#333';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x - tw / 2, y - 7, tw, 14);
-          ctx.fillStyle = l.type === 'autobahn' ? '#fff' : '#222';
-          ctx.fillText(l.name, x, y + 0.5);
-        }
+        return tiles;
+      };
+
+      // Hintergrund, Straßen und Straßennamen nur neu zeichnen, wenn sich Ansicht oder Karte ändern
+      const settings0 = getSettings();
+      const baseKey = [v.cx, v.cy, v.scale, w, h, dpr, segmentsRef.current, labelsRef.current, tileVersion, settings0.mapTiles, settings0.tileUrl, p.editor?.selected?.id].join('|');
+      if (!layer.current || layer.current.width !== canvas.width || layer.current.height !== canvas.height) {
+        layer.current = canvas.ownerDocument.createElement('canvas');
+        layer.current.width = canvas.width;
+        layer.current.height = canvas.height;
+        layerKey.current = '';
       }
+      if (layerKey.current !== baseKey) {
+        const lctx = layer.current.getContext('2d')!;
+        lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        layerTiles.current = drawBase(lctx);
+        layerKey.current = baseKey;
+      }
+      const tiles = layerTiles.current;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(layer.current, 0, 0);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       // Editor: Knoten
       if (p.editor?.showNodes && v.scale > 0.1) {
@@ -469,19 +507,44 @@ export function MapView(props: Props) {
         }
       }
 
-      // Fahrwege
-      ctx.setLineDash([6, 5]);
-      ctx.lineWidth = 1.5;
+      // Weiche Fahrzeugbewegung: zwischen zwei Server-Updates gleiten
+      const gl = glide.current;
+      const shown = new Map<string, Vec>();
+      for (const u of p.data?.units ?? []) {
+        let g = gl.get(u.id);
+        if (!g) {
+          g = { fx: u.x, fy: u.y, tx: u.x, ty: u.y, t0: now };
+          gl.set(u.id, g);
+        }
+        const f = Math.min(1, (now - g.t0) / 260);
+        const cx = g.fx + (g.tx - g.fx) * f;
+        const cy = g.fy + (g.ty - g.fy) * f;
+        if (g.tx !== u.x || g.ty !== u.y) {
+          // Große Sprünge (Wache, Neustart) nicht animieren
+          const jump = Math.hypot(u.x - cx, u.y - cy) > 3000;
+          g.fx = jump ? u.x : cx;
+          g.fy = jump ? u.y : cy;
+          g.tx = u.x;
+          g.ty = u.y;
+          g.t0 = now;
+        }
+        shown.set(u.id, { x: cx, y: cy });
+      }
+
+      // Fahrwege: Rest der Route jedes fahrenden Fahrzeugs auf den Straßen
       for (const u of p.data?.units ?? []) {
         if (!u.route?.length) continue;
-        const [ax, ay] = toScreen(u);
-        const [bx, by] = toScreen(u.route[0]);
+        const sel = p.data?.selectedUnitId === u.id || p.data?.highlightUnitIds?.includes(u.id);
         ctx.strokeStyle = FMS_COLOR[u.status] ?? '#333';
+        ctx.globalAlpha = sel ? 0.9 : 0.55;
+        ctx.lineWidth = sel ? 4 : 2.5;
+        ctx.setLineDash(u.status === 3 || u.status === 7 ? [] : [7, 5]);
         ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(bx, by);
+        ctx.moveTo(...toScreen(shown.get(u.id) ?? u));
+        for (let k = u.routeIdx + 1; k < u.route.length; k++) ctx.lineTo(...toScreen(u.route[k]));
         ctx.stroke();
       }
+      ctx.globalAlpha = 1;
       ctx.setLineDash([]);
 
       // Einsätze
@@ -516,8 +579,8 @@ export function MapView(props: Props) {
       // Fahrzeuge
       const units = p.data?.units ?? [];
       for (const u of units) {
-        if (u.task === 'station' && v.scale < 0.12) continue;
-        const pos = unitDrawPos(u, scn, units, v.scale);
+        if (u.task === 'station' && v.scale < (scn.stations.length > 40 ? 0.3 : 0.12)) continue;
+        const pos = u.task === 'station' ? unitDrawPos(u, scn, units, v.scale) : shown.get(u.id) ?? u;
         const [x, y] = toScreen(pos);
         const text = shortCallsign(u.callsign);
         ctx.font = 'bold 10px "Segoe UI", sans-serif';
@@ -644,6 +707,7 @@ function niceNumber(x: number): number {
 // ---------- Kartenkacheln ----------
 const tileCache = new Map<string, { img: HTMLImageElement; ok: boolean; used: number }>();
 let tileUse = 0;
+let tileVersion = 0;
 const EARTH = 2 * Math.PI * 6378137;
 
 function getTile(url: string) {

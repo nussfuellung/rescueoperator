@@ -99,6 +99,11 @@ export function shortCallsign(cs: string): string {
   return m ? m[1] : cs;
 }
 
+/** Funkrufname ohne Organisation, für Funkprotokolle: "Florian Würzburg 40/1" -> "Würzburg 40/1" */
+export function radioName(cs: string): string {
+  return cs.replace(/^(Florian|Rotkreuz|Johannes|Akkon|Sama|Samariter|Kater|Heros|Pelikan)\s+/, '');
+}
+
 export function orgPrefix(org: 'FW' | 'RD'): string {
   return org === 'FW' ? 'Florian' : 'Rotkreuz';
 }

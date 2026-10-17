@@ -118,6 +118,19 @@ const PLACE_RADIUS: Record<string, number> = {
   hamlet: 300,
 };
 
+/** OSM-Höchstgeschwindigkeit in km/h, auch für "DE:urban" und Spielstraßen */
+export function parseMaxspeed(v: string | undefined, highway: string): number | undefined {
+  if (highway === 'living_street') return 10;
+  if (!v) return undefined;
+  const n = parseInt(v, 10);
+  if (!isNaN(n)) return /mph/.test(v) ? Math.round(n * 1.609) : n;
+  if (/urban/i.test(v)) return 50;
+  if (/rural/i.test(v)) return 100;
+  if (/none|motorway/i.test(v)) return 130;
+  if (/walk|living/i.test(v)) return 10;
+  return undefined;
+}
+
 /** Abstand eines Punkts zur Geraden a-b (für die Vereinfachung von Straßenverläufen) */
 function lineDistance(p: Vec, a: Vec, b: Vec) {
   const dx = b.x - a.x;
@@ -202,6 +215,9 @@ export function importOsm(json: string | { elements: OsmElement[] }, opts: OsmIm
       const mid = osmNodes.get(ids[Math.floor(ids.length / 2)])!;
       if (townAt(towns, mid)) type = 'ortsstrasse';
     }
+    const maxspeed = parseMaxspeed(tags.maxspeed, tags.highway);
+    const ow = tags.oneway ?? (tags.highway === 'motorway' || tags.highway === 'motorway_link' || tags.junction === 'roundabout' ? 'yes' : 'no');
+    const oneway = ow === 'yes' || ow === '1' || ow === 'true' ? 1 : ow === '-1' ? -1 : 0;
     // Zwischenpunkte nur behalten, wo sie für Kreuzungen oder den Verlauf nötig sind
     let anchor = 0;
     for (let i = 1; i < ids.length; i++) {
@@ -222,7 +238,12 @@ export function importOsm(json: string | { elements: OsmElement[] }, opts: OsmIm
       if (!needed) continue;
       const a = getNode(ids[anchor]);
       const b = getNode(ids[i]);
-      if (a !== b) roads.push({ id: `r${w.id}_${roads.length}`, a: a.id, b: b.id, name, type });
+      if (a !== b) {
+        const road: Road = { id: `r${w.id}_${roads.length}`, a: oneway === -1 ? b.id : a.id, b: oneway === -1 ? a.id : b.id, name, type };
+        if (maxspeed) road.maxspeed = maxspeed;
+        if (oneway) road.oneway = true;
+        roads.push(road);
+      }
       anchor = i;
     }
   }
@@ -360,6 +381,16 @@ export function importOsm(json: string | { elements: OsmElement[] }, opts: OsmIm
   const objects: MapObject[] = [];
   const largest = keptTowns[0];
   const seenNames = new Set<string>();
+  const tidy = (n: string) => n.replace(/^Brk\b/, 'BRK').replace(/\s+/g, ' ').trim();
+  /** Ortsname für Funkrufnamen aus dem Wachennamen ("Freiwillige Feuerwehr Würzburg-Versbach" -> "Würzburg-Versbach") */
+  const placeFromName = (n: string, town: string) => {
+    const rest = n
+      .replace(/^(Freiwillige Feuerwehr|Feuerwehrgerätehaus|Feuerwehrhaus|Feuerwehr|FF|Feuerwache|Berufsfeuerwehr)\s*/i, '')
+      .replace(/\s+Löschzug.*$/i, '')
+      .replace(/^(der|des|in|im)\s+/i, '')
+      .trim();
+    return rest && rest.length <= 28 && !/\d{3}/.test(rest) ? rest : town;
+  };
   for (const e of elements) {
     const t = e.tags;
     if (!t) continue;
@@ -370,18 +401,22 @@ export function importOsm(json: string | { elements: OsmElement[] }, opts: OsmIm
     seenNames.add(key);
     const town = townOf(p0);
     if (t.amenity === 'fire_station') {
+      const name = tidy(t.name ?? `Feuerwehr ${town}`);
+      // Schulen und Zentren ohne eigene Einsatzfahrzeuge
+      if (/schule|zentrum|museum|verein|jugend/i.test(name)) continue;
       const p = snapToRoad(p0);
-      const career = /berufsfeuerwehr|feuerwache \d|hauptwache/i.test(t.name ?? '') || (t['fire_station:type'] ?? '') === 'career';
-      const isCity = town === largest?.name;
+      const career =
+        /berufsfeuerwehr|feuerwache \d|hauptwache/i.test(name) || (t['fire_station:type'] ?? '') === 'career' || name === `Feuerwehr ${largest?.name}`;
+      const place = placeFromName(name, town);
+      const isTownCenter = keptTowns.some((x) => x.radius >= 1500 && x.name === place);
       const types: VehicleTypeId[] = career
         ? ['KDOW', 'ELW', 'HLF', 'HLF', 'DLK', 'RW', 'TLF']
-        : isCity && !stations.some((s) => s.kind === 'feuerwache' && s.name.includes(town))
-          ? ['ELW', 'HLF', 'LF', 'DLK', 'RW']
-          : ['HLF', ...(dist(p, largest ?? p) > 4000 ? ['TLF' as VehicleTypeId] : [])];
-      const place = stations.some((s) => s.kind === 'feuerwache' && s.name === `FF ${town}`) ? `${town}-${stations.length}` : town;
+        : isTownCenter
+          ? ['ELW', 'HLF', 'LF', 'DLK']
+          : ['HLF'];
       stations.push({
         id: `s_fw_${e.id}`,
-        name: career ? t.name ?? `Feuerwache ${town}` : `FF ${place}`,
+        name: career ? (/berufsfeuerwehr/i.test(name) ? name : `Berufsfeuerwehr ${place}`) : `FF ${place}`,
         kind: 'feuerwache',
         career,
         x: p.x,
@@ -390,18 +425,20 @@ export function importOsm(json: string | { elements: OsmElement[] }, opts: OsmIm
       });
     } else if (t.emergency === 'ambulance_station') {
       const p = snapToRoad(p0);
-      const first = !stations.some((s) => s.kind === 'rettungswache');
+      const name = tidy(t.name ?? '');
+      const label = /wache/i.test(name) && name.length < 50 ? name : `Rettungswache ${town}`;
+      // Notarzt dort, wo eine Klinik in der Nähe ist
       stations.push({
         id: `s_rw_${e.id}`,
-        name: t.name ?? `Rettungswache ${town}`,
+        name: label,
         kind: 'rettungswache',
         career: true,
         x: p.x,
         y: p.y,
-        vehicles: makeVehicles(town, first ? ['RTW', 'RTW', 'NEF', 'KTW'] : ['RTW', 'RTW']),
+        vehicles: [],
       });
     } else if (t.amenity === 'hospital') {
-      if (!t.name || /tagesklinik|psychiatr|reha/i.test(t.name)) continue;
+      if (!t.name || /tagesklinik|psychiatr|psychosomat|reha|bezirkskrankenhaus|naturklinik|tierklinik/i.test(t.name)) continue;
       const big = /klinikum|universit|uniklinik|zentral/i.test(t.name);
       const p = snapToRoad(p0);
       hospitals.push({
@@ -409,7 +446,7 @@ export function importOsm(json: string | { elements: OsmElement[] }, opts: OsmIm
         name: t.name,
         x: p.x,
         y: p.y,
-        specialties: big ? [...SPECIALTIES] : ['Innere Medizin', 'Chirurgie', 'Unfallchirurgie'],
+        specialties: big ? [...SPECIALTIES] : /orthop|könig-ludwig/i.test(t.name) ? ['Unfallchirurgie', 'Chirurgie'] : ['Innere Medizin', 'Chirurgie', 'Unfallchirurgie'],
       });
     } else if (t.name && (t.amenity === 'school' || t.amenity === 'nursing_home' || t.social_facility === 'nursing_home' || t.amenity === 'place_of_worship')) {
       const kind: MapObject['kind'] = t.amenity === 'school' ? 'schule' : t.amenity === 'place_of_worship' ? 'kirche' : 'seniorenheim';
@@ -420,14 +457,35 @@ export function importOsm(json: string | { elements: OsmElement[] }, opts: OsmIm
   // Fehlendes ergänzen, damit das Szenario spielbar ist
   const center = (town: Town) => snapToRoad({ x: town.x, y: town.y });
   if (!stations.some((s) => s.kind === 'feuerwache')) notes.push('Keine Feuerwehren in den Kartendaten, je Ort wurde eine Freiwillige Feuerwehr ergänzt.');
-  for (const town of keptTowns.filter((t) => t.radius >= 700)) {
+  const bigTowns = keptTowns.filter((t) => t.radius >= (keptTowns.length > 40 ? 1500 : 700));
+  for (const town of bigTowns) {
     if (stations.some((s) => s.kind === 'feuerwache' && dist(s, town) < Math.max(2500, town.radius))) continue;
     const p = center(town);
     stations.push({ id: `s_fw_add_${town.id}`, name: `FF ${town.name}`, kind: 'feuerwache', career: false, x: p.x + 30, y: p.y - 30, vehicles: makeVehicles(town.name, ['HLF']) });
   }
   if (!stations.some((s) => s.vehicles.some((v) => v.type === 'ELW'))) {
     const st = stations.find((s) => s.kind === 'feuerwache' && largest && dist(s, largest) < largest.radius * 1.5) ?? stations.find((s) => s.kind === 'feuerwache');
-    st?.vehicles.push(...makeVehicles(st.name.replace(/^FF /, ''), ['ELW', 'DLK', 'RW']));
+    st?.vehicles.push(...makeVehicles(placeFromName(st.name, largest.name), ['ELW', 'DLK', 'RW']));
+  }
+  // Rettungswachen: Kleinstädte ohne Wache im Umkreis von 8 km bekommen eine
+  let added = 0;
+  for (const town of keptTowns.filter((t) => t.radius >= 1500 || keptTowns.length <= 3)) {
+    if (stations.some((s) => s.kind === 'rettungswache' && dist(s, town) < 8000)) continue;
+    const p = center(town);
+    stations.push({ id: `s_rw_add_${town.id}`, name: `BRK Rettungswache ${town.name}`, kind: 'rettungswache', career: true, x: p.x - 30, y: p.y + 30, vehicles: [] });
+    added++;
+  }
+  if (added) notes.push(`${added} Rettungswachen ergänzt, wo die Kartendaten in einem größeren Ort keine kennen.`);
+  // Fahrzeuge der Rettungswachen: Großstadtwachen mehr, Notarzt bei Kliniken
+  for (const rw of stations.filter((s) => s.kind === 'rettungswache')) {
+    const fromName = rw.name.replace(/^.*Rettungswache\s*/i, '').trim();
+    const town = fromName && fromName.length < 28 ? fromName : townOf(rw);
+    const cityTown = keptTowns.find((x) => x.name === town);
+    const nearHospital = hospitals.some((h) => dist(h, rw) < 5000);
+    const types: VehicleTypeId[] = cityTown && cityTown.radius >= 3000 ? ['RTW', 'RTW', 'KTW'] : ['RTW'];
+    if (nearHospital && !stations.some((s) => s !== rw && s.vehicles.some((v) => v.type === 'NEF') && dist(s, rw) < 5000)) types.push('NEF');
+    if (!types.includes('RTW')) types.push('RTW');
+    if (rw.vehicles.length === 0) rw.vehicles.push(...makeVehicles(town, types));
   }
   if (!stations.some((s) => s.kind === 'rettungswache')) {
     notes.push('Keine Rettungswachen in den Kartendaten, im größten Ort wurde eine ergänzt.');
@@ -436,13 +494,26 @@ export function importOsm(json: string | { elements: OsmElement[] }, opts: OsmIm
   }
   if (!stations.some((s) => s.vehicles.some((v) => v.type === 'NEF'))) {
     const rw = stations.find((s) => s.kind === 'rettungswache')!;
-    rw.vehicles.push(...makeVehicles(rw.name.replace(/^.*Rettungswache /, ''), ['NEF']));
+    rw.vehicles.push(...makeVehicles(townOf(rw), ['NEF']));
   }
   if (!hospitals.length) {
     notes.push('Kein Krankenhaus im Gebiet, im größten Ort wurde eines ergänzt.');
     const p = center(largest);
     hospitals.push({ id: 'h_add', name: `Klinikum ${largest.name}`, x: p.x + 40, y: p.y + 40, specialties: [...SPECIALTIES] });
   }
+
+  // Kurze IDs halten große Karten klein
+  const shortId = new Map<string, string>();
+  keptNodes.forEach((n, i) => {
+    const id = `n${i.toString(36)}`;
+    shortId.set(n.id, id);
+    n.id = id;
+  });
+  keptRoads.forEach((r, i) => {
+    r.id = `r${i.toString(36)}`;
+    r.a = shortId.get(r.a)!;
+    r.b = shortId.get(r.b)!;
+  });
 
   const scenario: Scenario = {
     version: 1,

@@ -71,15 +71,30 @@ function writeAll(all: Record<string, Scenario>) {
   }
 }
 
+const BUILTIN_ID = 'scn_ils_wuerzburg';
+let builtin: Promise<Scenario | null> | null = null;
+/** Musterleitstelle ILS Würzburg liegt gepackt neben der Seite (zu groß für den Browserspeicher) */
+function loadBuiltin() {
+  builtin ??= fetch('./ils-wuerzburg.json.gz')
+    .then(async (r) => {
+      if (!r.ok || !r.body) return null;
+      const text = await new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).text();
+      return JSON.parse(text) as Scenario;
+    })
+    .catch(() => null);
+  return builtin;
+}
+
 const browserBridge: Bridge = {
   async listScenarios() {
     const all = readAll();
-    if (!Object.keys(all).length) {
+    const b = all[BUILTIN_ID] ? null : await loadBuiltin();
+    if (!Object.keys(all).length && !b) {
       const scn = generateScenario({ seed: 4711, towns: 8, name: 'Musterland' });
       all[scn.id] = scn;
       writeAll(all);
     }
-    return Object.values(all).map((s) => ({
+    return [...(b ? [b] : []), ...Object.values(all)].map((s) => ({
       id: s.id,
       name: s.name,
       ilsName: s.ilsName,
@@ -89,7 +104,7 @@ const browserBridge: Bridge = {
     }));
   },
   async loadScenario(id) {
-    return readAll()[id];
+    return readAll()[id] ?? (id === BUILTIN_ID ? ((await loadBuiltin()) as Scenario) : undefined!);
   },
   async saveScenario(scn) {
     const all = readAll();

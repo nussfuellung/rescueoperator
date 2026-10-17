@@ -3,10 +3,11 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { attachPttKeys } from './audio/stt';
 
-export type PanelId = 'calls' | 'map' | 'incidents' | 'radio' | 'units';
+export type PanelId = 'calls' | 'form' | 'map' | 'incidents' | 'radio' | 'units';
 
 export const PANEL_TITLES: Record<PanelId, string> = {
   calls: 'Notrufabfrage',
+  form: 'Einsatzmaske',
   map: 'Karte',
   incidents: 'Einsätze',
   radio: 'Funk',

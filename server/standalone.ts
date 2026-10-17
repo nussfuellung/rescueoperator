@@ -1,5 +1,7 @@
-// Eigenständiger Server ohne Oberfläche: node dist/server/standalone.js [--port 4711] [--scenario datei.json]
-import { readFileSync } from 'node:fs';
+// Eigenständiger Server ohne Oberfläche: node dist/server/standalone.js [--port 4711] [--scenario datei.json | --seed 4711]
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { DEFAULT_PORT } from '../shared/protocol';
 import { generateScenario } from '../shared/mapgen';
 import { recomputeHouseNumbers } from '../shared/geo';
@@ -18,6 +20,9 @@ const file = arg('scenario');
 if (file) {
   scenario = JSON.parse(readFileSync(file, 'utf8'));
   recomputeHouseNumbers(scenario);
+} else if (!arg('seed') && existsSync(join(__dirname, '../assets/ils-wuerzburg.json.gz'))) {
+  // Standard: Musterleitstelle ILS Würzburg (echte Karte)
+  scenario = JSON.parse(gunzipSync(readFileSync(join(__dirname, '../assets/ils-wuerzburg.json.gz'))).toString('utf8'));
 } else {
   scenario = generateScenario({ seed: Number(arg('seed') ?? 4711), towns: 8 });
 }

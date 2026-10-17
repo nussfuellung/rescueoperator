@@ -1,5 +1,11 @@
 // Bündelt Electron-Hauptprozess, Preload und eigenständigen Server.
 import { build } from 'esbuild';
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+
+// Musterleitstelle ILS Würzburg für Hauptprozess, Server und Browser-Modus
+mkdirSync('dist/assets', { recursive: true });
+copyFileSync('assets/ils-wuerzburg.json.gz', 'dist/assets/ils-wuerzburg.json.gz');
+if (existsSync('dist/renderer')) copyFileSync('assets/ils-wuerzburg.json.gz', 'dist/renderer/ils-wuerzburg.json.gz');
 
 const common = {
   bundle: true,

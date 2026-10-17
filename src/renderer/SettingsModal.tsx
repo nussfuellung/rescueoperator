@@ -41,6 +41,14 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [progress, setProgress] = useState<string>('');
   const [err, setErr] = useState('');
   const [heard, setHeard] = useState<string[]>([]);
+  const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
+  useEffect(() => {
+    // Gerätenamen gibt es erst nach erteilter Freigabe
+    navigator.mediaDevices
+      ?.enumerateDevices()
+      .then((d) => setMics(d.filter((x) => x.kind === 'audioinput')))
+      .catch(() => {});
+  }, [stt.status]);
 
   useEffect(() => {
     const t = setInterval(() => setInfo(ttsInfo()), 1000);
@@ -215,10 +223,36 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             />
           </label>
         </div>
+        <label>
+          Mikrofon
+          <select
+            value={s.micDeviceId}
+            onChange={async (e) => {
+              updateSettings({ micDeviceId: e.target.value });
+              await speechInput.openMic().catch(() => {});
+            }}
+          >
+            <option value="">Standardmikrofon von Windows</option>
+            {mics
+              .filter((m) => m.deviceId && m.deviceId !== 'default' && m.deviceId !== 'communications')
+              .map((m) => (
+                <option key={m.deviceId} value={m.deviceId}>
+                  {m.label || 'Mikrofon'}
+                </option>
+              ))}
+          </select>
+        </label>
         <p className="small">
           Status: <b>{stt.status}</b>
           {stt.error ? ` – ${stt.error}` : ''}
+          {stt.device && stt.status === 'bereit' ? ` · ${stt.device}` : ''}
         </p>
+        {stt.status === 'bereit' && (
+          <div className="mic-meter" title="Pegel des Mikrofons">
+            <span style={{ width: `${Math.min(100, stt.level * 250)}%` }} />
+          </div>
+        )}
+        {stt.status === 'aus' && s.sttEnabled && <p className="small muted">Noch kein Modell geladen. Bitte zuerst das deutsche Modell herunterladen.</p>}
         {stt.status === 'bereit' && (
           <div className="stt-test">
             <MicButton targetId="settings-test" label="Test: gedrückt halten und sprechen" />

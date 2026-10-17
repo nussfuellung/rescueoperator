@@ -26,6 +26,10 @@ export interface Road {
   numB?: number;
   /** Ort, zu dem die Straße gehört (Name), leer = außerorts */
   town?: string;
+  /** Zulässige Höchstgeschwindigkeit in km/h (aus OSM) */
+  maxspeed?: number;
+  /** Einbahnstraße: nur von a nach b befahrbar */
+  oneway?: boolean;
 }
 
 export interface Town {

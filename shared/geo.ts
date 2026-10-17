@@ -22,12 +22,26 @@ interface Adj {
   time: number;
 }
 
+/** Fahrzeit-Annahme je Straße in m/s (ohne Sonderrechte) */
+export function roadSpeed(r: Road): number {
+  const base = ROAD_SPEED_KMH[r.type];
+  // Ausgeschilderte Höchstgeschwindigkeit, innerorts wegen Kreuzungen etwas darunter
+  const kmh = r.maxspeed ? Math.min(r.maxspeed, 130) * (r.type === 'ortsstrasse' ? 0.85 : 0.95) : base;
+  return Math.max(10, kmh) / 3.6;
+}
+
+/** Gegen die Einbahnrichtung: auf Autobahnen und Schnellstraßen nie, sonst nur langsam mit Sonderrechten */
+const WRONG_WAY_FACTOR = 4;
+
 /** Vorberechneter Routing-Graph eines Szenarios */
 export class RoadGraph {
   readonly nodes: RoadNode[];
   readonly roads: Road[];
   readonly index = new Map<string, number>();
+  /** ausgehende Kanten */
   readonly adj: Adj[][];
+  /** eingehende Kanten (für Fahrzeiten zu einem Ziel) */
+  readonly radj: Adj[][];
   private grid = new Map<string, number[]>();
   private readonly cell = 500;
 
@@ -42,14 +56,20 @@ export class RoadGraph {
       else this.grid.set(k, [i]);
     });
     this.adj = scn.nodes.map(() => []);
+    this.radj = scn.nodes.map(() => []);
+    const add = (from: number, to: number, road: number, len: number, time: number) => {
+      this.adj[from].push({ to, road, len, time });
+      this.radj[to].push({ to: from, road, len, time });
+    };
     scn.roads.forEach((r, ri) => {
       const a = this.index.get(r.a);
       const b = this.index.get(r.b);
       if (a === undefined || b === undefined || a === b) return;
       const len = dist(scn.nodes[a], scn.nodes[b]);
-      const time = len / (ROAD_SPEED_KMH[r.type] / 3.6);
-      this.adj[a].push({ to: b, road: ri, len, time });
-      this.adj[b].push({ to: a, road: ri, len, time });
+      const time = len / roadSpeed(r);
+      add(a, b, ri, len, time);
+      if (!r.oneway) add(b, a, ri, len, time);
+      else if (r.type === 'ortsstrasse' || r.type === 'landstrasse') add(b, a, ri, len, time * WRONG_WAY_FACTOR);
     });
   }
 
@@ -70,7 +90,7 @@ export class RoadGraph {
           const arr = this.grid.get(`${cx + dx}:${cy + dy}`);
           if (!arr) continue;
           for (const i of arr) {
-            if (this.adj[i].length === 0) continue;
+            if (this.adj[i].length === 0 && this.radj[i].length === 0) continue;
             const d = dist(p, this.nodes[i]);
             if (d < bestD) {
               bestD = d;
@@ -85,90 +105,140 @@ export class RoadGraph {
     return best;
   }
 
-  /** Dijkstra ab einem Knoten; liefert Fahrzeit (s) und Vorgänger */
-  dijkstra(start: number): { time: Float64Array; prev: Int32Array } {
+  /** Kompakte Kantenlisten (CSR) für schnelles Routing auf großen Karten */
+  private csr(toTarget: boolean) {
+    const key = toTarget ? '_csrIn' : '_csrOut';
+    const self = this as unknown as Record<string, { off: Int32Array; to: Int32Array; time: Float64Array }>;
+    if (!self[key]) {
+      const lists = toTarget ? this.radj : this.adj;
+      const off = new Int32Array(lists.length + 1);
+      lists.forEach((l, i) => (off[i + 1] = off[i] + l.length));
+      const to = new Int32Array(off[lists.length]);
+      const time = new Float64Array(off[lists.length]);
+      lists.forEach((l, i) =>
+        l.forEach((e, k) => {
+          to[off[i] + k] = e.to;
+          time[off[i] + k] = e.time;
+        }),
+      );
+      self[key] = { off, to, time };
+    }
+    return self[key];
+  }
+
+  /**
+   * Dijkstra ab einem Knoten; liefert Fahrzeit (s) und Vorgänger.
+   * Mit toTarget = true sind es die Fahrzeiten von allen Knoten ZU start (für Anfahrzeiten zum Einsatzort).
+   * Mit stopAt endet die Suche, sobald alle diese Knoten feststehen.
+   */
+  dijkstra(start: number, toTarget = false, stopAt?: Iterable<number>): { time: Float64Array; prev: Int32Array } {
+    const { off, to, time: et } = this.csr(toTarget);
     const n = this.nodes.length;
     const time = new Float64Array(n).fill(Infinity);
     const prev = new Int32Array(n).fill(-1);
     if (start < 0) return { time, prev };
+    const pending = stopAt ? new Set(stopAt) : null;
+    pending?.delete(-1);
     time[start] = 0;
     const heap = new MinHeap();
     heap.push(start, 0);
     while (heap.size) {
       const [u, tu] = heap.pop();
       if (tu > time[u]) continue;
-      for (const e of this.adj[u]) {
-        const nt = tu + e.time;
-        if (nt < time[e.to]) {
-          time[e.to] = nt;
-          prev[e.to] = u;
-          heap.push(e.to, nt);
+      if (pending) {
+        pending.delete(u);
+        if (pending.size === 0) break;
+      }
+      for (let k = off[u]; k < off[u + 1]; k++) {
+        const v = to[k];
+        const nt = tu + et[k];
+        if (nt < time[v]) {
+          time[v] = nt;
+          prev[v] = u;
+          heap.push(v, nt);
         }
       }
     }
     return { time, prev };
   }
 
-  /** Route von a nach b als Punktliste und Fahrzeit in Sekunden (ohne Sonderrechte) */
-  route(from: Vec, to: Vec): { points: Vec[]; seconds: number } | null {
+  /**
+   * Route von a nach b als Punktliste und Fahrzeit in Sekunden (ohne Sonderrechte).
+   * times enthält für jeden Punkt die Fahrzeit ab Start, damit Fahrzeuge je Straße unterschiedlich schnell fahren.
+   */
+  route(from: Vec, to: Vec): { points: Vec[]; times: number[]; seconds: number } | null {
     const s = this.nearestNode(from);
     const t = this.nearestNode(to);
     if (s < 0 || t < 0) return null;
-    const { time, prev } = this.dijkstra(s);
+    const { time, prev } = this.dijkstra(s, false, [t]);
     if (!isFinite(time[t])) return null;
-    const path: Vec[] = [];
-    for (let v = t; v !== -1; v = prev[v]) path.push({ x: this.nodes[v].x, y: this.nodes[v].y });
-    path.reverse();
-    const offroad = dist(from, this.nodes[s]) + dist(to, this.nodes[t]);
-    return {
-      points: [{ x: from.x, y: from.y }, ...path, { x: to.x, y: to.y }],
-      seconds: time[t] + offroad / (30 / 3.6),
-    };
+    const ids: number[] = [];
+    for (let v = t; v !== -1; v = prev[v]) ids.push(v);
+    ids.reverse();
+    const slow = 30 / 3.6;
+    const points: Vec[] = [{ x: from.x, y: from.y }];
+    const times: number[] = [0];
+    const t0 = dist(from, this.nodes[s]) / slow;
+    for (const v of ids) {
+      points.push({ x: this.nodes[v].x, y: this.nodes[v].y });
+      times.push(t0 + time[v]);
+    }
+    points.push({ x: to.x, y: to.y });
+    times.push(times[times.length - 1] + dist(to, this.nodes[t]) / slow);
+    return { points, times, seconds: times[times.length - 1] };
   }
 }
 
 class MinHeap {
-  private ids: number[] = [];
-  private keys: number[] = [];
-  get size() {
-    return this.ids.length;
-  }
+  private ids = new Int32Array(1024);
+  private keys = new Float64Array(1024);
+  size = 0;
   push(id: number, key: number) {
-    this.ids.push(id);
-    this.keys.push(key);
-    let i = this.ids.length - 1;
+    if (this.size === this.ids.length) {
+      const ids = new Int32Array(this.size * 2);
+      ids.set(this.ids);
+      this.ids = ids;
+      const keys = new Float64Array(this.size * 2);
+      keys.set(this.keys);
+      this.keys = keys;
+    }
+    let i = this.size++;
+    const ids = this.ids;
+    const keys = this.keys;
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (this.keys[p] <= this.keys[i]) break;
-      this.swap(i, p);
+      if (keys[p] <= key) break;
+      ids[i] = ids[p];
+      keys[i] = keys[p];
       i = p;
     }
+    ids[i] = id;
+    keys[i] = key;
   }
   pop(): [number, number] {
-    const id = this.ids[0];
-    const key = this.keys[0];
-    const lastId = this.ids.pop()!;
-    const lastKey = this.keys.pop()!;
-    if (this.ids.length) {
-      this.ids[0] = lastId;
-      this.keys[0] = lastKey;
+    const ids = this.ids;
+    const keys = this.keys;
+    const id = ids[0];
+    const key = keys[0];
+    const n = --this.size;
+    if (n > 0) {
+      const lastId = ids[n];
+      const lastKey = keys[n];
       let i = 0;
       for (;;) {
         const l = 2 * i + 1;
+        if (l >= n) break;
         const r = l + 1;
-        let m = i;
-        if (l < this.ids.length && this.keys[l] < this.keys[m]) m = l;
-        if (r < this.ids.length && this.keys[r] < this.keys[m]) m = r;
-        if (m === i) break;
-        this.swap(i, m);
+        const m = r < n && keys[r] < keys[l] ? r : l;
+        if (keys[m] >= lastKey) break;
+        ids[i] = ids[m];
+        keys[i] = keys[m];
         i = m;
       }
+      ids[i] = lastId;
+      keys[i] = lastKey;
     }
     return [id, key];
-  }
-  private swap(a: number, b: number) {
-    [this.ids[a], this.ids[b]] = [this.ids[b], this.ids[a]];
-    [this.keys[a], this.keys[b]] = [this.keys[b], this.keys[a]];
   }
 }
 

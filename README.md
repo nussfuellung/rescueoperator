@@ -2,13 +2,13 @@
 
 Multiplayer-Leitstellensimulator nach dem Vorbild der bayerischen Integrierten Leitstellen (ILS). Mehrere Spieler besetzen gemeinsam eine Leitstelle im LAN: Notrufe annehmen und abfragen, Einsätze anlegen, Fahrzeuge nach Alarm- und Ausrückeordnung (AAO) alarmieren, Funkverkehr mit FMS-Status führen und Patienten in passende Kliniken bringen. Ein Editor erlaubt eigene Leitstellenbereiche mit simuliertem GIS.
 
-Stand: zweiter Playtest-Build (Version 0.2.0). Neu: funktionierende Sprachausgabe, Spracheingabe per Mikrofon, echte Karten aus OpenStreetMap mit Routing auf echten Straßen und auslagerbare Fenster für mehrere Monitore.
+Stand: dritter Playtest-Build (Version 0.3.0). Neu: **ILS Würzburg** als mitgelieferte Musterleitstelle auf echter OpenStreetMap-Karte, realistischeres Routing (Tempolimits, Einbahnstraßen, Fahrt je Straße unterschiedlich schnell), sichtbare Fahrten auf der Karte, die Einsatzmaske als eigenes Fenster und eine überarbeitete Spracheingabe mit Mikrofonwahl und Pegelanzeige.
 
 ## Schnellstart unter Windows
 
-1. `release/Leitstellensimulator-0.2.0-win.zip` entpacken.
+1. `release/Leitstellensimulator-0.3.0-win.zip` entpacken.
 2. `Leitstellensimulator.exe` starten. Das Paket ist nicht signiert; Windows SmartScreen fragt deshalb einmal nach („Weitere Informationen“ → „Trotzdem ausführen“).
-3. Namen eingeben, **Schicht hosten** → Leitstelle wählen → **Server starten**.
+3. Namen eingeben, **Schicht hosten** → Leitstelle wählen (vorinstalliert: **ILS Würzburg**) → **Server starten**.
 4. Beim ersten Hosten fragt die Windows-Firewall nach. Für Mitspieler im LAN „Private Netzwerke“ erlauben.
 
 Mitspieler starten dieselbe App, wählen **Schicht beitreten** und geben die Adresse ein, die beim Host oben rechts und in der Schichtbesprechung steht (z. B. `192.168.0.23:4711`).
@@ -76,17 +76,25 @@ Oben links laufen Uhrzeit, Pause und Zeitraffer (1×, 2×, 4×).
 
 Unter **⚙ Einstellungen** (im Hauptmenü und oben rechts im Spiel) lässt sich die Sprachausgabe einschalten und mit **Stimme testen** prüfen. Vorgelesen werden die Funksprüche der Fahrzeuge und, im eigenen Notrufgespräch, die Sätze des Anrufers (mit anderer Stimme). Besatzungen hören die Leitstelle. Bei **Stimme: Automatisch** wird zuerst die Browser-Stimme von Chromium versucht; startet sie nicht, übernimmt die Systemstimme (Windows: deutsche SAPI-Stimme über PowerShell, macOS: `say`, Linux: `spd-say` oder `espeak`). Unter Windows muss eine deutsche Stimme installiert sein (Einstellungen → Zeit und Sprache → Sprache → Deutsch → Sprachausgabe). Der Lautsprecher-Knopf oben schaltet Töne und Sprache stumm.
 
+### Musterleitstelle ILS Würzburg
+
+Mitgeliefert ist der Bereich der ILS Würzburg (Stadt Würzburg, Landkreise Würzburg, Kitzingen und Main-Spessart) auf echter Karte: rund 60.000 Straßenabschnitte mit Namen, Tempolimits und Einbahnstraßen, gut 400 Orte, die Feuerwehren und Rettungswachen aus den Kartendaten (fehlende Rettungswachen in Kleinstädten ergänzt) und die Kliniken Universitätsklinikum, Juliusspital, König-Ludwig-Haus, Missioklinik, Main-Klinik Ochsenfurt und Klinik Kitzinger Land. Die Fahrzeugbelegung der Wachen ist geschätzt (Berufsfeuerwehr Würzburg voll ausgestattet, Ortsfeuerwehren mit HLF, größere Orte zusätzlich mit ELW, LF und DLK) und kann im Editor an die Wirklichkeit angepasst werden. Hausnummern sind entlang der Straßen geschätzt, weil die offenen Adressdaten Bayern noch nicht enthalten. Kartendaten © OpenStreetMap-Mitwirkende (ODbL), bezogen über Overture Maps.
+
+Fahrzeuge fahren auf den echten Straßen: auf der Autobahn schnell, in der Altstadt langsam, Einbahnstraßen werden nur langsam mit Sonderrechten gegen die Richtung befahren, Autobahnen nie. Die restliche Route jedes fahrenden Fahrzeugs ist auf der Karte eingezeichnet (durchgezogen bei Einsatzfahrt, gestrichelt sonst).
+
 ### Spracheingabe (Mikrofon)
 
 Notrufgespräche und Funk lassen sich sprechen statt tippen. Die Erkennung läuft offline auf dem PC (Vosk). In den Einstellungen einmal **Deutsches Modell herunterladen** (vosk-model-small-de-0.15, rund 45 MB) oder ein bereits heruntergeladenes ZIP über **Aus Datei…** laden, dann **Spracheingabe einschalten**. Mit **Test** im selben Dialog sieht man, was erkannt wird.
 
-- **Sprechtaste** (Standard `F4`, einstellbar) gedrückt halten oder den 🎤-Knopf gedrückt halten und sprechen.
+- **Sprechtaste** (Standard `F4`, einstellbar) gedrückt halten oder den 🎤-Knopf gedrückt halten und sprechen. Die Sprechtaste unterbricht die Sprachausgabe.
+- Oben in der Leiste zeigt 🎤, ob die Erkennung bereit ist, ob gerade zugehört wird, was zuletzt erkannt wurde und wohin es ging. In den Einstellungen lässt sich das Mikrofon auswählen, ein Pegel zeigt, ob Ton ankommt.
+- Klappt es nicht, steht der Grund in den Einstellungen unter „Status“. Häufigste Ursache unter Windows: Einstellungen → Datenschutz und Sicherheit → Mikrofon → „Desktop-Apps Zugriff auf das Mikrofon erlauben“ ist aus, oder ein anderes Programm (Teams, Discord) belegt das Mikrofon.
 - **Freisprechen**: Während eines eigenen Notrufgesprächs ist das Mikrofon dauerhaft offen; jeder erkannte Satz geht als Frage an den Anrufer. Während die Sprachausgabe spricht, hört das Mikrofon nicht zu.
 - Wohin das Gesagte geht: im Notrufgespräch an den Anrufer („Wo genau ist der Notfallort?“, „Atmet die Person?“), beim Disponenten mit ausgewähltem Fahrzeug als Funkspruch an dieses Fahrzeug, bei der Besatzung als Funkspruch an die Leitstelle. „Status drei“ setzt als Besatzung direkt den Status.
 
 ### Fenster auf mehrere Monitore verteilen
 
-Jeder Bereich (Notrufabfrage, Karte, Einsätze, Funk, Fahrzeugstatus) hat oben rechts den Knopf ⧉, der ihn in ein eigenes Fenster auslagert. Das Fenster lässt sich auf einen anderen Monitor ziehen; Position und Größe merkt sich die App. Im Menü **🗗 Fenster** gibt es **Kompakte Ansicht (alles in einem Fenster)**, eine Aufteilung **Mehrere Monitore** und das Wiederherstellen der letzten Aufteilung. Schließen eines ausgelagerten Fensters holt den Bereich zurück.
+Jeder Bereich (Notrufabfrage, Einsatzmaske, Karte, Einsätze, Funk, Fahrzeugstatus) hat oben rechts den Knopf ⧉, der ihn in ein eigenes Fenster auslagert. Das Fenster lässt sich auf einen anderen Monitor ziehen; Position und Größe merkt sich die App. Die Einsatzmaske ist ein eigener Bereich: Sie kann z. B. neben dem Notrufgespräch auf einem zweiten Monitor liegen, der Kartenklick im Hauptfenster setzt trotzdem den Einsatzort. Im Menü **🗗 Fenster** gibt es **Kompakte Ansicht (alles in einem Fenster)**, die Aufteilungen **Mehrere Monitore** und **Zwei Monitore (Karte auf dem zweiten)** und das Wiederherstellen der letzten Aufteilung. Schließen eines ausgelagerten Fensters holt den Bereich zurück.
 
 ### Wertung
 
@@ -94,7 +102,7 @@ Punkte gibt es für schnelle Annahme, richtiges Stichwort, genauen Einsatzort, s
 
 ## Leitstellen-Editor
 
-Hauptmenü → **Leitstellen-Editor**. Eine neue Leitstelle entsteht aus einer echten Karte (OpenStreetMap), per Kartengenerator (Orte, Ortsstraßen, Staats-, Kreis- und Bundesstraßen, Autobahn, Wachen, Kliniken, Objekte) oder leer.
+Hauptmenü → **Leitstellen-Editor**. Eine neue Leitstelle entsteht aus einer echten Karte (OpenStreetMap, empfohlen), per Fantasiekarten-Generator für Spiele ohne Internet (Orte, Ortsstraßen, Staats-, Kreis- und Bundesstraßen, Autobahn, Wachen, Kliniken, Objekte) oder leer.
 
 ### Echte Karte aus OpenStreetMap
 
@@ -103,7 +111,7 @@ Hauptmenü → **Leitstellen-Editor**. Eine neue Leitstelle entsteht aus einer e
 - echte Hausnummern; Anrufer nennen echte Adressen, und die Adresssuche im Einsatzformular findet sie,
 - Orte, Feuerwehren, Rettungswachen, Kliniken, Schulen, Seniorenheime und Kirchen.
 
-Wachen bekommen eine sinnvolle Fahrzeugbelegung, die im Editor angepasst werden sollte. Fehlt etwas in den Kartendaten (z. B. keine Rettungswache im Gebiet), wird es ergänzt und oben im Editor gemeldet. Einbahnstraßen und Abbiegeverbote werden bewusst ignoriert (Sonderrechte). Im Spiel liegt unter dem Straßennetz die OpenStreetMap-Karte als Hintergrund (abschaltbar in den Einstellungen, braucht Internet); ohne Internet zeigt die App ihre eigene Darstellung. Statt online zu laden, kann auch eine Overpass-JSON-Datei gewählt werden. Kartendaten © OpenStreetMap-Mitwirkende, ODbL.
+Wachen bekommen eine sinnvolle Fahrzeugbelegung, die im Editor angepasst werden sollte. Fehlt etwas in den Kartendaten (z. B. keine Rettungswache im Gebiet), wird es ergänzt und oben im Editor gemeldet. Tempolimits und Einbahnstraßen werden übernommen; Abbiegeverbote nicht. Im Spiel liegt unter dem Straßennetz die OpenStreetMap-Karte als Hintergrund (abschaltbar in den Einstellungen, braucht Internet); ohne Internet zeigt die App ihre eigene Darstellung. Statt online zu laden, kann auch eine Overpass-JSON-Datei gewählt werden. Kartendaten © OpenStreetMap-Mitwirkende, ODbL.
 
 Werkzeuge links:
 - **Auswählen**: Element anklicken und rechts bearbeiten; Knoten, Wachen, Kliniken, Objekte und Orte lassen sich ziehen.

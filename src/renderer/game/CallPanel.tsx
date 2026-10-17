@@ -26,10 +26,7 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
   const mine = calls.find((c) => c.state === 'active' && c.takerId === ctx.me && c.kind === '112');
   const myBma = calls.filter((c) => c.state === 'active' && c.takerId === ctx.me && c.kind === 'bma' && !c.incidentId);
   const others = calls.filter((c) => c.state === 'active' && c.takerId !== ctx.me);
-  const [manual, setManual] = useState(false);
-  const [bmaCall, setBmaCall] = useState<string | null>(null);
-  const formCall = (mine && !mine.incidentId ? mine : undefined) ?? calls.find((c) => c.id === bmaCall && !c.incidentId);
-  const showForm = !!formCall || manual;
+  const setBmaCall = ctx.setFormCallId;
 
   // Leertaste nimmt den ältesten Anruf an
   const firstRinging = ringing[0];
@@ -94,8 +91,21 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
       </div>
 
       {mine && <Conversation ctx={ctx} call={mine} />}
+    </div>
+  );
+}
+
+/** Einsatzmaske: eigenständiger Bereich, lässt sich getrennt von der Notrufabfrage auslagern */
+export function IncidentFormPanel({ ctx }: { ctx: GameCtx }) {
+  const calls = ctx.state.calls;
+  const mine = calls.find((c) => c.state === 'active' && c.takerId === ctx.me && c.kind === '112');
+  const formCall = (mine && !mine.incidentId ? mine : undefined) ?? calls.find((c) => c.id === ctx.formCallId && !c.incidentId);
+  const showForm = !!formCall || ctx.formManual;
+  return (
+    <div className="panel einsatzmaske">
+      <div className="panel-title">Einsatzmaske</div>
       {!showForm && (
-        <button className="manual-btn" onClick={() => setManual(true)}>
+        <button className="manual-btn" onClick={() => ctx.setFormManual(true)}>
           + Einsatz ohne Anruf anlegen
         </button>
       )}
@@ -105,8 +115,8 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
           ctx={ctx}
           call={formCall}
           onDone={() => {
-            setManual(false);
-            setBmaCall(null);
+            ctx.setFormManual(false);
+            ctx.setFormCallId(null);
           }}
         />
       )}
@@ -204,6 +214,13 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
   const [patients, setPatients] = useState(0);
   const [note, setNote] = useState('');
   const [err, setErr] = useState('');
+  // Bei echten Karten gibt es tausende Straßen: nur passende Vorschläge anbieten
+  const streetOptions = useMemo(() => {
+    const q = street.toLowerCase().trim();
+    if (streets.length < 400) return streets;
+    if (q.length < 2) return [];
+    return streets.filter((s) => s.label.toLowerCase().includes(q)).slice(0, 60);
+  }, [streets, street]);
 
   const applyPos = (p: Vec, label?: string) => {
     const hit = reverseGeocode(scn, p);
@@ -291,7 +308,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
         <button onClick={search}>Suchen</button>
       </div>
       <datalist id="streets">
-        {streets.map((s) => (
+        {streetOptions.map((s) => (
           <option key={s.label} value={s.label} />
         ))}
       </datalist>

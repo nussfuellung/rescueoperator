@@ -5,7 +5,7 @@ import type { PublicState, Role, Scenario, Vec } from '../../../shared/types';
 import { conn, useNet } from '../net';
 import { MapView, type Hit } from '../MapView';
 import { alarmTone, beep, isMuted, ring, setMuted } from '../sound';
-import { CallPanel } from './CallPanel';
+import { CallPanel, IncidentFormPanel } from './CallPanel';
 import { IncidentPanel } from './IncidentPanel';
 import { UnitBoard } from './UnitBoard';
 import { RadioPanel } from './RadioPanel';
@@ -15,6 +15,7 @@ import { SettingsModal, useSttAutoload } from '../SettingsModal';
 import { getSettings } from '../settings';
 import { radioSpeech, say, stopSpeaking } from '../audio/tts';
 import { attachPttKeys } from '../audio/stt';
+import { MicStatus } from '../audio/SpeechUi';
 
 export interface GameCtx {
   scn: Scenario;
@@ -30,10 +31,16 @@ export interface GameCtx {
   setMarker: (p: Vec | null) => void;
   /** Kartenklick an das Einsatzformular weiterleiten */
   mapPickRef: React.MutableRefObject<((p: Vec) => void) | null>;
+  /** Einsatzmaske ohne Anruf geöffnet */
+  formManual: boolean;
+  setFormManual: (v: boolean) => void;
+  /** BMA-Anruf, zu dem die Einsatzmaske gehört */
+  formCallId: string | null;
+  setFormCallId: (id: string | null) => void;
 }
 
 const POPPED_KEY = 'lst.popped';
-const ALL_PANELS: PanelId[] = ['calls', 'map', 'incidents', 'radio', 'units'];
+const ALL_PANELS: PanelId[] = ['calls', 'form', 'map', 'incidents', 'radio', 'units'];
 
 function loadPopped(): PanelId[] {
   try {
@@ -59,6 +66,8 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
   // Ausgelagerte Fenster werden nicht automatisch wieder geöffnet (Popup-Sperre), nur gemerkt
   const [popped, setPopped] = useState<PanelId[]>([]);
   const mapPickRef = useRef<((p: Vec) => void) | null>(null);
+  const [formManual, setFormManual] = useState(false);
+  const [formCallId, setFormCallId] = useState<string | null>(null);
 
   useSounds(state);
   useSttAutoload();
@@ -88,6 +97,10 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
     marker,
     setMarker,
     mapPickRef,
+    formManual,
+    setFormManual,
+    formCallId,
+    setFormCallId,
   };
 
   const onMapClick = (p: Vec, hit: Hit | null) => {
@@ -109,6 +122,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
 
   const panels: Record<PanelId, ReactNode> = {
     calls: <CallPanel ctx={ctx} />,
+    form: <IncidentFormPanel ctx={ctx} />,
     map: (
       <div className="map-wrap">
         <MapView
@@ -144,7 +158,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
       </div>
     );
 
-  const leftVisible = !isPopped('calls');
+  const leftVisible = !isPopped('calls') || !isPopped('form');
   const rightVisible = !isPopped('incidents') || !isPopped('radio');
   const centerVisible = !isPopped('map') || !isPopped('units');
   const columns = [leftVisible ? '370px' : null, centerVisible ? '1fr' : null, rightVisible ? (centerVisible ? '430px' : '1fr') : null]
@@ -171,6 +185,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
         ★ {state.score.points} Punkte
       </button>
       <div className="spacer" />
+      <MicStatus />
       {props.hostInfo && (
         <div className="hostinfo" title="Andere Spieler im LAN treten mit dieser Adresse bei">
           Host: {props.hostInfo.addresses.map((a) => `${a}:${props.hostInfo!.port}`).join(' · ') || `localhost:${props.hostInfo.port}`}
@@ -198,7 +213,8 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
               ))}
               <hr />
               <button onClick={() => setPopped([])}>Kompakte Ansicht (alles in einem Fenster)</button>
-              <button onClick={() => setPopped(['calls', 'incidents', 'radio', 'units'])}>Mehrere Monitore (nur Karte bleibt)</button>
+              <button onClick={() => setPopped(['calls', 'form', 'incidents', 'radio', 'units'])}>Mehrere Monitore (nur Karte bleibt)</button>
+              <button onClick={() => setPopped(['map'])}>Zwei Monitore (Karte auf dem zweiten)</button>
               {loadPopped().length > 0 && popped.length === 0 && (
                 <button onClick={() => setPopped(loadPopped())}>Letzte Fensteraufteilung wiederherstellen</button>
               )}
@@ -251,7 +267,12 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
         <CrewView ctx={ctx} />
       ) : (
         <div className="layout" style={{ gridTemplateColumns: columns || '1fr' }}>
-          {leftVisible && <aside className="col-left">{dock('calls', 'grow-panel')}</aside>}
+          {leftVisible && (
+            <aside className="col-left">
+              {dock('calls', 'grow-panel')}
+              {dock('form', isPopped('calls') ? 'grow-panel' : '')}
+            </aside>
+          )}
           {centerVisible && (
             <main className="col-center">
               {dock('map', 'grow-panel')}

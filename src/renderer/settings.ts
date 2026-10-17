@@ -12,6 +12,8 @@ export interface Settings {
   sttEnabled: boolean;
   sttMode: 'continuous' | 'ptt';
   pttKey: string;
+  /** gewähltes Mikrofon, leer = Standardgerät */
+  micDeviceId: string;
   mapTiles: boolean;
   tileUrl: string;
 }
@@ -27,6 +29,7 @@ const DEFAULTS: Settings = {
   sttEnabled: false,
   sttMode: 'ptt',
   pttKey: 'F4',
+  micDeviceId: '',
   mapTiles: true,
   tileUrl: DEFAULT_TILE_URL,
 };
