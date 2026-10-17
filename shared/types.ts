@@ -105,6 +105,26 @@ export interface ScenarioSettings {
   startClock: number;
 }
 
+/** Bezug eines aus OpenStreetMap importierten Szenarios zur echten Welt */
+export interface GeoRef {
+  /** Breitengrad, an dem lokale Meter exakt stimmen */
+  lat0: number;
+  /** Web-Mercator-Koordinaten der linken oberen Ecke (x = 0, y = 0) */
+  mx0: number;
+  my0: number;
+  bbox?: { south: number; west: number; north: number; east: number };
+}
+
+/** Echte Hausnummer (aus OpenStreetMap) */
+export interface Address {
+  street: string;
+  /** z. B. "12a" */
+  number: string;
+  town: string;
+  x: number;
+  y: number;
+}
+
 export interface Scenario {
   version: 1;
   id: string;
@@ -122,6 +142,10 @@ export interface Scenario {
   vehicleTypes: VehicleType[];
   stichworte: Stichwort[];
   settings: ScenarioSettings;
+  /** Nur bei echten Karten: Projektion für Kartenkacheln */
+  geo?: GeoRef;
+  /** Nur bei echten Karten: echte Hausnummern */
+  addresses?: Address[];
 }
 
 // ---------- Laufzeitzustand (Server -> Client) ----------

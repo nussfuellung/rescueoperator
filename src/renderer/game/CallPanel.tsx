@@ -5,6 +5,8 @@ import { geocode, reverseGeocode, streetDirectory } from '../../../shared/geo';
 import type { CallState, QuestionId, Vec } from '../../../shared/types';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
+import { useSpeechTarget } from '../audio/stt';
+import { MicButton } from '../audio/SpeechUi';
 
 const QUESTIONS: { id: QuestionId; label: string; key: string }[] = [
   { id: 'wo', label: 'Wo?', key: '1' },
@@ -126,9 +128,13 @@ function Conversation({ ctx, call }: { ctx: GameCtx; call: CallState }) {
       const q = QUESTIONS.find((x) => x.key === e.key);
       if (q && e.altKey) conn.send({ a: 'ask', callId: call.id, question: q.id });
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    const win = box.current?.ownerDocument.defaultView ?? window;
+    win.addEventListener('keydown', onKey);
+    return () => win.removeEventListener('keydown', onKey);
   }, [call.id]);
+
+  // Gesprochene Fragen gehen direkt an den Anrufer
+  useSpeechTarget(`call-${call.id}`, 50, (spoken) => conn.send({ a: 'ask', callId: call.id, question: 'was', text: spoken }), true);
 
   return (
     <div className="conversation">
@@ -179,6 +185,7 @@ function Conversation({ ctx, call }: { ctx: GameCtx; call: CallState }) {
         <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Eigene Frage an den Anrufer…" />
         <button type="submit">Fragen</button>
       </form>
+      <MicButton targetId={`call-${call.id}`} label="Frage sprechen" />
       <button className="danger" onClick={() => conn.send({ a: 'endCall', callId: call.id })}>
         Gespräch beenden
       </button>
@@ -204,7 +211,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
     setAddress(label ?? hit?.text ?? `${Math.round(p.x)}/${Math.round(p.y)}`);
     if (hit) {
       setStreet(hit.road.type === 'ortsstrasse' ? `${hit.street}, ${hit.town}` : hit.street);
-      setNumber(hit.number ? String(hit.number) : '');
+      setNumber(hit.houseNumber ?? (hit.number ? String(hit.number) : ''));
     }
     ctx.setMarker(hit && hit.distance < 300 ? hit.point : p);
   };
@@ -228,8 +235,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
 
   const search = () => {
     const [s, town] = street.split(',').map((x) => x.trim());
-    const n = parseInt(number, 10);
-    const hit = geocode(scn, s, town ?? '', isNaN(n) ? undefined : n);
+    const hit = geocode(scn, s, town ?? '', number.trim() || undefined);
     if (!hit) {
       setErr('Adresse nicht gefunden. Straße aus der Liste wählen oder in die Karte klicken.');
       return;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ROLE_LABEL, formatClock, formatDuration } from '../../../shared/catalog';
 import { RoadGraph } from '../../../shared/geo';
 import type { PublicState, Role, Scenario, Vec } from '../../../shared/types';
@@ -10,6 +10,11 @@ import { IncidentPanel } from './IncidentPanel';
 import { UnitBoard } from './UnitBoard';
 import { RadioPanel } from './RadioPanel';
 import { CrewView } from './CrewView';
+import { PANEL_TITLES, Popout, type PanelId } from '../Popout';
+import { SettingsModal, useSttAutoload } from '../SettingsModal';
+import { getSettings } from '../settings';
+import { radioSpeech, say, stopSpeaking } from '../audio/tts';
+import { attachPttKeys } from '../audio/stt';
 
 export interface GameCtx {
   scn: Scenario;
@@ -27,6 +32,17 @@ export interface GameCtx {
   mapPickRef: React.MutableRefObject<((p: Vec) => void) | null>;
 }
 
+const POPPED_KEY = 'lst.popped';
+const ALL_PANELS: PanelId[] = ['calls', 'map', 'incidents', 'radio', 'units'];
+
+function loadPopped(): PanelId[] {
+  try {
+    return JSON.parse(localStorage.getItem(POPPED_KEY) ?? '[]');
+  } catch {
+    return [];
+  }
+}
+
 export function GameScreen(props: { hostInfo: { port: number; addresses: string[] } | null; onLeave: () => void }) {
   const net = useNet();
   const scn = net.scenario!;
@@ -37,11 +53,24 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
   const [focusPt, setFocusPt] = useState<{ x: number; y: number; seq: number } | null>(null);
   const [marker, setMarker] = useState<Vec | null>(null);
   const [showScore, setShowScore] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showWindows, setShowWindows] = useState(false);
   const [muted, setMutedState] = useState(isMuted());
-  const [tts, setTts] = useState(conn.ttsEnabled);
+  // Ausgelagerte Fenster werden nicht automatisch wieder geöffnet (Popup-Sperre), nur gemerkt
+  const [popped, setPopped] = useState<PanelId[]>([]);
   const mapPickRef = useRef<((p: Vec) => void) | null>(null);
 
   useSounds(state);
+  useSttAutoload();
+  useEffect(() => attachPttKeys(window), []);
+  useReadAloud(state, net.playerId, scn.ilsName);
+  useEffect(() => {
+    try {
+      localStorage.setItem(POPPED_KEY, JSON.stringify(popped));
+    } catch {
+      /* egal */
+    }
+  }, [popped]);
 
   if (!state) return <div className="menu-bg">Verbinde…</div>;
   const me = state.players.find((p) => p.id === net.playerId);
@@ -75,6 +104,53 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
     mapPickRef.current?.(p);
   };
 
+  const togglePanel = (id: PanelId) => setPopped((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const isPopped = (id: PanelId) => popped.includes(id);
+
+  const panels: Record<PanelId, ReactNode> = {
+    calls: <CallPanel ctx={ctx} />,
+    map: (
+      <div className="map-wrap">
+        <MapView
+          scenario={scn}
+          focus={focusPt}
+          data={{
+            units: state.units,
+            incidents: state.incidents,
+            calls: state.calls,
+            selectedIncidentId: selectedIncident ?? undefined,
+            selectedUnitId: selectedUnit ?? undefined,
+            marker,
+          }}
+          hitKinds={['unit', 'incident']}
+          onClick={onMapClick}
+        />
+        <div className="map-legend">Linksklick: auswählen bzw. Einsatzort setzen · Ziehen: verschieben · Mausrad: zoomen</div>
+      </div>
+    ),
+    incidents: <IncidentPanel ctx={ctx} />,
+    radio: <RadioPanel ctx={ctx} />,
+    units: <UnitBoard ctx={ctx} />,
+  };
+
+  /** Panel im Hauptfenster mit Auslager-Knopf */
+  const dock = (id: PanelId, className = '') =>
+    isPopped(id) ? null : (
+      <div className={`dock dock-${id} ${className}`}>
+        <button className="popout-btn" title={`${PANEL_TITLES[id]} in eigenes Fenster auslagern`} onClick={() => togglePanel(id)}>
+          ⧉
+        </button>
+        {panels[id]}
+      </div>
+    );
+
+  const leftVisible = !isPopped('calls');
+  const rightVisible = !isPopped('incidents') || !isPopped('radio');
+  const centerVisible = !isPopped('map') || !isPopped('units');
+  const columns = [leftVisible ? '370px' : null, centerVisible ? '1fr' : null, rightVisible ? (centerVisible ? '430px' : '1fr') : null]
+    .filter(Boolean)
+    .join(' ');
+
   const topBar = (
     <header className="topbar">
       <div className="brand">{scn.ilsName}</div>
@@ -100,35 +176,48 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
           Host: {props.hostInfo.addresses.map((a) => `${a}:${props.hostInfo!.port}`).join(' · ') || `localhost:${props.hostInfo.port}`}
         </div>
       )}
-      <select
-        value={me?.role ?? 'dispatcher'}
-        onChange={(e) => conn.send({ a: 'setRole', role: e.target.value as Role })}
-        title="Rolle wechseln"
-      >
+      <select value={me?.role ?? 'dispatcher'} onChange={(e) => conn.send({ a: 'setRole', role: e.target.value as Role })} title="Rolle wechseln">
         {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
           <option key={r} value={r}>
             {ROLE_LABEL[r]}
           </option>
         ))}
       </select>
+      {me?.role !== 'crew' && (
+        <div className="menu-anchor">
+          <button onClick={() => setShowWindows(!showWindows)} title="Fenster auslagern oder zurückholen">
+            🗗 Fenster
+          </button>
+          {showWindows && (
+            <div className="dropdown" onMouseLeave={() => setShowWindows(false)}>
+              {ALL_PANELS.map((id) => (
+                <label key={id} className="inline">
+                  <input type="checkbox" checked={isPopped(id)} onChange={() => togglePanel(id)} />
+                  {PANEL_TITLES[id]} auslagern
+                </label>
+              ))}
+              <hr />
+              <button onClick={() => setPopped([])}>Kompakte Ansicht (alles in einem Fenster)</button>
+              <button onClick={() => setPopped(['calls', 'incidents', 'radio', 'units'])}>Mehrere Monitore (nur Karte bleibt)</button>
+              {loadPopped().length > 0 && popped.length === 0 && (
+                <button onClick={() => setPopped(loadPopped())}>Letzte Fensteraufteilung wiederherstellen</button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       <button
         onClick={() => {
           setMuted(!muted);
           setMutedState(!muted);
+          if (!muted) stopSpeaking();
         }}
         title="Ton an/aus"
       >
         {muted ? '🔇' : '🔊'}
       </button>
-      <button
-        onClick={() => {
-          conn.ttsEnabled = !tts;
-          setTts(!tts);
-        }}
-        className={tts ? 'active' : ''}
-        title="Funksprüche vorlesen"
-      >
-        Sprachausgabe
+      <button onClick={() => setShowSettings(true)} title="Sprachausgabe, Spracheingabe, Karte">
+        ⚙ Einstellungen
       </button>
       <button onClick={props.onLeave}>Verlassen</button>
     </header>
@@ -161,38 +250,42 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
       {me?.role === 'crew' ? (
         <CrewView ctx={ctx} />
       ) : (
-        <div className="layout">
-          <aside className="col-left">
-            <CallPanel ctx={ctx} />
-          </aside>
-          <main className="col-center">
-            <div className="map-wrap">
-              <MapView
-                scenario={scn}
-                focus={focusPt}
-                data={{
-                  units: state.units,
-                  incidents: state.incidents,
-                  calls: state.calls,
-                  selectedIncidentId: selectedIncident ?? undefined,
-                  selectedUnitId: selectedUnit ?? undefined,
-                  marker,
-                }}
-                hitKinds={['unit', 'incident']}
-                onClick={onMapClick}
-              />
-              <div className="map-legend">
-                Linksklick: auswählen bzw. Einsatzort setzen · Ziehen: verschieben · Mausrad: zoomen
-              </div>
-            </div>
-            <UnitBoard ctx={ctx} />
-          </main>
-          <aside className="col-right">
-            <IncidentPanel ctx={ctx} />
-            <RadioPanel ctx={ctx} />
-          </aside>
+        <div className="layout" style={{ gridTemplateColumns: columns || '1fr' }}>
+          {leftVisible && <aside className="col-left">{dock('calls', 'grow-panel')}</aside>}
+          {centerVisible && (
+            <main className="col-center">
+              {dock('map', 'grow-panel')}
+              {dock('units', isPopped('map') ? 'grow-panel' : '')}
+            </main>
+          )}
+          {rightVisible && (
+            <aside className="col-right">
+              {dock('incidents', 'grow-panel')}
+              {dock('radio', 'grow-panel')}
+            </aside>
+          )}
+          {!leftVisible && !centerVisible && !rightVisible && (
+            <div className="all-popped">Alle Bereiche sind in eigene Fenster ausgelagert. Über „🗗 Fenster“ holst du sie zurück.</div>
+          )}
         </div>
       )}
+      {me?.role !== 'crew' &&
+        popped.map((id) => (
+          <Popout key={id} id={id} title={PANEL_TITLES[id]} onClose={() => setPopped((p) => p.filter((x) => x !== id))}>
+            <div className={`popout-panel dock-${id}`}>
+              <div className="popout-head">
+                <span>
+                  {scn.ilsName} · {PANEL_TITLES[id]}
+                </span>
+                <span className="clock small-clock">{formatClock(state.clockStart, state.time)}</span>
+                <button onClick={() => togglePanel(id)} title="Zurück ins Hauptfenster">
+                  ⇲ Zurückholen
+                </button>
+              </div>
+              {panels[id]}
+            </div>
+          </Popout>
+        ))}
       {!state.started && me?.role !== 'crew' && <Lobby ctx={ctx} hostInfo={props.hostInfo} />}
       {!state.started && me?.role === 'crew' && (
         <div className="crew-wait">
@@ -203,9 +296,45 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
         </div>
       )}
       {showScore && <ScoreModal state={state} onClose={() => setShowScore(false)} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {toasts}
     </div>
   );
+}
+
+/** Liest neue Funksprüche der Fahrzeuge und die Sätze des eigenen Anrufers vor */
+function useReadAloud(state: PublicState | undefined, me: string | undefined, ilsName: string) {
+  const lastRadio = useRef<number | null>(null);
+  const lastCaller = useRef(new Map<string, number>());
+  useEffect(() => {
+    if (!state) return;
+    const s = getSettings();
+    const maxId = state.radio.length ? state.radio[state.radio.length - 1].id : 0;
+    if (lastRadio.current === null) lastRadio.current = maxId;
+    const myUnit = state.players.find((p) => p.id === me)?.unitId;
+    const myCallsign = state.units.find((u) => u.id === myUnit)?.callsign;
+    for (const m of state.radio) {
+      if (m.id <= lastRadio.current) continue;
+      if (!s.readRadio || m.kind !== 'voice') continue;
+      // Eigene Funksprüche nicht vorlesen; Besatzungen hören die Leitstelle
+      if (myCallsign) {
+        if (m.from === ilsName && m.to === myCallsign) say(`Leitstelle: ${m.text}`, 'radio');
+      } else if (m.from !== ilsName) {
+        say(radioSpeech(m.from, m.text), 'radio');
+      }
+    }
+    lastRadio.current = maxId;
+    for (const c of state.calls) {
+      if (c.takerId !== me || c.kind !== '112') continue;
+      const seen = lastCaller.current.get(c.id) ?? 0;
+      c.transcript.forEach((l, i) => {
+        if (i < seen || l.from !== 'caller' || !s.readCaller) return;
+        const text = l.text.replace(/\([^)]*\)/g, '').trim();
+        if (text) say(text, 'caller');
+      });
+      lastCaller.current.set(c.id, c.transcript.length);
+    }
+  }, [state]);
 }
 
 function Lobby({ ctx, hostInfo }: { ctx: GameCtx; hostInfo: { port: number; addresses: string[] } | null }) {

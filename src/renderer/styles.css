@@ -970,3 +970,231 @@ input.tiny {
   border-radius: 6px;
   z-index: 5;
 }
+
+/* ---------- Andockbare und ausgelagerte Bereiche ---------- */
+.dock {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.dock > .panel,
+.dock > .map-wrap {
+  flex: 1;
+  min-height: 0;
+}
+.dock-calls,
+.dock-map,
+.dock-radio {
+  flex: 1;
+}
+.dock-incidents {
+  flex: 1.3;
+}
+.dock-units {
+  max-height: 34%;
+  min-height: 150px;
+}
+.dock-units.grow-panel {
+  flex: 1;
+  max-height: none;
+}
+.dock .unitboard {
+  max-height: none;
+}
+.popout-btn {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  z-index: 3;
+  padding: 0 6px;
+  font-size: 13px;
+  line-height: 20px;
+  opacity: 0.55;
+  background: transparent;
+  border-color: transparent;
+}
+.popout-btn:hover {
+  opacity: 1;
+  border-color: var(--line);
+}
+.dock .panel-title {
+  padding-right: 34px;
+}
+.dock-map .popout-btn {
+  top: 8px;
+  right: 8px;
+  background: rgba(17, 22, 29, 0.8);
+  opacity: 0.85;
+}
+.all-popped {
+  margin: auto;
+  color: var(--muted);
+  padding: 40px;
+}
+html:has(.popout-body),
+.popout-body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+.popout-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.popout-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  max-height: none;
+}
+.popout-panel > .panel,
+.popout-panel > .map-wrap {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  border-top: none;
+}
+.popout-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: #0b1016;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.popout-head span:first-child {
+  flex: 1;
+  color: var(--accent);
+  font-weight: 600;
+}
+.small-clock {
+  font-family: Consolas, monospace;
+  background: #000;
+  color: #7ee787;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.menu-anchor {
+  position: relative;
+}
+.dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  min-width: 290px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.dropdown hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  width: 100%;
+}
+.dropdown button {
+  text-align: left;
+}
+
+/* ---------- Spracheingabe ---------- */
+.mic {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  min-width: 0;
+}
+.mic-btn {
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+  white-space: nowrap;
+}
+.mic-btn.live {
+  background: #6e1a1f;
+  border-color: var(--danger);
+}
+.mic-btn .level {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--ok);
+  transition: width 0.1s;
+}
+.mic .partial {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Einstellungen ---------- */
+.settings h3 {
+  margin: 18px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--accent);
+}
+.settings label {
+  display: block;
+  margin: 4px 0;
+}
+.settings label.inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.settings input:not([type='checkbox']) {
+  width: 100%;
+  box-sizing: border-box;
+}
+.settings input.num {
+  width: 90px;
+}
+.stt-test {
+  background: #0b1016;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  margin: 6px 0;
+}
+
+/* ---------- Import echter Karten ---------- */
+.osm-hits {
+  max-height: 160px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: 6px 0;
+}
+.import-notes {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 6px 12px;
+  background: #13261a;
+  border-bottom: 1px solid #2c5a3a;
+  font-size: 12px;
+}
+.import-notes > div {
+  flex: 1;
+}
+.file-pick input {
+  width: auto !important;
+}

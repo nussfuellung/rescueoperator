@@ -5,8 +5,19 @@ import type { FmsStatus } from '../../../shared/types';
 import { conn } from '../net';
 import { MapView } from '../MapView';
 import type { GameCtx } from './GameScreen';
+import { useSpeechTarget } from '../audio/stt';
+import { MicButton } from '../audio/SpeechUi';
 
 const KEYS: FmsStatus[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+const NUMBER_WORDS: Record<string, FmsStatus> = { eins: 1, zwei: 2, drei: 3, vier: 4, fünf: 5, sechs: 6, sieben: 7, acht: 8, neun: 9 };
+
+/** Erkennt "Status vier" oder "Status 4" als reine Statusmeldung */
+export function spokenStatus(text: string): FmsStatus | null {
+  const m = text.toLowerCase().trim().match(/^(?:status|staatus)\s+(\d|eins|zwei|drei|vier|fünf|sechs|sieben|acht|neun)$/);
+  if (!m) return null;
+  return (NUMBER_WORDS[m[1]] ?? Number(m[1])) as FmsStatus;
+}
 
 export function CrewView({ ctx }: { ctx: GameCtx }) {
   const { state, scn } = ctx;
@@ -14,6 +25,18 @@ export function CrewView({ ctx }: { ctx: GameCtx }) {
   const u = state.units.find((x) => x.id === me?.unitId);
   const [text, setText] = useState('');
   const [filter, setFilter] = useState('');
+  // "Status drei" setzt den Status, alles andere geht als Funkspruch raus
+  useSpeechTarget(
+    'crew-radio',
+    40,
+    u
+      ? (spoken) => {
+          const st = spokenStatus(spoken);
+          if (st) conn.send({ a: 'crewStatus', status: st });
+          else conn.send({ a: 'crewRadio', text: spoken });
+        }
+      : null,
+  );
 
   if (!u) {
     const free = state.units.filter((x) => !x.crewPlayerId && x.callsign.toLowerCase().includes(filter.toLowerCase()));
@@ -113,6 +136,7 @@ export function CrewView({ ctx }: { ctx: GameCtx }) {
             <input className="grow" value={text} onChange={(e) => setText(e.target.value)} placeholder="Funkspruch an die Leitstelle…" />
             <button type="submit">Senden</button>
           </form>
+          <MicButton targetId="crew-radio" label="Funkspruch sprechen" />
         </div>
         <button onClick={() => conn.send({ a: 'setRole', role: 'crew' })}>Fahrzeug verlassen</button>
       </div>

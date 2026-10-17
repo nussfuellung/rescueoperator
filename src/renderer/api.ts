@@ -21,6 +21,30 @@ interface Bridge {
   startHost(scenarioId: string, port: number): Promise<{ port: number; addresses: string[] }>;
   stopHost(): Promise<boolean>;
   hostStatus(): Promise<{ port: number; addresses: string[] } | null>;
+  ttsAvailable?(): Promise<boolean>;
+  ttsSpeak?(text: string, voice: number, rate: number): Promise<boolean>;
+  ttsStop?(): Promise<void>;
+  sttInfo?(): Promise<ModelInfo>;
+  sttDownload?(): Promise<ModelInfo>;
+  sttImport?(): Promise<ModelInfo>;
+  sttRemove?(): Promise<ModelInfo>;
+  onSttProgress?(fn: (p: { got: number; total: number; converting?: boolean }) => void): () => void;
+  fetchText?(url: string, body?: string): Promise<string>;
+}
+
+export interface ModelInfo {
+  installed: boolean;
+  url: string;
+  size?: number;
+}
+
+/** Text von einem Kartendienst holen: in der Desktop-App über den Hauptprozess, sonst direkt */
+export async function fetchText(url: string, body?: string): Promise<string> {
+  if (window.lst?.fetchText) return window.lst.fetchText(url, body);
+  const res = await fetch(url, body ? { method: 'POST', body, headers: { 'content-type': 'application/x-www-form-urlencoded' } } : {});
+  const text = await res.text();
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+  return text;
 }
 
 declare global {

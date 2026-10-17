@@ -1,5 +1,5 @@
 // Einsatzvorlagen und Anruferdialoge für simulierte Notrufe.
-import type { QuestionId, VehicleTypeId } from '../shared/types';
+import type { MapObject, QuestionId, VehicleTypeId } from '../shared/types';
 
 export type LocationKind = 'wohnung' | 'strasse' | 'ausserorts' | 'objekt' | 'autobahn' | 'keine';
 
@@ -9,6 +9,8 @@ export interface IncidentTemplate {
   stichwort: string;
   weight: number;
   where: LocationKind;
+  /** Nur Objekte dieser Art (bei where = 'objekt') */
+  objectKinds?: MapObject['kind'][];
   /** Tatsächlich benötigte Kräfte; Standard ist die AAO des Stichworts */
   needs?: Record<VehicleTypeId, number>;
   /** Patienten mit Transport und benötigter Fachrichtung */
@@ -160,6 +162,7 @@ export const TEMPLATES: IncidentTemplate[] = [
     stichwort: 'RD KTP',
     weight: 0.8,
     where: 'objekt',
+    objectKinds: ['seniorenheim'],
     needs: { KTW: 1 },
     patients: [{ specialty: 'Innere Medizin', desc: 'Liegendtransport zur stationären Aufnahme' }],
     opening: ['Grüß Gott, hier ist die Pflege vom {objekt}. Wir bräuchten einen Krankentransport.'],
@@ -430,15 +433,15 @@ export function questionText(q: QuestionId): string {
 
 /** Ordnet eine frei getippte Frage einem Fragentyp zu */
 export function classifyQuestion(text: string): QuestionId | null {
-  const t = text.toLowerCase();
+  const t = ` ${text.toLowerCase().replace(/[.,!?;:]+/g, ' ').replace(/\s+/g, ' ')} `;
   if (/reanimation|herzdruck|drücken|cpr|massage/.test(t)) return 'tcpr';
   if (/ruhig|beruhig|keine angst/.test(t)) return 'beruhigen';
   if (/wie ?viele|anzahl|verletzte|personen|betroffen/.test(t)) return 'wieviele';
-  if (/name|wer sind|rückruf|nummer|telefon/.test(t)) return 'wer';
+  if (/name|wer sind|wer ist am|mit wem|rückruf|nummer|telefon/.test(t)) return 'wer';
   if (/atmet|atmung|ansprechbar|bewusst|zustand|wach|blut|schmerz|reagiert/.test(t)) return 'zustand';
   if (/feuer|rauch|gefahr|eingeklemmt|brennt|gas|strom|flammen/.test(t)) return 'gefahr';
-  if (/wo |wo\?|^wo|adresse|straße|hausnummer|welcher ort|wohin|genau/.test(t)) return 'wo';
-  if (/was |was\?|^was|passiert|los|geschehen|vorgefallen/.test(t)) return 'was';
+  if (/ wo |adresse|straße|hausnummer|welche[mrn]? ort|ortschaft|notfallort|einsatzort|wohin|befinden sie|genau/.test(t)) return 'wo';
+  if (/ was |passiert| los |geschehen|vorgefallen|notfall/.test(t)) return 'was';
   return null;
 }
 

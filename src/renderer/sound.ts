@@ -1,4 +1,6 @@
 // Klingelton, Signaltöne und Sprachausgabe ohne Audiodateien.
+import { getSettings } from './settings';
+
 let ctx: AudioContext | null = null;
 let muted = false;
 
@@ -14,7 +16,6 @@ function audio(): AudioContext | null {
 
 export function setMuted(m: boolean) {
   muted = m;
-  if (m) window.speechSynthesis?.cancel();
 }
 
 export function isMuted() {
@@ -23,7 +24,7 @@ export function isMuted() {
 
 function tone(freq: number, start: number, dur: number, vol = 0.08) {
   const c = audio();
-  if (!c || muted) return;
+  if (!c || muted || !getSettings().ringtone) return;
   const o = c.createOscillator();
   const g = c.createGain();
   o.type = 'sine';
@@ -57,12 +58,3 @@ export function alarmTone() {
   tone(660, 0.3, 0.25, 0.07);
 }
 
-export function speak(text: string) {
-  if (muted || !('speechSynthesis' in window)) return;
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'de-DE';
-  const voice = window.speechSynthesis.getVoices().find((v) => v.lang.startsWith('de'));
-  if (voice) u.voice = voice;
-  u.rate = 1.1;
-  window.speechSynthesis.speak(u);
-}

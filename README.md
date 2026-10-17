@@ -2,11 +2,11 @@
 
 Multiplayer-Leitstellensimulator nach dem Vorbild der bayerischen Integrierten Leitstellen (ILS). Mehrere Spieler besetzen gemeinsam eine Leitstelle im LAN: Notrufe annehmen und abfragen, Einsätze anlegen, Fahrzeuge nach Alarm- und Ausrückeordnung (AAO) alarmieren, Funkverkehr mit FMS-Status führen und Patienten in passende Kliniken bringen. Ein Editor erlaubt eigene Leitstellenbereiche mit simuliertem GIS.
 
-Stand: erster Playtest-Build (Version 0.1.0).
+Stand: zweiter Playtest-Build (Version 0.2.0). Neu: funktionierende Sprachausgabe, Spracheingabe per Mikrofon, echte Karten aus OpenStreetMap mit Routing auf echten Straßen und auslagerbare Fenster für mehrere Monitore.
 
 ## Schnellstart unter Windows
 
-1. `release/Leitstellensimulator-0.1.0-win.zip` entpacken.
+1. `release/Leitstellensimulator-0.2.0-win.zip` entpacken.
 2. `Leitstellensimulator.exe` starten. Das Paket ist nicht signiert; Windows SmartScreen fragt deshalb einmal nach („Weitere Informationen“ → „Trotzdem ausführen“).
 3. Namen eingeben, **Schicht hosten** → Leitstelle wählen → **Server starten**.
 4. Beim ersten Hosten fragt die Windows-Firewall nach. Für Mitspieler im LAN „Private Netzwerke“ erlauben.
@@ -70,7 +70,23 @@ Die Rolle wird beim Start gewählt und kann jederzeit oben rechts gewechselt wer
 
 **Schichtführer**: wie Disponent, für den Überblick.
 
-Oben links laufen Uhrzeit, Pause und Zeitraffer (1×, 2×, 4×). Die Funksprüche können per Sprachausgabe vorgelesen werden (Button „Sprachausgabe“, nutzt die deutsche Windows-Stimme).
+Oben links laufen Uhrzeit, Pause und Zeitraffer (1×, 2×, 4×).
+
+### Sprachausgabe
+
+Unter **⚙ Einstellungen** (im Hauptmenü und oben rechts im Spiel) lässt sich die Sprachausgabe einschalten und mit **Stimme testen** prüfen. Vorgelesen werden die Funksprüche der Fahrzeuge und, im eigenen Notrufgespräch, die Sätze des Anrufers (mit anderer Stimme). Besatzungen hören die Leitstelle. Bei **Stimme: Automatisch** wird zuerst die Browser-Stimme von Chromium versucht; startet sie nicht, übernimmt die Systemstimme (Windows: deutsche SAPI-Stimme über PowerShell, macOS: `say`, Linux: `spd-say` oder `espeak`). Unter Windows muss eine deutsche Stimme installiert sein (Einstellungen → Zeit und Sprache → Sprache → Deutsch → Sprachausgabe). Der Lautsprecher-Knopf oben schaltet Töne und Sprache stumm.
+
+### Spracheingabe (Mikrofon)
+
+Notrufgespräche und Funk lassen sich sprechen statt tippen. Die Erkennung läuft offline auf dem PC (Vosk). In den Einstellungen einmal **Deutsches Modell herunterladen** (vosk-model-small-de-0.15, rund 45 MB) oder ein bereits heruntergeladenes ZIP über **Aus Datei…** laden, dann **Spracheingabe einschalten**. Mit **Test** im selben Dialog sieht man, was erkannt wird.
+
+- **Sprechtaste** (Standard `F4`, einstellbar) gedrückt halten oder den 🎤-Knopf gedrückt halten und sprechen.
+- **Freisprechen**: Während eines eigenen Notrufgesprächs ist das Mikrofon dauerhaft offen; jeder erkannte Satz geht als Frage an den Anrufer. Während die Sprachausgabe spricht, hört das Mikrofon nicht zu.
+- Wohin das Gesagte geht: im Notrufgespräch an den Anrufer („Wo genau ist der Notfallort?“, „Atmet die Person?“), beim Disponenten mit ausgewähltem Fahrzeug als Funkspruch an dieses Fahrzeug, bei der Besatzung als Funkspruch an die Leitstelle. „Status drei“ setzt als Besatzung direkt den Status.
+
+### Fenster auf mehrere Monitore verteilen
+
+Jeder Bereich (Notrufabfrage, Karte, Einsätze, Funk, Fahrzeugstatus) hat oben rechts den Knopf ⧉, der ihn in ein eigenes Fenster auslagert. Das Fenster lässt sich auf einen anderen Monitor ziehen; Position und Größe merkt sich die App. Im Menü **🗗 Fenster** gibt es **Kompakte Ansicht (alles in einem Fenster)**, eine Aufteilung **Mehrere Monitore** und das Wiederherstellen der letzten Aufteilung. Schließen eines ausgelagerten Fensters holt den Bereich zurück.
 
 ### Wertung
 
@@ -78,7 +94,16 @@ Punkte gibt es für schnelle Annahme, richtiges Stichwort, genauen Einsatzort, s
 
 ## Leitstellen-Editor
 
-Hauptmenü → **Leitstellen-Editor**. Eine neue Leitstelle entsteht entweder per Kartengenerator (Orte, Ortsstraßen, Staats-, Kreis- und Bundesstraßen, Autobahn, Wachen, Kliniken, Objekte) oder leer.
+Hauptmenü → **Leitstellen-Editor**. Eine neue Leitstelle entsteht aus einer echten Karte (OpenStreetMap), per Kartengenerator (Orte, Ortsstraßen, Staats-, Kreis- und Bundesstraßen, Autobahn, Wachen, Kliniken, Objekte) oder leer.
+
+### Echte Karte aus OpenStreetMap
+
+**Neue Leitstelle aus echter Karte** (oder im Editor **Echte Karte laden…**): Ort suchen, Umkreis wählen (2 bis 15 km), **Karte importieren**. Übernommen werden:
+- das Straßennetz mit Straßennamen und Typen (Autobahn, Bundes-, Staats-/Kreisstraße, Ortsstraße); gefahren und geroutet wird auf diesen echten Straßen,
+- echte Hausnummern; Anrufer nennen echte Adressen, und die Adresssuche im Einsatzformular findet sie,
+- Orte, Feuerwehren, Rettungswachen, Kliniken, Schulen, Seniorenheime und Kirchen.
+
+Wachen bekommen eine sinnvolle Fahrzeugbelegung, die im Editor angepasst werden sollte. Fehlt etwas in den Kartendaten (z. B. keine Rettungswache im Gebiet), wird es ergänzt und oben im Editor gemeldet. Einbahnstraßen und Abbiegeverbote werden bewusst ignoriert (Sonderrechte). Im Spiel liegt unter dem Straßennetz die OpenStreetMap-Karte als Hintergrund (abschaltbar in den Einstellungen, braucht Internet); ohne Internet zeigt die App ihre eigene Darstellung. Statt online zu laden, kann auch eine Overpass-JSON-Datei gewählt werden. Kartendaten © OpenStreetMap-Mitwirkende, ODbL.
 
 Werkzeuge links:
 - **Auswählen**: Element anklicken und rechts bearbeiten; Knoten, Wachen, Kliniken, Objekte und Orte lassen sich ziehen.
@@ -99,19 +124,23 @@ Hausnummern werden automatisch entlang gleichnamiger Straßenzüge vergeben. `St
 
 - Electron, React und TypeScript; Vite für die Oberfläche, esbuild für Hauptprozess und Server.
 - Der Host startet im Electron-Hauptprozess einen WebSocket-Server (Standardport 4711). Die Simulation läuft nur dort; Clients senden Aktionen und erhalten viermal pro Sekunde den Zustand. Verdeckte Informationen (die „Wahrheit“ hinter einem Notruf) verlassen den Server nie.
-- Simuliertes GIS ohne externe Kartendienste: eigener Straßengraph, Routing mit Dijkstra, Geokodierung und Rückwärtsgeokodierung mit Hausnummern, Canvas-Karte.
+- GIS: eigener Straßengraph, Routing mit Dijkstra, Geokodierung und Rückwärtsgeokodierung mit Hausnummern, Canvas-Karte. Echte Karten kommen über Nominatim (Ortssuche) und Overpass (Daten) aus OpenStreetMap und werden in lokale Meter umgerechnet (Web-Mercator mit cos(Breite) skaliert, damit OSM-Kacheln deckungsgleich darunter liegen).
+- Sprachausgabe: Web Speech API mit Rückfall auf die Systemstimme im Hauptprozess. Spracheingabe: vosk-browser (WebAssembly), das Modell wird im Hauptprozess heruntergeladen, von ZIP in tar.gz umgepackt und über das eigene Protokoll `lstmodel://` bereitgestellt.
+- Ausgelagerte Fenster sind React-Portale in eigene Fenster desselben Renderers; der Spielzustand bleibt dadurch überall gleich.
 
 ```
 shared/    Datenmodell, Katalog (Fahrzeuge, Stichworte, FMS), GIS, Kartengenerator, AAO-Logik
 server/    Spielsimulation, Notruf-Vorlagen, WebSocket-Server, eigenständiger Server
 electron/  Hauptprozess (Fenster, Leitstellen-Bibliothek, Host) und Preload
 src/renderer/  Oberfläche: Menü, Leitstelle, Besatzung, Editor, Karte
-tests/     Vitest: GIS, Einsatzablauf, 2-Stunden-Dauertest mit Bot-Disponent
+tests/     Vitest: GIS, Einsatzablauf, Spracherkennung, OSM-Import mit echten Daten (Liechtenstein), Dauertests mit Bot-Disponent
 ```
 
 ## Bekannte Grenzen dieses Playtest-Builds
 
-- Funk ist Text mit optionaler Sprachausgabe, kein Sprechfunk zwischen Spielern.
+- Funk zwischen Spielern ist Text bzw. erkannte Sprache mit Vorlesen, keine echte Sprachübertragung.
+- Die Spracherkennung mit dem kleinen deutschen Modell versteht kurze, deutliche Sätze am besten; die Zuordnung zu den Abfragefragen läuft über Stichworte (wo, was passiert, atmet, wie viele …).
+- Echte Karten: Sehr große Gebiete (über 15 km Umkreis) sind nicht vorgesehen. Hausnummern gibt es nur, wo OpenStreetMap sie kennt; sonst werden sie entlang der Straße geschätzt.
 - Kein Verkehr, keine Polizei als eigene Organisation, keine Hubschrauber.
 - Eine laufende Schicht wird nicht gespeichert; Verlassen beendet sie für den Host.
 - Stichwortkatalog und Funkkenner sind an Bayern angelehnt, aber vereinfacht und im Editor anpassbar.

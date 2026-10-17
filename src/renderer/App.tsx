@@ -6,6 +6,7 @@ import { api, isDesktop, type ScenarioInfo } from './api';
 import { conn, useNet } from './net';
 import { GameScreen } from './game/GameScreen';
 import { EditorScreen } from './editor/EditorScreen';
+import { SettingsModal } from './SettingsModal';
 
 type Screen = 'menu' | 'host' | 'join' | 'editor' | 'game';
 
@@ -32,6 +33,7 @@ export function App() {
   const [role, setRole] = useState<Role>(() => store.get('lst.role', 'dispatcher') as Role);
   const [hostInfo, setHostInfo] = useState<{ port: number; addresses: string[] } | null>(null);
   const net = useNet();
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => store.set('lst.name', name), [name]);
   useEffect(() => store.set('lst.role', role), [role]);
@@ -79,6 +81,7 @@ export function App() {
                 Schicht beitreten
               </button>
               <button onClick={() => setScreen('editor')}>Leitstellen-Editor</button>
+              <button onClick={() => setShowSettings(true)}>Einstellungen (Sprache, Karte)</button>
             </div>
             {!name.trim() && <p className="muted small">Bitte zuerst einen Namen eingeben.</p>}
           </>
@@ -105,6 +108,7 @@ export function App() {
         )}
         {net.error && <p className="error">{net.error}</p>}
       </div>
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </div>
   );
 }

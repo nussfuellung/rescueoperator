@@ -1,11 +1,18 @@
 // Electron-Hauptprozess: Fenster, Leitstellen-Bibliothek, Host-Server.
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, net, session, shell } from 'electron';
 import { mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { recomputeHouseNumbers } from '../shared/geo';
 import { generateScenario } from '../shared/mapgen';
 import type { Scenario } from '../shared/types';
 import { GameServer, lanAddresses } from '../server/server';
+import { speakSystem, stopSystemSpeech, systemTtsAvailable } from './tts';
+import { downloadModel, handleModelProtocol, installModelFromBytes, modelInfo, registerModelScheme, removeModel } from './stt';
+
+registerModelScheme();
+
+const UA = `Leitstellensimulator/${app.getVersion()} (Desktop-Spiel; https://github.com)`;
+const ALLOWED_HOSTS = ['overpass-api.de', 'overpass.kumi.systems', 'overpass.private.coffee', 'nominatim.openstreetmap.org'];
 
 let win: BrowserWindow | null = null;
 let host: GameServer | null = null;
@@ -63,8 +70,15 @@ function createWindow() {
   const dev = process.env.LST_DEV_URL;
   if (dev) win.loadURL(dev);
   else win.loadFile(join(__dirname, '../renderer/index.html'));
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    // Ausgelagerte Fenster der Oberfläche (React-Portale in leere Fenster)
+    if (url === 'about:blank' && frameName.startsWith('lst-')) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: { autoHideMenuBar: true, backgroundColor: '#11161d', minWidth: 300, minHeight: 200 },
+      };
+    }
+    if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
 }
@@ -116,7 +130,47 @@ ipcMain.handle('host:stop', async () => {
 });
 ipcMain.handle('host:status', () => (host ? { port: host.port, addresses: lanAddresses() } : null));
 
-app.whenReady().then(createWindow);
+ipcMain.handle('tts:available', () => systemTtsAvailable());
+ipcMain.handle('tts:speak', (_e, text: string, voice: number, rate: number) => speakSystem(text, voice, rate));
+ipcMain.handle('tts:stop', () => stopSystemSpeech());
+
+ipcMain.handle('stt:info', () => modelInfo());
+ipcMain.handle('stt:download', (e) => downloadModel(e.sender));
+ipcMain.handle('stt:remove', () => removeModel());
+ipcMain.handle('stt:import', async () => {
+  const res = await dialog.showOpenDialog(win!, {
+    title: 'Vosk-Sprachmodell wählen (ZIP oder tar.gz)',
+    filters: [{ name: 'Sprachmodell', extensions: ['zip', 'gz', 'tgz'] }],
+    properties: ['openFile'],
+  });
+  if (res.canceled || !res.filePaths[0]) return modelInfo();
+  return installModelFromBytes(new Uint8Array(readFileSync(res.filePaths[0])), res.filePaths[0]);
+});
+
+// Kartendaten von OpenStreetMap (Overpass, Nominatim) mit korrekter Kennung abrufen
+ipcMain.handle('net:fetchText', async (_e, url: string, body?: string) => {
+  const host = new URL(url).hostname;
+  if (!ALLOWED_HOSTS.includes(host)) throw new Error(`Host nicht erlaubt: ${host}`);
+  const res = await net.fetch(url, {
+    method: body ? 'POST' : 'GET',
+    body,
+    headers: { 'user-agent': UA, ...(body ? { 'content-type': 'application/x-www-form-urlencoded' } : {}) },
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+  return text;
+});
+
+app.whenReady().then(() => {
+  handleModelProtocol();
+  // Kartenkacheln von OpenStreetMap verlangen eine Kennung und einen Referer
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://*.openstreetmap.org/*', 'https://*.openstreetmap.de/*'] }, (details, cb) => {
+    details.requestHeaders['User-Agent'] = UA;
+    details.requestHeaders['Referer'] = 'https://leitstellensimulator.local/';
+    cb({ requestHeaders: details.requestHeaders });
+  });
+  createWindow();
+});
 app.on('window-all-closed', async () => {
   await host?.stop();
   app.quit();

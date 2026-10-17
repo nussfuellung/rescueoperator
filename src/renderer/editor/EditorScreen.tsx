@@ -6,10 +6,13 @@ import { emptyScenario, generateScenario, newId, validateScenario } from '../../
 import type { MapObject, RoadType, Scenario, Station, Vec } from '../../../shared/types';
 import { api, type ScenarioInfo } from '../api';
 import { MapView, type Hit } from '../MapView';
+import { OsmImportDialog } from './OsmImportDialog';
 
 export function EditorScreen({ onBack }: { onBack: () => void }) {
   const [list, setList] = useState<ScenarioInfo[]>([]);
   const [editing, setEditing] = useState<Scenario | null>(null);
+  const [osm, setOsm] = useState(false);
+  const [notes, setNotes] = useState<string[]>([]);
   const refresh = () => api.listScenarios().then(setList);
   useEffect(() => {
     refresh();
@@ -19,7 +22,9 @@ export function EditorScreen({ onBack }: { onBack: () => void }) {
     return (
       <Editor
         initial={editing}
+        notes={notes}
         onClose={() => {
+          setNotes([]);
           setEditing(null);
           refresh();
         }}
@@ -83,6 +88,9 @@ export function EditorScreen({ onBack }: { onBack: () => void }) {
           >
             Neue Leitstelle (Karte generieren)
           </button>
+          <button className="primary" onClick={() => setOsm(true)}>
+            Neue Leitstelle aus echter Karte (OpenStreetMap)
+          </button>
           <button onClick={() => setEditing(emptyScenario('Neue Leitstelle'))}>Neue leere Leitstelle</button>
           <button
             onClick={async () => {
@@ -99,6 +107,16 @@ export function EditorScreen({ onBack }: { onBack: () => void }) {
           <button onClick={onBack}>Zurück</button>
         </div>
       </div>
+      {osm && (
+        <OsmImportDialog
+          onCancel={() => setOsm(false)}
+          onDone={(scn, n) => {
+            setOsm(false);
+            setNotes(n);
+            setEditing(scn);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -124,7 +142,7 @@ const ROAD_LABEL: Record<RoadType, string> = {
   autobahn: 'Autobahn',
 };
 
-function Editor({ initial, onClose }: { initial: Scenario; onClose: () => void }) {
+function Editor({ initial, onClose, notes = [] }: { initial: Scenario; onClose: () => void; notes?: string[] }) {
   const scnRef = useRef<Scenario>(structuredClone(initial));
   const scn = scnRef.current;
   const [version, setVersion] = useState(0);
@@ -134,8 +152,10 @@ function Editor({ initial, onClose }: { initial: Scenario; onClose: () => void }
   const [pending, setPending] = useState<string | null>(null);
   const [roadName, setRoadName] = useState('Neue Straße');
   const [roadType, setRoadType] = useState<RoadType>('ortsstrasse');
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(notes.length > 0);
   const [msg, setMsg] = useState('');
+  const [importNotes, setImportNotes] = useState<string[]>(notes);
+  const [osm, setOsm] = useState(false);
 
   const changed = (renumber = false) => {
     if (renumber) recomputeHouseNumbers(scn);
@@ -315,7 +335,7 @@ function Editor({ initial, onClose }: { initial: Scenario; onClose: () => void }
     if (!isFinite(towns)) return;
     if (!confirm('Die aktuelle Karte samt Wachen und Kliniken wird ersetzt. Fortfahren?')) return;
     const g = generateScenario({ seed, towns, name: scn.name });
-    Object.assign(scn, { ...g, id: scn.id, name: scn.name, ilsName: scn.ilsName, stichworte: scn.stichworte, vehicleTypes: scn.vehicleTypes, settings: scn.settings });
+    Object.assign(scn, { ...g, id: scn.id, name: scn.name, ilsName: scn.ilsName, stichworte: scn.stichworte, vehicleTypes: scn.vehicleTypes, settings: scn.settings, geo: undefined, addresses: undefined });
     setSel(null);
     changed(true);
   };
@@ -330,6 +350,7 @@ function Editor({ initial, onClose }: { initial: Scenario; onClose: () => void }
         </button>
         <button onClick={() => api.exportScenario(scn)}>Exportieren</button>
         <button onClick={generate}>Karte generieren…</button>
+        <button onClick={() => setOsm(true)}>Echte Karte laden…</button>
         <span className="ok small">{msg}</span>
         <div className="spacer" />
         <button
@@ -340,6 +361,32 @@ function Editor({ initial, onClose }: { initial: Scenario; onClose: () => void }
           Schließen
         </button>
       </header>
+      {importNotes.length > 0 && (
+        <div className="import-notes">
+          <div>
+            {importNotes.map((n, i) => (
+              <div key={i}>{n}</div>
+            ))}
+            <div className="muted">Noch nicht gespeichert. Prüfe Wachen und Fahrzeuge, dann „Speichern“.</div>
+          </div>
+          <button className="small-btn" onClick={() => setImportNotes([])}>
+            ✕
+          </button>
+        </div>
+      )}
+      {osm && (
+        <OsmImportDialog
+          onCancel={() => setOsm(false)}
+          onDone={(g, n) => {
+            setOsm(false);
+            if (!confirm('Die aktuelle Karte samt Wachen und Kliniken wird ersetzt. Fortfahren?')) return;
+            Object.assign(scn, { ...g, id: scn.id, name: scn.name, ilsName: scn.ilsName, stichworte: scn.stichworte, vehicleTypes: scn.vehicleTypes, settings: scn.settings });
+            setImportNotes(n);
+            setSel(null);
+            changed();
+          }}
+        />
+      )}
       <div className="editor-body">
         <div className="tools">
           {TOOLS.map((t) => (
@@ -377,6 +424,7 @@ function Editor({ initial, onClose }: { initial: Scenario; onClose: () => void }
         </div>
         <div className="editor-map">
           <MapView
+            key={`${scn.geo?.mx0 ?? 'gen'}-${scn.width}-${scn.height}`}
             scenario={scn}
             version={version}
             editor={{ selected: sel, pendingNodeId: pending, showNodes: tool === 'road' || tool === 'select' || tool === 'delete' }}

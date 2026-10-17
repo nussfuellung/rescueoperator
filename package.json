@@ -1,7 +1,7 @@
 {
   "name": "leitstellensimulator",
   "productName": "Leitstellensimulator",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Multiplayer-Leitstellensimulator nach Vorbild der bayerischen Integrierten Leitstellen",
   "main": "dist/electron/main.js",
   "private": true,
@@ -33,6 +33,8 @@
     }
   },
   "dependencies": {
+    "fflate": "^0.8.2",
+    "vosk-browser": "^0.0.8",
     "ws": "^8.18.0"
   },
   "devDependencies": {

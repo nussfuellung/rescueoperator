@@ -217,8 +217,9 @@ export class Game {
       const t = this.rand(0.15, 0.85);
       return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
     };
-    if (tpl.where === 'objekt' && this.scn.objects.length) {
-      const obj = this.pick(this.scn.objects);
+    const objs = this.scn.objects.filter((o) => !tpl.objectKinds || tpl.objectKinds.includes(o.kind));
+    if (tpl.where === 'objekt' && objs.length) {
+      const obj = this.pick(objs);
       const hit = reverseGeocode(this.scn, obj);
       const address = hit?.text ?? obj.name;
       return { pos: { x: obj.x, y: obj.y }, address: `${obj.name}, ${address}`, spoken: `Im ${obj.name}, ${address}.`, objekt: obj.name };
@@ -227,11 +228,12 @@ export class Game {
       const p = pointOn(['autobahn']);
       if (p) {
         const town = nearestTown(this.scn.towns, p)?.name ?? '';
+        const road = reverseGeocode(this.scn, p)?.road.name ?? 'Autobahn';
         const dir = this.rng() < 0.5 ? 'Richtung Osten' : 'Richtung Westen';
         return {
           pos: p,
-          address: `A 92 ${dir} bei ${town}`,
-          spoken: `Auf der A 92, ${dir}, irgendwo bei ${town}. Ein Kilometerschild hab ich nicht gesehen.`,
+          address: `${road} ${dir} bei ${town}`,
+          spoken: `Auf der ${road}, ${dir}, irgendwo bei ${town}. Ein Kilometerschild hab ich nicht gesehen.`,
         };
       }
     }
@@ -247,6 +249,14 @@ export class Game {
           spoken: `Auf der ${hit.street} zwischen ${towns[0].name} und ${towns[1]?.name ?? 'dem Nachbarort'}, ungefähr ${km} Kilometer nach ${towns[0].name}.`,
         };
       }
+    }
+    // Echte Karte: eine echte Hausnummer wählen
+    const addrs = this.scn.addresses;
+    if (addrs?.length && tpl.where !== 'strasse') {
+      const a = this.pick(addrs);
+      const spoken =
+        this.rng() < 0.15 ? `${a.street} ${a.number}... äh, in ${a.town}. Zweiter Stock.` : `${a.street} ${a.number} in ${a.town}.`;
+      return { pos: { x: a.x, y: a.y }, address: `${a.street} ${a.number}, ${a.town}`, spoken };
     }
     const p = pointOn(['ortsstrasse']);
     if (!p) return null;
@@ -301,7 +311,7 @@ export class Game {
   }
 
   private weightedTemplate(): IncidentTemplate {
-    const usable = TEMPLATES.filter((t) => t.where !== 'objekt' || this.scn.objects.length);
+    const usable = TEMPLATES.filter((t) => t.where !== 'objekt' || this.scn.objects.some((o) => !t.objectKinds || t.objectKinds.includes(o.kind)));
     const total = usable.reduce((s, t) => s + t.weight, 0);
     let r = this.rng() * total;
     for (const t of usable) {

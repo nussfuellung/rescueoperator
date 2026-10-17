@@ -2,7 +2,6 @@
 import { useSyncExternalStore } from 'react';
 import type { Action, ClientMsg, ServerMsg } from '../../shared/protocol';
 import type { PublicState, Role, Scenario } from '../../shared/types';
-import { speak } from './sound';
 
 export interface Toast {
   id: number;
@@ -24,7 +23,6 @@ export class Connection {
   private listeners = new Set<() => void>();
   private toastId = 0;
   snap: NetSnapshot = { status: 'idle', toasts: [] };
-  ttsEnabled = true;
 
   private set(patch: Partial<NetSnapshot>) {
     this.snap = { ...this.snap, ...patch };
@@ -61,9 +59,6 @@ export class Connection {
             break;
           case 'toast':
             this.toast(msg.text, msg.level);
-            break;
-          case 'speech':
-            if (this.ttsEnabled) speak(msg.text);
             break;
         }
       };

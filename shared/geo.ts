@@ -1,5 +1,5 @@
 // Simuliertes GIS: Straßengraph, Routing, Hausnummern, Geokodierung.
-import type { Road, RoadNode, RoadType, Scenario, Town, Vec } from './types';
+import type { Address, Road, RoadNode, RoadType, Scenario, Town, Vec } from './types';
 
 export const ROAD_SPEED_KMH: Record<RoadType, number> = {
   autobahn: 120,
@@ -209,7 +209,9 @@ export function recomputeHouseNumbers(scn: Scenario): void {
     const b = nodeById.get(r.b);
     if (!a || !b) continue;
     const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    r.town = r.type === 'ortsstrasse' ? (townAt(scn.towns, mid) ?? nearestTown(scn.towns, mid))?.name ?? '' : '';
+    // Bei echten Karten stammt der Ort aus den Adressdaten und bleibt erhalten
+    if (r.type !== 'ortsstrasse') r.town = '';
+    else if (!(scn.geo && r.town)) r.town = (townAt(scn.towns, mid) ?? nearestTown(scn.towns, mid))?.name ?? '';
     r.numA = undefined;
     r.numB = undefined;
   }
@@ -283,12 +285,80 @@ export interface AddressHit {
   text: string;
   street: string;
   number?: number;
+  /** Hausnummer mit Zusatz, z. B. "12a" (nur bei echten Adressen) */
+  houseNumber?: string;
   town: string;
   distance: number;
 }
 
+const normStreet = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/str\.?$/, 'straße')
+    .replace(/strasse$/, 'straße')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** Raster über die echten Hausnummern, einmal pro Szenario */
+const addressGrid = new WeakMap<Address[], Map<string, Address[]>>();
+const ADDR_CELL = 100;
+function gridOf(list: Address[]) {
+  let g = addressGrid.get(list);
+  if (!g) {
+    g = new Map();
+    for (const a of list) {
+      const k = `${Math.floor(a.x / ADDR_CELL)}:${Math.floor(a.y / ADDR_CELL)}`;
+      const arr = g.get(k);
+      if (arr) arr.push(a);
+      else g.set(k, [a]);
+    }
+    addressGrid.set(list, g);
+  }
+  return g;
+}
+
+/** Nächste echte Hausnummer im Umkreis */
+export function nearestAddress(scn: Scenario, p: Vec, maxDist = 60): Address | null {
+  if (!scn.addresses?.length) return null;
+  const g = gridOf(scn.addresses);
+  const cx = Math.floor(p.x / ADDR_CELL);
+  const cy = Math.floor(p.y / ADDR_CELL);
+  const r = Math.ceil(maxDist / ADDR_CELL);
+  let best: Address | null = null;
+  let bestD = maxDist;
+  for (let dx = -r; dx <= r; dx++)
+    for (let dy = -r; dy <= r; dy++)
+      for (const a of g.get(`${cx + dx}:${cy + dy}`) ?? []) {
+        const d = dist(a, p);
+        if (d <= bestD) {
+          bestD = d;
+          best = a;
+        }
+      }
+  return best;
+}
+
 /** Rückwärtsgeokodierung: Adresse zum Kartenpunkt */
 export function reverseGeocode(scn: Scenario, p: Vec): AddressHit | null {
+  const real = nearestAddress(scn, p);
+  if (real) {
+    const n = parseInt(real.number, 10);
+    const roadHit = reverseGeocodeRoads(scn, p);
+    return {
+      road: roadHit?.road ?? scn.roads[0],
+      point: { x: real.x, y: real.y },
+      street: real.street,
+      number: isNaN(n) ? undefined : n,
+      houseNumber: real.number,
+      town: real.town,
+      distance: dist(real, p),
+      text: `${real.street} ${real.number}, ${real.town}`,
+    };
+  }
+  return reverseGeocodeRoads(scn, p);
+}
+
+function reverseGeocodeRoads(scn: Scenario, p: Vec): AddressHit | null {
   const nodeById = new Map(scn.nodes.map((n) => [n.id, n]));
   let best: AddressHit | null = null;
   for (const r of scn.roads) {
@@ -336,13 +406,52 @@ export function streetDirectory(scn: Scenario): StreetEntry[] {
     const label = town ? `${r.name}, ${town}` : r.name;
     if (!seen.has(label)) seen.set(label, { street: r.name, town, label });
   }
+  for (const a of scn.addresses ?? []) {
+    const label = `${a.street}, ${a.town}`;
+    if (!seen.has(label)) seen.set(label, { street: a.street, town: a.town, label });
+  }
   return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'de'));
 }
 
 /** Geokodierung: Straße + Hausnummer + Ort -> Kartenpunkt */
-export function geocode(scn: Scenario, street: string, town: string, number?: number): AddressHit | null {
+export function geocode(scn: Scenario, street: string, town: string, number?: number | string): AddressHit | null {
+  const norm = normStreet;
+  // Echte Hausnummern zuerst
+  if (scn.addresses?.length && number !== undefined && String(number).trim()) {
+    const wanted = String(number).trim().toLowerCase().replace(/\s+/g, '');
+    const wantedNum = parseInt(wanted, 10);
+    const same = scn.addresses.filter((a) => norm(a.street) === norm(street) && (!town || norm(a.town) === norm(town)));
+    let hit = same.find((a) => a.number.toLowerCase().replace(/\s+/g, '') === wanted);
+    if (!hit && !isNaN(wantedNum)) {
+      // Nächstliegende vorhandene Nummer auf der gleichen Straßenseite
+      let bestScore = Infinity;
+      for (const a of same) {
+        const n = parseInt(a.number, 10);
+        if (isNaN(n)) continue;
+        const score = Math.abs(n - wantedNum) + (n % 2 === wantedNum % 2 ? 0 : 0.5);
+        if (score < bestScore) {
+          bestScore = score;
+          hit = a;
+        }
+      }
+      if (bestScore > 20) hit = undefined;
+    }
+    if (hit) {
+      const roadHit = reverseGeocodeRoads(scn, hit);
+      return {
+        road: roadHit?.road ?? scn.roads[0],
+        point: { x: hit.x, y: hit.y },
+        street: hit.street,
+        number: isNaN(wantedNum) ? undefined : wantedNum,
+        houseNumber: String(number).trim(),
+        town: hit.town,
+        distance: 0,
+        text: `${hit.street} ${String(number).trim()}, ${hit.town}`,
+      };
+    }
+  }
+  if (typeof number === 'string') number = parseInt(number, 10) || undefined;
   const nodeById = new Map(scn.nodes.map((n) => [n.id, n]));
-  const norm = (s: string) => s.toLowerCase().replace(/str\.?$/, 'straße').replace(/\s+/g, ' ').trim();
   const candidates = scn.roads.filter(
     (r) => norm(r.name) === norm(street) && (!town || r.type !== 'ortsstrasse' || norm(r.town ?? '') === norm(town)),
   );

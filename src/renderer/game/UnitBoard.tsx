@@ -4,6 +4,8 @@ import { FMS_COLOR, FMS_TEXT, formatDuration, shortCallsign } from '../../../sha
 import type { UnitState } from '../../../shared/types';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
+import { useSpeechTarget } from '../audio/stt';
+import { MicButton } from '../audio/SpeechUi';
 
 const TASK_TEXT: Record<UnitState['task'], string> = {
   station: 'auf Wache',
@@ -59,6 +61,8 @@ export function UnitBoard({ ctx }: { ctx: GameCtx }) {
 function UnitControl({ ctx, u }: { ctx: GameCtx; u: UnitState }) {
   const { scn, state } = ctx;
   const [text, setText] = useState('');
+  // Spricht der Disponent bei ausgewähltem Fahrzeug, geht das als Funkspruch an dieses Fahrzeug
+  useSpeechTarget(`unit-${u.id}`, 30, (spoken) => conn.send({ a: 'radio', unitId: u.id, text: spoken }));
   const inc = state.incidents.find((i) => i.id === u.incidentId);
   const type = scn.vehicleTypes.find((t) => t.id === u.type);
   const crew = state.players.find((p) => p.id === u.crewPlayerId);
@@ -115,6 +119,7 @@ function UnitControl({ ctx, u }: { ctx: GameCtx; u: UnitState }) {
           <input className="grow" value={text} onChange={(e) => setText(e.target.value)} placeholder={`Funkspruch an ${shortCallsign(u.callsign)}…`} />
           <button type="submit">Senden</button>
         </form>
+        <MicButton targetId={`unit-${u.id}`} label="Funken" />
       </div>
     </div>
   );

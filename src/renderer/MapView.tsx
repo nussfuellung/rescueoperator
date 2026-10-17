@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { FMS_COLOR, shortCallsign } from '../../shared/catalog';
 import { projectOnSegment } from '../../shared/geo';
+import { localToMercator, mercatorToLocal } from '../../shared/osmimport';
+import { getSettings } from './settings';
 import type { CallState, IncidentState, RoadType, Scenario, UnitState, Vec } from '../../shared/types';
 
 export type HitKind = 'unit' | 'incident' | 'station' | 'hospital' | 'object' | 'town' | 'node' | 'road';
@@ -80,6 +82,32 @@ export function MapView(props: Props) {
   const labelsRef = useRef(labels);
   labelsRef.current = labels;
 
+  // Straßenabschnitte als Zahlenfelder je Straßentyp: schnell zu zeichnen, auch bei echten Karten
+  const segments = useMemo(() => {
+    const scn = props.scenario;
+    const nodeById = new Map(scn.nodes.map((n) => [n.id, n]));
+    const out = {} as Record<RoadType, Float64Array>;
+    for (const type of ROAD_ORDER) {
+      const list = scn.roads.filter((r) => r.type === type);
+      const arr = new Float64Array(list.length * 4);
+      let k = 0;
+      for (const r of list) {
+        const a = nodeById.get(r.a);
+        const b = nodeById.get(r.b);
+        if (!a || !b) continue;
+        arr[k++] = a.x;
+        arr[k++] = a.y;
+        arr[k++] = b.x;
+        arr[k++] = b.y;
+      }
+      out[type] = arr.subarray(0, k);
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.scenario, props.version]);
+  const segmentsRef = useRef(segments);
+  segmentsRef.current = segments;
+
   // Fokus setzen (z. B. auf ausgewählten Einsatz)
   useEffect(() => {
     if (props.focus) {
@@ -92,6 +120,8 @@ export function MapView(props: Props) {
   useEffect(() => {
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext('2d')!;
+    // Die Karte kann in einem ausgelagerten Fenster liegen
+    const win = canvas.ownerDocument.defaultView ?? window;
     let raf = 0;
     let dragging: { sx: number; sy: number; cx: number; cy: number; moved: boolean; hit: Hit | null; drag: boolean } | null = null;
 
@@ -209,14 +239,14 @@ export function MapView(props: Props) {
     };
 
     canvas.addEventListener('mousedown', onDown);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    win.addEventListener('mousemove', onMove);
+    win.addEventListener('mouseup', onUp);
     canvas.addEventListener('contextmenu', onContextMenu);
     canvas.addEventListener('wheel', onWheel, { passive: false });
 
     const draw = () => {
-      raf = requestAnimationFrame(draw);
-      const dpr = window.devicePixelRatio || 1;
+      raf = win.requestAnimationFrame(draw);
+      const dpr = win.devicePixelRatio || 1;
       const w = canvas.clientWidth;
       const h = canvas.clientHeight;
       if (!w || !h) return;
@@ -234,51 +264,63 @@ export function MapView(props: Props) {
       ctx.fillStyle = '#e9e5da';
       ctx.fillRect(0, 0, w, h);
 
+      // Echte Karte: Kacheln von OpenStreetMap als Hintergrund
+      const settings = getSettings();
+      const tiles = !!scn.geo && settings.mapTiles && drawTiles(ctx, scn, v, w, h, settings.tileUrl, toScreen);
+
       // Orte
-      ctx.fillStyle = '#ddd3bf';
-      for (const t of scn.towns) {
-        const [x, y] = toScreen(t);
-        ctx.beginPath();
-        ctx.arc(x, y, t.radius * v.scale * 1.08, 0, Math.PI * 2);
-        ctx.fill();
+      if (!tiles) {
+        ctx.fillStyle = '#ddd3bf';
+        for (const t of scn.towns) {
+          const [x, y] = toScreen(t);
+          ctx.beginPath();
+          ctx.arc(x, y, t.radius * v.scale * 1.08, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
-      // Straßen
-      const nodeById = new Map(scn.nodes.map((n) => [n.id, n]));
+      // Straßen (über Kacheln nur dezent, damit das befahrbare Netz sichtbar bleibt)
+      const segs = segmentsRef.current;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      for (const pass of ['casing', 'fill'] as const) {
+      if (tiles) ctx.globalAlpha = 0.35;
+      const x0 = v.cx - w / 2 / v.scale - 20 / v.scale;
+      const x1 = v.cx + w / 2 / v.scale + 20 / v.scale;
+      const y0 = v.cy - h / 2 / v.scale - 20 / v.scale;
+      const y1 = v.cy + h / 2 / v.scale + 20 / v.scale;
+      const ox = w / 2 - v.cx * v.scale;
+      const oy = h / 2 - v.cy * v.scale;
+      for (const pass of tiles ? (['fill'] as const) : (['casing', 'fill'] as const)) {
         for (const type of ROAD_ORDER) {
           const st = ROAD_STYLE[type];
+          // Bei weit herausgezoomten großen Netzen Ortsstraßen ohne Rand zeichnen
+          if (pass === 'casing' && type === 'ortsstrasse' && v.scale < 0.06 && segs[type].length > 20000) continue;
           const width = Math.max(st.minPx, st.width * v.scale);
+          const arr = segs[type];
           ctx.beginPath();
-          for (const r of scn.roads) {
-            if (r.type !== type) continue;
-            const a = nodeById.get(r.a);
-            const b = nodeById.get(r.b);
-            if (!a || !b) continue;
-            const [ax, ay] = toScreen(a);
-            const [bx, by] = toScreen(b);
-            if (Math.max(ax, bx) < -20 || Math.min(ax, bx) > w + 20 || Math.max(ay, by) < -20 || Math.min(ay, by) > h + 20) continue;
-            ctx.moveTo(ax, ay);
-            ctx.lineTo(bx, by);
+          for (let i = 0; i < arr.length; i += 4) {
+            const ax = arr[i], ay = arr[i + 1], bx = arr[i + 2], by = arr[i + 3];
+            if ((ax < x0 && bx < x0) || (ax > x1 && bx > x1) || (ay < y0 && by < y0) || (ay > y1 && by > y1)) continue;
+            ctx.moveTo(ax * v.scale + ox, ay * v.scale + oy);
+            ctx.lineTo(bx * v.scale + ox, by * v.scale + oy);
           }
           if (pass === 'casing') {
             ctx.strokeStyle = st.casing;
             ctx.lineWidth = width + 2;
           } else {
-            ctx.strokeStyle = st.fill;
-            ctx.lineWidth = width;
+            ctx.strokeStyle = tiles ? '#1f6feb' : st.fill;
+            ctx.lineWidth = tiles ? Math.max(1.5, width * 0.5) : width;
           }
           ctx.stroke();
         }
       }
+      ctx.globalAlpha = 1;
 
       // Editor: ausgewählte Straße
       if (p.editor?.selected?.kind === 'road') {
         const r = scn.roads.find((x) => x.id === p.editor!.selected!.id);
-        const a = r && nodeById.get(r.a);
-        const b = r && nodeById.get(r.b);
+        const a = r && scn.nodes.find((n) => n.id === r.a);
+        const b = r && scn.nodes.find((n) => n.id === r.b);
         if (a && b) {
           ctx.strokeStyle = '#ff006e';
           ctx.lineWidth = 4;
@@ -289,8 +331,10 @@ export function MapView(props: Props) {
         }
       }
 
-      // Straßennamen
-      if (v.scale > 0.28) {
+      // Straßennamen (die Kacheln bringen eigene mit)
+      if (tiles) {
+        // nichts
+      } else if (v.scale > 0.28) {
         ctx.font = `${Math.min(13, 9 + v.scale * 4)}px "Segoe UI", sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -315,6 +359,8 @@ export function MapView(props: Props) {
         ctx.textBaseline = 'middle';
         for (const l of labelsRef.current) {
           if (l.type === 'ortsstrasse') continue;
+          // Nur Straßennummern (B 16, ST 2084) als Schild, keine langen Namen
+          if (l.name.length > 9 || !/\d/.test(l.name)) continue;
           const [x, y] = toScreen(l);
           const tw = ctx.measureText(l.name).width + 6;
           ctx.fillStyle = l.type === 'autobahn' ? '#1d4fa3' : l.type === 'bundesstrasse' ? '#f2c230' : '#fff';
@@ -505,6 +551,18 @@ export function MapView(props: Props) {
         ctx.stroke();
       }
 
+      if (tiles) {
+        ctx.font = '11px "Segoe UI", sans-serif';
+        const txt = '© OpenStreetMap-Mitwirkende';
+        const tw = ctx.measureText(txt).width;
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.fillRect(w - tw - 12, 0, tw + 12, 17);
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(txt, w - tw - 6, 9);
+      }
+
       // Maßstab
       const targetPx = 120;
       const meters = niceNumber(targetPx / v.scale);
@@ -525,10 +583,10 @@ export function MapView(props: Props) {
     draw();
 
     return () => {
-      cancelAnimationFrame(raf);
+      win.cancelAnimationFrame(raf);
       canvas.removeEventListener('mousedown', onDown);
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      win.removeEventListener('mousemove', onMove);
+      win.removeEventListener('mouseup', onUp);
       canvas.removeEventListener('contextmenu', onContextMenu);
       canvas.removeEventListener('wheel', onWheel);
     };
@@ -581,4 +639,77 @@ function niceNumber(x: number): number {
   const exp = Math.pow(10, Math.floor(Math.log10(x)));
   const f = x / exp;
   return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * exp;
+}
+
+// ---------- Kartenkacheln ----------
+const tileCache = new Map<string, { img: HTMLImageElement; ok: boolean; used: number }>();
+let tileUse = 0;
+const EARTH = 2 * Math.PI * 6378137;
+
+function getTile(url: string) {
+  let t = tileCache.get(url);
+  if (!t) {
+    const img = new Image();
+    const entry = { img, ok: false, used: 0 };
+    img.onload = () => (entry.ok = true);
+    img.src = url;
+    t = entry;
+    tileCache.set(url, t);
+    if (tileCache.size > 600) {
+      // Am längsten unbenutzte Kacheln verwerfen
+      const old = [...tileCache.entries()].sort((a, b) => a[1].used - b[1].used).slice(0, 150);
+      for (const [k] of old) tileCache.delete(k);
+    }
+  }
+  t.used = ++tileUse;
+  return t;
+}
+
+function tileUrl(tpl: string, z: number, x: number, y: number) {
+  const sub = 'abc'[(x + y) % 3];
+  return tpl.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y)).replace('{s}', sub);
+}
+
+/** Zeichnet OSM-Kacheln passend zur lokalen Projektion; false, wenn das Szenario keinen Erdbezug hat */
+function drawTiles(
+  ctx: CanvasRenderingContext2D,
+  scn: Scenario,
+  v: { cx: number; cy: number; scale: number },
+  w: number,
+  h: number,
+  tpl: string,
+  toScreen: (p: Vec) => [number, number],
+): boolean {
+  const geo = scn.geo;
+  if (!geo) return false;
+  const k = Math.cos((geo.lat0 * Math.PI) / 180);
+  // Bildschirmpixel pro Mercator-Meter = scale / k; Kachelpixel pro Mercator-Meter = 256 * 2^z / EARTH
+  const z = Math.max(1, Math.min(19, Math.round(Math.log2((v.scale / k) * EARTH / 256))));
+  const n = 2 ** z;
+  const tl = localToMercator(geo, { x: v.cx - w / 2 / v.scale, y: v.cy - h / 2 / v.scale });
+  const br = localToMercator(geo, { x: v.cx + w / 2 / v.scale, y: v.cy + h / 2 / v.scale });
+  const tx = (mx: number) => ((mx + EARTH / 2) / EARTH) * n;
+  const ty = (my: number) => ((EARTH / 2 - my) / EARTH) * n;
+  const xs = Math.floor(tx(tl.mx));
+  const xe = Math.floor(tx(br.mx));
+  const ys = Math.floor(ty(tl.my));
+  const ye = Math.floor(ty(br.my));
+  if ((xe - xs + 1) * (ye - ys + 1) > 120) return false;
+  const tileM = EARTH / n;
+  let drawn = 0;
+  for (let x = xs; x <= xe; x++) {
+    for (let y = ys; y <= ye; y++) {
+      if (y < 0 || y >= n) continue;
+      const t = getTile(tileUrl(tpl, z, ((x % n) + n) % n, y));
+      if (!t.ok) continue;
+      const mx = x * tileM - EARTH / 2;
+      const my = EARTH / 2 - y * tileM;
+      const [sx, sy] = toScreen(mercatorToLocal(geo, mx, my));
+      const [ex, ey] = toScreen(mercatorToLocal(geo, mx + tileM, my - tileM));
+      ctx.drawImage(t.img, sx, sy, ex - sx + 0.5, ey - sy + 0.5);
+      drawn++;
+    }
+  }
+  // Ohne Internet bleibt die eigene Kartendarstellung
+  return drawn > 0;
 }
