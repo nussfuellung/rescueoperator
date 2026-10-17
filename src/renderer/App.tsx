@@ -7,6 +7,7 @@ import { conn, useNet } from './net';
 import { GameScreen } from './game/GameScreen';
 import { EditorScreen } from './editor/EditorScreen';
 import { SettingsModal } from './SettingsModal';
+import { MobileScreen } from './game/MobileScreen';
 
 type Screen = 'menu' | 'host' | 'join' | 'editor' | 'game';
 
@@ -27,7 +28,20 @@ const store = {
   },
 };
 
+// Aufruf vom Tablet oder Handy über den QR-Code: http://<rechner>:4711/?geraet=<code>&bereiche=beide
+const params = new URLSearchParams(location.search);
+const deviceCode = params.get('geraet');
+const deviceAreas = (() => {
+  const b = params.get('bereiche') ?? 'beide';
+  return b === 'telefon' ? (['telefon'] as const) : b === 'funk' ? (['funk'] as const) : (['telefon', 'funk'] as const);
+})();
+
 export function App() {
+  if (deviceCode) return <MobileScreen code={deviceCode} areas={[...deviceAreas]} />;
+  return <DesktopApp />;
+}
+
+function DesktopApp() {
   const [screen, setScreen] = useState<Screen>('menu');
   const [name, setName] = useState(() => store.get('lst.name', ''));
   const [role, setRole] = useState<Role>(() => store.get('lst.role', 'dispatcher') as Role);

@@ -1,0 +1,26 @@
+Leitstellensimulator – Start auf Windows, Linux und Mac
+=======================================================
+
+Die ZIP-Datei bitte direkt auf dem Rechner entpacken, auf dem gespielt wird
+(nicht unter Windows entpacken und dann auf den Mac kopieren).
+
+Windows
+  Doppelklick auf "Start Windows.bat".
+  Fragt die Windows-Firewall nach, "Private Netzwerke" erlauben,
+  damit Mitspieler und Tablets im LAN beitreten können.
+
+Linux (z. B. CachyOS, Arch, Ubuntu, Fedora)
+  Im Dateimanager Rechtsklick auf "Start Linux.sh" > Ausführen,
+  oder im Terminal im entpackten Ordner:  bash "Start Linux.sh"
+  Sprachausgabe über die Systemstimme braucht speech-dispatcher oder espeak-ng
+  (CachyOS/Arch:  sudo pacman -S speech-dispatcher espeak-ng).
+
+Mac (Apple-Chip M1/M2/M3/M4 und Intel)
+  Beim ersten Mal: Rechtsklick auf "Start Mac.command" > Öffnen > Öffnen.
+  Das Skript entfernt die Download-Sperre, signiert die App lokal und startet sie.
+  Danach reicht ein Doppelklick. Die App selbst liegt in programm/mac-apple bzw. programm/mac-intel
+  und kann auch in den Programme-Ordner gezogen werden, nachdem sie einmal gestartet wurde.
+
+Tablet oder Handy für Telefon und Funk
+  Im Spiel oben auf "📱 Tablet" klicken und den QR-Code mit dem Gerät scannen.
+  Gerät und Rechner müssen im selben WLAN sein.

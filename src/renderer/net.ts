@@ -16,6 +16,10 @@ export interface NetSnapshot {
   state?: PublicState;
   toasts: Toast[];
   error?: string;
+  /** Code, mit dem ein Tablet diesen Platz übernehmen kann */
+  linkCode?: string;
+  /** Adresse des Servers (für den Kopplungs-Link) */
+  url?: string;
 }
 
 export class Connection {
@@ -36,19 +40,19 @@ export class Connection {
 
   getSnapshot = () => this.snap;
 
-  connect(url: string, name: string, role: Role): Promise<void> {
+  connect(url: string, name: string, role: Role, opts: { link?: string; lite?: boolean } = {}): Promise<void> {
     this.close();
-    this.set({ status: 'connecting', error: undefined, state: undefined, scenario: undefined });
+    this.set({ status: 'connecting', error: undefined, state: undefined, scenario: undefined, url });
     return new Promise((resolve, reject) => {
       let settled = false;
       const ws = new WebSocket(url);
       this.ws = ws;
-      ws.onopen = () => this.raw({ t: 'hello', name, role });
+      ws.onopen = () => this.raw({ t: 'hello', name, role, ...opts });
       ws.onmessage = (ev) => {
         const msg = JSON.parse(ev.data) as ServerMsg;
         switch (msg.t) {
           case 'welcome':
-            this.set({ status: 'online', playerId: msg.playerId, scenario: msg.scenario });
+            this.set({ status: 'online', playerId: msg.playerId, scenario: msg.scenario, linkCode: msg.linkCode });
             if (!settled) {
               settled = true;
               resolve();
@@ -59,6 +63,13 @@ export class Connection {
             break;
           case 'toast':
             this.toast(msg.text, msg.level);
+            break;
+          case 'error':
+            this.set({ error: msg.text });
+            if (!settled) {
+              settled = true;
+              reject(new Error(msg.text));
+            }
             break;
         }
       };

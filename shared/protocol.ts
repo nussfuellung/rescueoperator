@@ -43,13 +43,22 @@ export type Action =
   | { a: 'crewHospital'; hospitalId: string };
 
 export type ClientMsg =
-  | { t: 'hello'; name: string; role: Role }
+  | {
+      t: 'hello';
+      name: string;
+      role: Role;
+      /** Kopplungscode: dieses Gerät übernimmt Bereiche eines vorhandenen Platzes */
+      link?: string;
+      /** Szenario ohne Straßennetz senden (Tablet-Ansicht braucht keine Karte) */
+      lite?: boolean;
+    }
   | { t: 'action'; action: Action }
   | { t: 'ping' };
 
 export type ServerMsg =
-  | { t: 'welcome'; playerId: string; scenario: Scenario }
+  | { t: 'welcome'; playerId: string; scenario: Scenario; linkCode?: string }
   | { t: 'state'; state: PublicState }
   | { t: 'toast'; text: string; level: 'info' | 'warn' | 'error' }
   | { t: 'speech'; text: string }
-  | { t: 'pong' };
+  | { t: 'pong' }
+  | { t: 'error'; text: string };

@@ -28,6 +28,8 @@ if (file) {
 }
 
 const server = new GameServer(scenario);
+// Web-App für Tablets und Handys
+if (existsSync(join(__dirname, '../renderer/index.html'))) server.staticDir = join(__dirname, '../renderer');
 server.start(port).then((p) => {
   console.log(`${scenario.ilsName} läuft auf Port ${p}`);
   for (const ip of lanAddresses()) console.log(`  Im LAN beitreten: ${ip}:${p}`);

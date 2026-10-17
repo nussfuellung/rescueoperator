@@ -18,6 +18,7 @@ import { attachPttKeys, speechInput } from '../audio/stt';
 import { buildVocab } from '../../../shared/speechfix';
 import { radioName } from '../../../shared/catalog';
 import { MicStatus } from '../audio/SpeechUi';
+import { DeviceModal } from './DeviceModal';
 
 export interface GameCtx {
   scn: Scenario;
@@ -71,8 +72,10 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
   const mapPickRef = useRef<((p: Vec) => void) | null>(null);
   const [formManual, setFormManual] = useState(false);
   const [formCallId, setFormCallId] = useState<string | null>(null);
+  const [remote, setRemote] = useState<PanelId[]>([]);
+  const [showDevice, setShowDevice] = useState(false);
 
-  useSounds(state);
+  useSounds(state, { calls: !remote.includes('calls'), radio: !remote.includes('radio') });
   useSttAutoload();
   useEffect(() => attachPttKeys(window), []);
   // Wortschatz der Karte für die Nachkorrektur der Spracherkennung
@@ -87,7 +90,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
     ]);
     return () => speechInput.setVocabulary(undefined);
   }, [scn]);
-  useReadAloud(state, net.playerId, scn.ilsName);
+  useReadAloud(state, net.playerId, scn.ilsName, { radio: !remote.includes('radio'), caller: !remote.includes('calls') });
   useEffect(() => {
     try {
       localStorage.setItem(POPPED_KEY, JSON.stringify(popped));
@@ -163,8 +166,10 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
   };
 
   /** Panel im Hauptfenster mit Auslager-Knopf */
+  // Bereiche, die ein gekoppeltes Tablet übernommen hat, fehlen am Rechner
+  const isAway = (id: PanelId) => isPopped(id) || remote.includes(id);
   const dock = (id: PanelId, className = '') =>
-    isPopped(id) ? null : (
+    isAway(id) ? null : (
       <div className={`dock dock-${id} ${className}`}>
         <button className="popout-btn" title={`${PANEL_TITLES[id]} in eigenes Fenster auslagern`} onClick={() => togglePanel(id)}>
           ⧉
@@ -173,9 +178,9 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
       </div>
     );
 
-  const leftVisible = !isPopped('calls') || !isPopped('form');
-  const rightVisible = !isPopped('incidents') || !isPopped('radio');
-  const centerVisible = !isPopped('map') || !isPopped('units');
+  const leftVisible = !isAway('calls') || !isAway('form');
+  const rightVisible = !isAway('incidents') || !isAway('radio');
+  const centerVisible = !isAway('map') || !isAway('units');
   const columns = [leftVisible ? '370px' : null, centerVisible ? '1fr' : null, rightVisible ? (centerVisible ? '430px' : '1fr') : null]
     .filter(Boolean)
     .join(' ');
@@ -247,6 +252,11 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
       >
         {muted ? '🔇' : '🔊'}
       </button>
+      {me?.role !== 'crew' && (
+        <button onClick={() => setShowDevice(true)} title="Telefon und Funk auf ein Tablet oder Handy im selben Netz auslagern">
+          📱 Tablet{remote.length ? ' ✓' : ''}
+        </button>
+      )}
       <button onClick={() => setShowSettings(true)} title="Sprachausgabe, Spracheingabe, Karte">
         ⚙ Einstellungen
       </button>
@@ -285,13 +295,13 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
           {leftVisible && (
             <aside className="col-left">
               {dock('calls', 'grow-panel')}
-              {dock('form', isPopped('calls') ? 'grow-panel' : '')}
+              {dock('form', isAway('calls') ? 'grow-panel' : '')}
             </aside>
           )}
           {centerVisible && (
             <main className="col-center">
               {dock('map', 'grow-panel')}
-              {dock('units', isPopped('map') ? 'grow-panel' : '')}
+              {dock('units', isAway('map') ? 'grow-panel' : '')}
             </main>
           )}
           {rightVisible && (
@@ -333,13 +343,14 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
       )}
       {showScore && <ScoreModal state={state} onClose={() => setShowScore(false)} />}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showDevice && <DeviceModal hostInfo={props.hostInfo} remote={remote} setRemote={setRemote} onClose={() => setShowDevice(false)} />}
       {toasts}
     </div>
   );
 }
 
 /** Liest neue Funksprüche der Fahrzeuge und die Sätze des eigenen Anrufers vor */
-function useReadAloud(state: PublicState | undefined, me: string | undefined, ilsName: string) {
+export function useReadAloud(state: PublicState | undefined, me: string | undefined, ilsName: string, only: { radio?: boolean; caller?: boolean } = { radio: true, caller: true }) {
   const lastRadio = useRef<number | null>(null);
   const lastCaller = useRef(new Map<string, number>());
   useEffect(() => {
@@ -351,7 +362,7 @@ function useReadAloud(state: PublicState | undefined, me: string | undefined, il
     const myCallsign = state.units.find((u) => u.id === myUnit)?.callsign;
     for (const m of state.radio) {
       if (m.id <= lastRadio.current) continue;
-      if (!s.readRadio || m.kind !== 'voice') continue;
+      if (!s.readRadio || !only.radio || m.kind !== 'voice') continue;
       // Eigene Funksprüche nicht vorlesen; Besatzungen hören die Leitstelle
       if (myCallsign) {
         if (m.from === ilsName && m.to === myCallsign) say(`Leitstelle: ${m.text}`, 'radio');
@@ -364,7 +375,7 @@ function useReadAloud(state: PublicState | undefined, me: string | undefined, il
       if (c.takerId !== me || c.kind !== '112') continue;
       const seen = lastCaller.current.get(c.id) ?? 0;
       c.transcript.forEach((l, i) => {
-        if (i < seen || l.from !== 'caller' || !s.readCaller) return;
+        if (i < seen || l.from !== 'caller' || !s.readCaller || !only.caller) return;
         const text = l.text.replace(/\([^)]*\)/g, '').trim();
         if (text) say(text, 'caller');
       });
@@ -468,16 +479,18 @@ function ScoreModal({ state, onClose }: { state: PublicState; onClose: () => voi
 }
 
 /** Klingeln bei offenen Notrufen, Signalton bei neuen Sprechwünschen */
-function useSounds(state?: PublicState) {
+export function useSounds(state?: PublicState, only: { calls?: boolean; radio?: boolean } = { calls: true, radio: true }) {
   const ref = useRef(state);
   ref.current = state;
+  const onlyRef = useRef(only);
+  onlyRef.current = only;
   const seenSpeak = useRef(new Set<string>());
   const seenBma = useRef(new Set<string>());
   useEffect(() => {
     const t = setInterval(() => {
       const s = ref.current;
       if (!s?.running) return;
-      if (s.calls.some((c) => c.state === 'ringing' && c.kind === '112')) ring();
+      if (onlyRef.current.calls && s.calls.some((c) => c.state === 'ringing' && c.kind === '112')) ring();
     }, 2200);
     return () => clearInterval(t);
   }, []);
@@ -488,14 +501,14 @@ function useSounds(state?: PublicState) {
         const k = `${u.id}:${u.speak.since}`;
         if (!seenSpeak.current.has(k)) {
           seenSpeak.current.add(k);
-          beep();
+          if (onlyRef.current.radio) beep();
         }
       }
     }
     for (const c of state.calls) {
       if (c.kind === 'bma' && !seenBma.current.has(c.id)) {
         seenBma.current.add(c.id);
-        alarmTone();
+        if (onlyRef.current.calls) alarmTone();
       }
     }
   }, [state]);

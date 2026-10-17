@@ -2,14 +2,19 @@
 
 Multiplayer-Leitstellensimulator nach dem Vorbild der bayerischen Integrierten Leitstellen (ILS). Mehrere Spieler besetzen gemeinsam eine Leitstelle im LAN: Notrufe annehmen und abfragen, Einsätze anlegen, Fahrzeuge nach Alarm- und Ausrückeordnung (AAO) alarmieren, Funkverkehr mit FMS-Status führen und Patienten in passende Kliniken bringen. Ein Editor erlaubt eigene Leitstellenbereiche mit simuliertem GIS.
 
-Stand: vierter Playtest-Build (Version 0.4.0). Neu: Wachenbelegung der ILS Würzburg mit bayerischen Fahrzeugkennzahlen und Fahrzeuglisten-Import im Editor, eine umfangreichere Einsatzmaske im Stil von ELDIS III mit AML-Übernahme und Kartensprung, TMO-Rufgruppen im Funk, präzisere Spracherkennung und Anrufer, die auf deutlich mehr Fragen antworten.
+Stand: fünfter Playtest-Build (Version 0.5.0). Neu: Telefon und Funk lassen sich als Web-App auf ein iPad, Tablet oder Handy im selben WLAN auslagern, und das Release enthält Startdateien für Windows, Linux (z. B. CachyOS) und macOS in einem Ordner.
 
-## Schnellstart unter Windows
+## Schnellstart
 
-1. `release/Leitstellensimulator-0.4.0-win.zip` entpacken.
-2. `Leitstellensimulator.exe` starten. Das Paket ist nicht signiert; Windows SmartScreen fragt deshalb einmal nach („Weitere Informationen“ → „Trotzdem ausführen“).
-3. Namen eingeben, **Schicht hosten** → Leitstelle wählen (vorinstalliert: **ILS Würzburg**) → **Server starten**.
-4. Beim ersten Hosten fragt die Windows-Firewall nach. Für Mitspieler im LAN „Private Netzwerke“ erlauben.
+`release/Leitstellensimulator-0.5.0.zip` direkt auf dem Spielrechner entpacken. Im Ordner liegen drei Startdateien und eine `LIESMICH.txt`:
+
+- **Windows:** `Start Windows.bat` doppelklicken. Das Paket ist nicht signiert; SmartScreen fragt deshalb einmal nach („Weitere Informationen“ → „Trotzdem ausführen“).
+- **Linux (CachyOS, Arch, Ubuntu, Fedora):** Rechtsklick auf `Start Linux.sh` → Ausführen, oder `bash "Start Linux.sh"` im Terminal. Für die Systemstimme `speech-dispatcher` oder `espeak-ng` installieren.
+- **macOS (Apple-Chip und Intel):** beim ersten Mal Rechtsklick auf `Start Mac.command` → Öffnen. Das Skript entfernt die Download-Sperre, signiert die App lokal und startet die passende Version.
+
+Danach:
+1. Namen eingeben, **Schicht hosten** → Leitstelle wählen (vorinstalliert: **ILS Würzburg**) → **Server starten**.
+2. Beim ersten Hosten fragt die Windows-Firewall nach. Für Mitspieler im LAN „Private Netzwerke“ erlauben.
 
 Mitspieler starten dieselbe App, wählen **Schicht beitreten** und geben die Adresse ein, die beim Host oben rechts und in der Schichtbesprechung steht (z. B. `192.168.0.23:4711`).
 
@@ -28,9 +33,10 @@ npm run typecheck  # TypeScript-Prüfung
 Pakete bauen:
 
 ```bash
-npm run dist:win    # Windows-ZIP in release/
-npm run dist:linux  # AppImage
-npm run dist:mac    # DMG (nur auf macOS)
+npm run dist:all    # Windows, Linux und macOS mit Startdateien in release/Leitstellensimulator-<version>.zip
+npm run dist:win    # nur Windows-ZIP
+npm run dist:linux  # nur Linux-Ordner
+npm run dist:mac    # nur macOS-Apps (Intel und Apple-Chip, unsigniert)
 ```
 
 ### Eigenständiger Server
@@ -109,6 +115,10 @@ Die Einsatzmaske ist an ELDIS III angelehnt, aber aufgeräumt:
 
 Jede Wache funkt in ihrer Rufgruppe. Oben im Funkbereich lassen sich Gruppen ein- und ausblenden (eine grün hinterlegte Gruppe ist gerade belegt), unten geht ein Gruppenruf an alle in einer Gruppe. Im Einsatz kann der Disponent eine Einsatzgruppe (z. B. WÜ EINS 1) zuweisen: Alle Fahrzeuge des Einsatzes bekommen die Anweisung zum Gruppenwechsel und melden sich dort, nachalarmierte Fahrzeuge schalten direkt um, nach dem Einsatz geht es zurück in die Heimatgruppe. Einzelne Fahrzeuge lassen sich in der Fahrzeugleiste umschalten. FMS-Status laufen unabhängig von der Gruppe. In der Fahrzeugleiste filtern Suche und Rufgruppe die vielen Wachen.
 
+### Telefon und Funk auf Tablet oder Handy
+
+Oben rechts auf **📱 Tablet** klicken, wählen, ob das Gerät Telefon, Funk oder beides übernimmt, und den QR-Code mit dem iPad, Tablet oder Handy scannen (oder die angezeigte Adresse im Browser eingeben). Rechner und Gerät müssen im selben WLAN sein; die Windows-Firewall muss „Private Netzwerke“ erlauben. Auf dem Gerät einmal **Tippen zum Start**, damit Klingeln und Vorlesen freigeschaltet werden. Das Gerät übernimmt deinen Platz: Ein dort angenommener Notruf öffnet am Rechner die Einsatzmaske mit AML, Sprechwünsche und Gruppenrufe laufen auf dem Gerät. Mit dem Haken „hier am Rechner ausblenden“ verschwinden die ausgelagerten Bereiche am Rechner, und Ton und Vorlesen kommen nur noch vom Gerät. Bricht das WLAN kurz ab, verbindet sich das Gerät von selbst neu. Die Spracheingabe gibt es auf dem Gerät nicht, weil Browser das Mikrofon nur über HTTPS freigeben; sie bleibt am Rechner.
+
 ### Fenster auf mehrere Monitore verteilen
 
 Jeder Bereich (Notrufabfrage, Einsatzmaske, Karte, Einsätze, Funk, Fahrzeugstatus) hat oben rechts den Knopf ⧉, der ihn in ein eigenes Fenster auslagert. Das Fenster lässt sich auf einen anderen Monitor ziehen; Position und Größe merkt sich die App. Die Einsatzmaske ist ein eigener Bereich: Sie kann z. B. neben dem Notrufgespräch auf einem zweiten Monitor liegen, der Kartenklick im Hauptfenster setzt trotzdem den Einsatzort. Im Menü **🗗 Fenster** gibt es **Kompakte Ansicht (alles in einem Fenster)**, die Aufteilungen **Mehrere Monitore** und **Zwei Monitore (Karte auf dem zweiten)** und das Wiederherstellen der letzten Aufteilung. Schließen eines ausgelagerten Fensters holt den Bereich zurück.
@@ -171,4 +181,5 @@ tests/     Vitest: GIS, Einsatzablauf, Spracherkennung, OSM-Import mit echten Da
 - Kein Verkehr, keine Polizei als eigene Organisation, keine Hubschrauber.
 - Eine laufende Schicht wird nicht gespeichert; Verlassen beendet sie für den Host.
 - Stichwortkatalog und Funkkenner sind an Bayern angelehnt, aber vereinfacht und im Editor anpassbar.
-- Der Windows-Build ist nicht signiert.
+- Die Builds sind nicht signiert. Die Mac-Version wurde unter Linux gebaut und nur bis zum Paket geprüft, nicht auf einem echten Mac gestartet.
+- Auf dem Tablet gibt es keine Spracheingabe (Browser erlauben das Mikrofon nur über HTTPS).

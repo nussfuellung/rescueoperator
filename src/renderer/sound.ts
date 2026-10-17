@@ -58,3 +58,22 @@ export function alarmTone() {
   tone(660, 0.3, 0.25, 0.07);
 }
 
+
+/** Auf Tablets und Handys darf Ton erst nach einer Berührung starten */
+export function unlockAudio() {
+  const c = audio();
+  if (c) {
+    const b = c.createBuffer(1, 1, 22050);
+    const s = c.createBufferSource();
+    s.buffer = b;
+    s.connect(c.destination);
+    s.start(0);
+  }
+  try {
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    speechSynthesis.speak(u);
+  } catch {
+    /* kein Vorlesen im Browser */
+  }
+}

@@ -133,6 +133,7 @@ ipcMain.handle('host:start', async (_e, scenarioId: string, port: number) => {
   const scn = loadScenario(scenarioId);
   recomputeHouseNumbers(scn);
   host = new GameServer(scn);
+  host.staticDir = join(__dirname, '../renderer');
   const p = await host.start(port);
   return { port: p, addresses: lanAddresses() };
 });
