@@ -1,0 +1,584 @@
+// Canvas-Karte des simulierten GIS: Straßen, Orte, Wachen, Kliniken, Fahrzeuge, Einsätze.
+import { useEffect, useMemo, useRef } from 'react';
+import { FMS_COLOR, shortCallsign } from '../../shared/catalog';
+import { projectOnSegment } from '../../shared/geo';
+import type { CallState, IncidentState, RoadType, Scenario, UnitState, Vec } from '../../shared/types';
+
+export type HitKind = 'unit' | 'incident' | 'station' | 'hospital' | 'object' | 'town' | 'node' | 'road';
+export interface Hit {
+  kind: HitKind;
+  id: string;
+}
+
+export interface MapData {
+  units?: UnitState[];
+  incidents?: IncidentState[];
+  calls?: CallState[];
+  selectedIncidentId?: string;
+  selectedUnitId?: string;
+  marker?: Vec | null;
+  highlightUnitIds?: string[];
+}
+
+export interface EditorOverlay {
+  selected?: Hit | null;
+  pendingNodeId?: string | null;
+  showNodes: boolean;
+}
+
+interface Props {
+  scenario: Scenario;
+  version?: number;
+  data?: MapData;
+  editor?: EditorOverlay;
+  focus?: { x: number; y: number; seq: number } | null;
+  onClick?: (p: Vec, hit: Hit | null, ev: MouseEvent) => void;
+  onContext?: (p: Vec, hit: Hit | null) => void;
+  /** Gibt true zurück, wenn das Objekt verschoben werden darf */
+  canDrag?: (hit: Hit) => boolean;
+  onDrag?: (hit: Hit, p: Vec) => void;
+  onDragEnd?: (hit: Hit) => void;
+  hitKinds?: HitKind[];
+}
+
+const ROAD_STYLE: Record<RoadType, { casing: string; fill: string; width: number; minPx: number }> = {
+  ortsstrasse: { casing: '#b9b2a3', fill: '#ffffff', width: 9, minPx: 1.2 },
+  landstrasse: { casing: '#c9a74a', fill: '#ffe9a8', width: 12, minPx: 2 },
+  bundesstrasse: { casing: '#c98a1a', fill: '#ffd166', width: 15, minPx: 2.6 },
+  autobahn: { casing: '#24467f', fill: '#5b8ee6', width: 22, minPx: 3.2 },
+};
+const ROAD_ORDER: RoadType[] = ['ortsstrasse', 'landstrasse', 'bundesstrasse', 'autobahn'];
+
+export function MapView(props: Props) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const propsRef = useRef(props);
+  propsRef.current = props;
+  const view = useRef({ cx: 0, cy: 0, scale: 0.05, init: false });
+
+  // Straßenbeschriftungen einmal pro Szenario-Version berechnen
+  const labels = useMemo(() => {
+    const scn = props.scenario;
+    const nodeById = new Map(scn.nodes.map((n) => [n.id, n]));
+    const best = new Map<string, { x: number; y: number; angle: number; len: number; name: string; type: RoadType }>();
+    for (const r of scn.roads) {
+      const a = nodeById.get(r.a);
+      const b = nodeById.get(r.b);
+      if (!a || !b) continue;
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      const key = `${r.town}|${r.name}|${r.type === 'ortsstrasse' ? '' : Math.round(a.x / 4000) + ':' + Math.round(a.y / 4000)}`;
+      const cur = best.get(key);
+      if (!cur || len > cur.len) {
+        let angle = Math.atan2(b.y - a.y, b.x - a.x);
+        if (angle > Math.PI / 2) angle -= Math.PI;
+        if (angle < -Math.PI / 2) angle += Math.PI;
+        best.set(key, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, angle, len, name: r.name, type: r.type });
+      }
+    }
+    return [...best.values()];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.scenario, props.version]);
+  const labelsRef = useRef(labels);
+  labelsRef.current = labels;
+
+  // Fokus setzen (z. B. auf ausgewählten Einsatz)
+  useEffect(() => {
+    if (props.focus) {
+      view.current.cx = props.focus.x;
+      view.current.cy = props.focus.y;
+      view.current.scale = Math.max(view.current.scale, 0.18);
+    }
+  }, [props.focus?.seq]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current!;
+    const ctx = canvas.getContext('2d')!;
+    let raf = 0;
+    let dragging: { sx: number; sy: number; cx: number; cy: number; moved: boolean; hit: Hit | null; drag: boolean } | null = null;
+
+    const toWorld = (sx: number, sy: number): Vec => {
+      const v = view.current;
+      return { x: v.cx + (sx - canvas.clientWidth / 2) / v.scale, y: v.cy + (sy - canvas.clientHeight / 2) / v.scale };
+    };
+    const toScreen = (p: Vec): [number, number] => {
+      const v = view.current;
+      return [(p.x - v.cx) * v.scale + canvas.clientWidth / 2, (p.y - v.cy) * v.scale + canvas.clientHeight / 2];
+    };
+
+    const fit = () => {
+      const scn = propsRef.current.scenario;
+      const w = canvas.clientWidth || 800;
+      const h = canvas.clientHeight || 600;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const n of scn.nodes) {
+        minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+        minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+      }
+      if (!isFinite(minX)) {
+        minX = 0; minY = 0; maxX = scn.width; maxY = scn.height;
+      }
+      view.current.cx = (minX + maxX) / 2;
+      view.current.cy = (minY + maxY) / 2;
+      view.current.scale = Math.min(w / (maxX - minX + 1000), h / (maxY - minY + 1000));
+      view.current.init = true;
+    };
+
+    const hitTest = (sx: number, sy: number): Hit | null => {
+      const p = propsRef.current;
+      const scn = p.scenario;
+      const kinds = p.hitKinds;
+      const allow = (k: HitKind) => !kinds || kinds.includes(k);
+      const near = (q: Vec, r = 12) => {
+        const [x, y] = toScreen(q);
+        return Math.hypot(x - sx, y - sy) <= r;
+      };
+      if (allow('unit')) {
+        for (const u of [...(p.data?.units ?? [])].reverse()) {
+          if (u.task === 'station' && view.current.scale < 0.12) continue;
+          if (near(unitDrawPos(u, scn, p.data?.units ?? [], view.current.scale), 14)) return { kind: 'unit', id: u.id };
+        }
+      }
+      if (allow('incident')) for (const i of p.data?.incidents ?? []) if (i.status !== 'abgeschlossen' && near(i, 14)) return { kind: 'incident', id: i.id };
+      if (allow('station')) for (const s of scn.stations) if (near(s)) return { kind: 'station', id: s.id };
+      if (allow('hospital')) for (const h of scn.hospitals) if (near(h)) return { kind: 'hospital', id: h.id };
+      if (allow('object')) for (const o of scn.objects) if (near(o, 9)) return { kind: 'object', id: o.id };
+      if (allow('node') && p.editor?.showNodes && view.current.scale > 0.1) for (const n of scn.nodes) if (near(n, 7)) return { kind: 'node', id: n.id };
+      if (allow('town')) for (const t of scn.towns) if (near(t, 14)) return { kind: 'town', id: t.id };
+      if (allow('road')) {
+        const nodeById = new Map(scn.nodes.map((n) => [n.id, n]));
+        const w = toWorld(sx, sy);
+        const tol = 7 / view.current.scale;
+        for (const r of scn.roads) {
+          const a = nodeById.get(r.a);
+          const b = nodeById.get(r.b);
+          if (a && b && projectOnSegment(w, a, b).d < tol) return { kind: 'road', id: r.id };
+        }
+      }
+      return null;
+    };
+
+    const onDown = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const hit = e.button === 0 ? hitTest(sx, sy) : null;
+      const drag = !!(hit && propsRef.current.canDrag?.(hit));
+      dragging = { sx, sy, cx: view.current.cx, cy: view.current.cy, moved: false, hit, drag };
+    };
+    const onMove = (e: MouseEvent) => {
+      if (!dragging) return;
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      if (Math.hypot(sx - dragging.sx, sy - dragging.sy) > 4) dragging.moved = true;
+      if (!dragging.moved) return;
+      if (dragging.drag && dragging.hit) {
+        propsRef.current.onDrag?.(dragging.hit, toWorld(sx, sy));
+      } else {
+        view.current.cx = dragging.cx - (sx - dragging.sx) / view.current.scale;
+        view.current.cy = dragging.cy - (sy - dragging.sy) / view.current.scale;
+      }
+    };
+    const onUp = (e: MouseEvent) => {
+      if (!dragging) return;
+      const d = dragging;
+      dragging = null;
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      if (d.moved && d.drag && d.hit) propsRef.current.onDragEnd?.(d.hit);
+      if (!d.moved && e.button === 0) propsRef.current.onClick?.(toWorld(sx, sy), d.hit, e);
+    };
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      propsRef.current.onContext?.(toWorld(sx, sy), hitTest(sx, sy));
+    };
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const before = toWorld(sx, sy);
+      const f = Math.exp(-e.deltaY * 0.0015);
+      view.current.scale = Math.max(0.01, Math.min(3, view.current.scale * f));
+      const after = toWorld(sx, sy);
+      view.current.cx += before.x - after.x;
+      view.current.cy += before.y - after.y;
+    };
+
+    canvas.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    canvas.addEventListener('contextmenu', onContextMenu);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+
+    const draw = () => {
+      raf = requestAnimationFrame(draw);
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      if (!w || !h) return;
+      if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+      }
+      if (!view.current.init) fit();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const p = propsRef.current;
+      const scn = p.scenario;
+      const v = view.current;
+      const now = performance.now();
+
+      ctx.fillStyle = '#e9e5da';
+      ctx.fillRect(0, 0, w, h);
+
+      // Orte
+      ctx.fillStyle = '#ddd3bf';
+      for (const t of scn.towns) {
+        const [x, y] = toScreen(t);
+        ctx.beginPath();
+        ctx.arc(x, y, t.radius * v.scale * 1.08, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Straßen
+      const nodeById = new Map(scn.nodes.map((n) => [n.id, n]));
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      for (const pass of ['casing', 'fill'] as const) {
+        for (const type of ROAD_ORDER) {
+          const st = ROAD_STYLE[type];
+          const width = Math.max(st.minPx, st.width * v.scale);
+          ctx.beginPath();
+          for (const r of scn.roads) {
+            if (r.type !== type) continue;
+            const a = nodeById.get(r.a);
+            const b = nodeById.get(r.b);
+            if (!a || !b) continue;
+            const [ax, ay] = toScreen(a);
+            const [bx, by] = toScreen(b);
+            if (Math.max(ax, bx) < -20 || Math.min(ax, bx) > w + 20 || Math.max(ay, by) < -20 || Math.min(ay, by) > h + 20) continue;
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(bx, by);
+          }
+          if (pass === 'casing') {
+            ctx.strokeStyle = st.casing;
+            ctx.lineWidth = width + 2;
+          } else {
+            ctx.strokeStyle = st.fill;
+            ctx.lineWidth = width;
+          }
+          ctx.stroke();
+        }
+      }
+
+      // Editor: ausgewählte Straße
+      if (p.editor?.selected?.kind === 'road') {
+        const r = scn.roads.find((x) => x.id === p.editor!.selected!.id);
+        const a = r && nodeById.get(r.a);
+        const b = r && nodeById.get(r.b);
+        if (a && b) {
+          ctx.strokeStyle = '#ff006e';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(...toScreen(a));
+          ctx.lineTo(...toScreen(b));
+          ctx.stroke();
+        }
+      }
+
+      // Straßennamen
+      if (v.scale > 0.28) {
+        ctx.font = `${Math.min(13, 9 + v.scale * 4)}px "Segoe UI", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (const l of labelsRef.current) {
+          const [x, y] = toScreen(l);
+          if (x < -100 || x > w + 100 || y < -50 || y > h + 50) continue;
+          if (l.len * v.scale < l.name.length * 5) continue;
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(l.angle);
+          ctx.fillStyle = '#4b4536';
+          ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+          ctx.lineWidth = 3;
+          ctx.strokeText(l.name, 0, 0);
+          ctx.fillText(l.name, 0, 0);
+          ctx.restore();
+        }
+      } else if (v.scale > 0.04) {
+        // Überlandstraßen-Nummern als Schilder
+        ctx.font = 'bold 10px "Segoe UI", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (const l of labelsRef.current) {
+          if (l.type === 'ortsstrasse') continue;
+          const [x, y] = toScreen(l);
+          const tw = ctx.measureText(l.name).width + 6;
+          ctx.fillStyle = l.type === 'autobahn' ? '#1d4fa3' : l.type === 'bundesstrasse' ? '#f2c230' : '#fff';
+          ctx.fillRect(x - tw / 2, y - 7, tw, 14);
+          ctx.strokeStyle = '#333';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x - tw / 2, y - 7, tw, 14);
+          ctx.fillStyle = l.type === 'autobahn' ? '#fff' : '#222';
+          ctx.fillText(l.name, x, y + 0.5);
+        }
+      }
+
+      // Editor: Knoten
+      if (p.editor?.showNodes && v.scale > 0.1) {
+        for (const n of scn.nodes) {
+          const [x, y] = toScreen(n);
+          if (x < -5 || x > w + 5 || y < -5 || y > h + 5) continue;
+          const sel = (p.editor.selected?.kind === 'node' && p.editor.selected.id === n.id) || p.editor.pendingNodeId === n.id;
+          ctx.fillStyle = sel ? '#ff006e' : '#5a6b7d';
+          ctx.beginPath();
+          ctx.arc(x, y, sel ? 5 : 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Ortsnamen
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const t of scn.towns) {
+        const [x, y] = toScreen(t);
+        const big = t.radius > 1200;
+        ctx.font = `${big ? 'bold ' : ''}${big ? 17 : 14}px "Segoe UI", sans-serif`;
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        const ty = y - t.radius * v.scale * (v.scale > 0.28 ? 0.85 : 1.08) - 10;
+        ctx.strokeText(t.name, x, ty);
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillText(t.name, x, ty);
+        if (p.editor?.selected?.kind === 'town' && p.editor.selected.id === t.id) {
+          ctx.strokeStyle = '#ff006e';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x, y, t.radius * v.scale, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      const isSel = (kind: HitKind, id: string) => p.editor?.selected?.kind === kind && p.editor.selected.id === id;
+
+      // Objekte
+      for (const o of scn.objects) {
+        const [x, y] = toScreen(o);
+        ctx.fillStyle = o.bma ? '#9d4edd' : '#7a7a7a';
+        ctx.beginPath();
+        ctx.moveTo(x, y - 6);
+        ctx.lineTo(x + 6, y);
+        ctx.lineTo(x, y + 6);
+        ctx.lineTo(x - 6, y);
+        ctx.closePath();
+        ctx.fill();
+        if (isSel('object', o.id)) ring(ctx, x, y, 10);
+        if (v.scale > 0.35) label(ctx, o.name, x, y + 14, '#3c096c');
+      }
+
+      // Kliniken
+      for (const hsp of scn.hospitals) {
+        const [x, y] = toScreen(hsp);
+        ctx.fillStyle = '#0353a4';
+        ctx.fillRect(x - 9, y - 9, 18, 18);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillText('H', x, y + 1);
+        if (isSel('hospital', hsp.id)) ring(ctx, x, y, 14);
+        if (v.scale > 0.12) label(ctx, hsp.name, x, y + 18, '#023e7d');
+      }
+
+      // Wachen
+      for (const s of scn.stations) {
+        const [x, y] = toScreen(s);
+        const fw = s.kind === 'feuerwache';
+        ctx.fillStyle = fw ? '#c1121f' : '#ffffff';
+        ctx.strokeStyle = fw ? '#780000' : '#c1121f';
+        ctx.lineWidth = 2;
+        ctx.fillRect(x - 11, y - 8, 22, 16);
+        ctx.strokeRect(x - 11, y - 8, 22, 16);
+        ctx.fillStyle = fw ? '#fff' : '#c1121f';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.fillText(fw ? 'FW' : 'RW', x, y + 1);
+        if (isSel('station', s.id)) ring(ctx, x, y, 15);
+        if (v.scale > 0.2) label(ctx, s.name, x, y - 16, '#7a0000');
+      }
+
+      // Handyortung (AML) und BMA-Positionen
+      for (const c of p.data?.calls ?? []) {
+        if (c.state === 'ended') continue;
+        if (c.aml) {
+          const [x, y] = toScreen(c.aml);
+          ctx.fillStyle = 'rgba(0,119,182,0.15)';
+          ctx.strokeStyle = 'rgba(0,119,182,0.8)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(x, y, Math.max(6, c.aml.acc * v.scale), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          label(ctx, `AML ${c.phone}`, x, y - Math.max(6, c.aml.acc * v.scale) - 8, '#023e7d');
+        }
+      }
+
+      // Fahrwege
+      ctx.setLineDash([6, 5]);
+      ctx.lineWidth = 1.5;
+      for (const u of p.data?.units ?? []) {
+        if (!u.route?.length) continue;
+        const [ax, ay] = toScreen(u);
+        const [bx, by] = toScreen(u.route[0]);
+        ctx.strokeStyle = FMS_COLOR[u.status] ?? '#333';
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      // Einsätze
+      const pulse = (Math.sin(now / 250) + 1) / 2;
+      for (const i of p.data?.incidents ?? []) {
+        if (i.status === 'abgeschlossen') continue;
+        const [x, y] = toScreen(i);
+        const sel = p.data?.selectedIncidentId === i.id;
+        const r = sel ? 13 : 10;
+        if (i.status === 'offen') {
+          ctx.fillStyle = `rgba(208,0,0,${0.15 + pulse * 0.25})`;
+          ctx.beginPath();
+          ctx.arc(x, y, r + 10, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = i.stichwort.startsWith('RD') ? '#e85d04' : i.stichwort.startsWith('THL') ? '#0077b6' : '#d00000';
+        ctx.strokeStyle = sel ? '#000' : '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, y - r);
+        ctx.lineTo(x + r, y + r * 0.8);
+        ctx.lineTo(x - r, y + r * 0.8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillText('!', x, y + 2);
+        label(ctx, `${i.stichwort}`, x, y + r + 10, '#6a040f', true);
+      }
+
+      // Fahrzeuge
+      const units = p.data?.units ?? [];
+      for (const u of units) {
+        if (u.task === 'station' && v.scale < 0.12) continue;
+        const pos = unitDrawPos(u, scn, units, v.scale);
+        const [x, y] = toScreen(pos);
+        const text = shortCallsign(u.callsign);
+        ctx.font = 'bold 10px "Segoe UI", sans-serif';
+        const tw = ctx.measureText(text).width + 16;
+        const sel = p.data?.selectedUnitId === u.id || p.data?.highlightUnitIds?.includes(u.id);
+        const blink = u.status === 5 && pulse > 0.5;
+        ctx.fillStyle = blink ? '#ffffff' : FMS_COLOR[u.status] ?? '#333';
+        roundRect(ctx, x - tw / 2, y - 8, tw, 16, 4);
+        ctx.fill();
+        ctx.strokeStyle = sel ? '#000' : 'rgba(0,0,0,0.45)';
+        ctx.lineWidth = sel ? 2.5 : 1;
+        ctx.stroke();
+        ctx.fillStyle = blink ? '#ff2d55' : '#fff';
+        ctx.textAlign = 'left';
+        ctx.fillText(String(u.status), x - tw / 2 + 4, y + 1);
+        ctx.textAlign = 'center';
+        ctx.fillText(text, x + 5, y + 1);
+      }
+
+      // Marker (vom Calltaker gesetzter Einsatzort)
+      if (p.data?.marker) {
+        const [x, y] = toScreen(p.data.marker);
+        ctx.strokeStyle = '#ff006e';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(x, y, 10, 0, Math.PI * 2);
+        ctx.moveTo(x - 16, y);
+        ctx.lineTo(x + 16, y);
+        ctx.moveTo(x, y - 16);
+        ctx.lineTo(x, y + 16);
+        ctx.stroke();
+      }
+
+      // Maßstab
+      const targetPx = 120;
+      const meters = niceNumber(targetPx / v.scale);
+      const px = meters * v.scale;
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.fillRect(10, h - 28, px + 60, 20);
+      ctx.strokeStyle = '#222';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(16, h - 14);
+      ctx.lineTo(16 + px, h - 14);
+      ctx.stroke();
+      ctx.fillStyle = '#222';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(meters >= 1000 ? `${meters / 1000} km` : `${meters} m`, 22 + px, h - 14);
+    };
+    draw();
+
+    return () => {
+      cancelAnimationFrame(raf);
+      canvas.removeEventListener('mousedown', onDown);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      canvas.removeEventListener('contextmenu', onContextMenu);
+      canvas.removeEventListener('wheel', onWheel);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="map-canvas" />;
+}
+
+/** Fahrzeuge auf der Wache nebeneinander unter dem Wachensymbol anordnen */
+function unitDrawPos(u: UnitState, scn: Scenario, all: UnitState[], scale: number): Vec {
+  if (u.task !== 'station') return u;
+  const st = scn.stations.find((s) => s.id === u.stationId);
+  if (!st) return u;
+  const here = all.filter((x) => x.stationId === u.stationId && x.task === 'station');
+  const idx = here.indexOf(u);
+  const col = idx % 3;
+  const row = Math.floor(idx / 3);
+  return { x: st.x + ((col - 1) * 58) / scale, y: st.y + (24 + row * 19) / scale };
+}
+
+function label(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, color: string, bold = false) {
+  ctx.font = `${bold ? 'bold ' : ''}11px "Segoe UI", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
+}
+
+function ring(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  ctx.strokeStyle = '#ff006e';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function niceNumber(x: number): number {
+  const exp = Math.pow(10, Math.floor(Math.log10(x)));
+  const f = x / exp;
+  return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * exp;
+}

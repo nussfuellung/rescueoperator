@@ -1,0 +1,123 @@
+// Electron-Hauptprozess: Fenster, Leitstellen-Bibliothek, Host-Server.
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { recomputeHouseNumbers } from '../shared/geo';
+import { generateScenario } from '../shared/mapgen';
+import type { Scenario } from '../shared/types';
+import { GameServer, lanAddresses } from '../server/server';
+
+let win: BrowserWindow | null = null;
+let host: GameServer | null = null;
+
+const libDir = () => {
+  const dir = join(app.getPath('userData'), 'leitstellen');
+  mkdirSync(dir, { recursive: true });
+  return dir;
+};
+const fileFor = (id: string) => join(libDir(), `${id.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`);
+
+function listScenarios() {
+  const dir = libDir();
+  let files = readdirSync(dir).filter((f) => f.endsWith('.json'));
+  if (!files.length) {
+    const scn = generateScenario({ seed: 4711, towns: 8, name: 'Musterland' });
+    writeFileSync(fileFor(scn.id), JSON.stringify(scn));
+    files = readdirSync(dir).filter((f) => f.endsWith('.json'));
+  }
+  return files
+    .map((f) => {
+      try {
+        const scn = JSON.parse(readFileSync(join(dir, f), 'utf8')) as Scenario;
+        return {
+          id: scn.id,
+          name: scn.name,
+          ilsName: scn.ilsName,
+          towns: scn.towns.length,
+          vehicles: scn.stations.reduce((n, s) => n + s.vehicles.length, 0),
+          updated: statSync(join(dir, f)).mtimeMs,
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => b!.updated - a!.updated);
+}
+
+function loadScenario(id: string): Scenario {
+  return JSON.parse(readFileSync(fileFor(id), 'utf8'));
+}
+
+function createWindow() {
+  win = new BrowserWindow({
+    width: 1680,
+    height: 1000,
+    minWidth: 1200,
+    minHeight: 750,
+    backgroundColor: '#11161d',
+    title: 'Leitstellensimulator',
+    autoHideMenuBar: true,
+    webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+  });
+  const dev = process.env.LST_DEV_URL;
+  if (dev) win.loadURL(dev);
+  else win.loadFile(join(__dirname, '../renderer/index.html'));
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+}
+
+ipcMain.handle('scenarios:list', () => listScenarios());
+ipcMain.handle('scenarios:load', (_e, id: string) => loadScenario(id));
+ipcMain.handle('scenarios:save', (_e, scn: Scenario) => {
+  writeFileSync(fileFor(scn.id), JSON.stringify(scn));
+  return true;
+});
+ipcMain.handle('scenarios:delete', (_e, id: string) => {
+  unlinkSync(fileFor(id));
+  return true;
+});
+ipcMain.handle('scenarios:export', async (_e, scn: Scenario) => {
+  const res = await dialog.showSaveDialog(win!, {
+    title: 'Leitstelle exportieren',
+    defaultPath: `${scn.name}.leitstelle.json`,
+    filters: [{ name: 'Leitstelle', extensions: ['json'] }],
+  });
+  if (res.canceled || !res.filePath) return false;
+  writeFileSync(res.filePath, JSON.stringify(scn, null, 1));
+  return true;
+});
+ipcMain.handle('scenarios:import', async () => {
+  const res = await dialog.showOpenDialog(win!, {
+    title: 'Leitstelle importieren',
+    filters: [{ name: 'Leitstelle', extensions: ['json'] }],
+    properties: ['openFile'],
+  });
+  if (res.canceled || !res.filePaths[0]) return null;
+  const scn = JSON.parse(readFileSync(res.filePaths[0], 'utf8')) as Scenario;
+  if (scn.version !== 1 || !Array.isArray(scn.roads)) throw new Error('Keine gültige Leitstellen-Datei');
+  writeFileSync(fileFor(scn.id), JSON.stringify(scn));
+  return scn;
+});
+ipcMain.handle('host:start', async (_e, scenarioId: string, port: number) => {
+  if (host) await host.stop();
+  const scn = loadScenario(scenarioId);
+  recomputeHouseNumbers(scn);
+  host = new GameServer(scn);
+  const p = await host.start(port);
+  return { port: p, addresses: lanAddresses() };
+});
+ipcMain.handle('host:stop', async () => {
+  await host?.stop();
+  host = null;
+  return true;
+});
+ipcMain.handle('host:status', () => (host ? { port: host.port, addresses: lanAddresses() } : null));
+
+app.whenReady().then(createWindow);
+app.on('window-all-closed', async () => {
+  await host?.stop();
+  app.quit();
+});
