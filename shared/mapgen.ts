@@ -420,10 +420,13 @@ export function validateScenario(scn: Scenario): string[] {
     problems.push('Es gibt kein Feuerwehrfahrzeug.');
   if (scn.hospitals.length === 0) problems.push('Es gibt kein Krankenhaus.');
   const callsigns = new Set<string>();
+  const ids = new Set<string>();
   for (const s of scn.stations)
     for (const v of s.vehicles) {
       if (callsigns.has(v.callsign)) problems.push(`Funkrufname doppelt: ${v.callsign}`);
       callsigns.add(v.callsign);
+      if (ids.has(v.id)) problems.push(`Fahrzeug-ID doppelt: ${v.id} (${v.callsign})`);
+      ids.add(v.id);
       if (!scn.vehicleTypes.some((t) => t.id === v.type)) problems.push(`Unbekannter Fahrzeugtyp ${v.type} bei ${v.callsign}`);
     }
   // Erreichbarkeit: alle Wachen im selben Netz wie die erste Wache

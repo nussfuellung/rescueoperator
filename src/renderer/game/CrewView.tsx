@@ -60,7 +60,8 @@ export function CrewView({ ctx }: { ctx: GameCtx }) {
   }
 
   const inc = state.incidents.find((i) => i.id === u.incidentId);
-  const myRadio = state.radio.filter((m) => m.from === u.callsign || m.to === u.callsign || m.to === 'alle');
+  // Die Besatzung hört ihre eigene Rufgruppe mit, dazu alles, was an sie gerichtet ist
+  const myRadio = state.radio.filter((m) => m.from === u.callsign || m.to === u.callsign || (m.group && m.group === u.tmo));
 
   return (
     <div className="crew">
@@ -115,12 +116,22 @@ export function CrewView({ ctx }: { ctx: GameCtx }) {
           </select>
         )}
         <div className="panel radio crew-radio">
-          <div className="panel-title">Funk</div>
+          <div className="panel-title row">
+            Funk
+            <select value={u.tmo ?? ''} onChange={(e) => conn.send({ a: 'crewTmo', group: e.target.value })} title="Rufgruppe am Funkgerät">
+              {(scn.tmoGroups ?? []).map((g) => (
+                <option key={g.id} value={g.id}>
+                  TMO {g.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="radio-log">
             {myRadio.slice(-40).map((m) => (
               <div key={m.id} className={`radio-line ${m.kind}`}>
                 <span className="muted">{formatClock(state.clockStart, m.t)}</span>{' '}
-                <b>{m.from === scn.ilsName ? 'ILS' : radioName(m.from)}</b>: {m.text}
+                <b>{m.from === scn.ilsName ? 'ILS' : radioName(m.from)}</b>
+                {m.to !== scn.ilsName && m.from !== u.callsign && m.to !== u.callsign && <> → {radioName(m.to)}</>}: {m.text}
               </div>
             ))}
           </div>

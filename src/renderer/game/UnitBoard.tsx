@@ -22,11 +22,32 @@ const TASK_TEXT: Record<UnitState['task'], string> = {
 export function UnitBoard({ ctx }: { ctx: GameCtx }) {
   const { scn, state } = ctx;
   const sel = state.units.find((u) => u.id === ctx.selectedUnit);
+  const [q, setQ] = useState('');
+  const [group, setGroup] = useState('');
+  const ql = q.toLowerCase().trim();
+  const shown = scn.stations.filter(
+    (st) =>
+      (!group || st.tmo === group) &&
+      (!ql || st.name.toLowerCase().includes(ql) || st.vehicles.some((v) => v.callsign.toLowerCase().includes(ql))),
+  );
   return (
     <div className="panel unitboard">
       {sel ? <UnitControl ctx={ctx} u={sel} /> : <div className="muted small pad">Fahrzeug anklicken für Funk und Details.</div>}
+      <div className="row unit-filter">
+        <input className="grow" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Wache oder Fahrzeug suchen…" />
+        <select value={group} onChange={(e) => setGroup(e.target.value)} title="Nach Rufgruppe filtern">
+          <option value="">Alle Rufgruppen</option>
+          {(scn.tmoGroups ?? [])
+            .filter((g) => g.use === 'FW' || g.use === 'RD')
+            .map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+        </select>
+      </div>
       <div className="stations">
-        {scn.stations.map((st) => (
+        {shown.map((st) => (
           <div key={st.id} className="station-group">
             <div className="station-name" title={st.name}>
               {st.name}
@@ -84,6 +105,16 @@ function UnitControl({ ctx, u }: { ctx: GameCtx; u: UnitState }) {
         <button className="small-btn" onClick={() => ctx.setSelectedUnit(null)}>
           ✕
         </button>
+      </div>
+      <div className="row small">
+        <span className="muted">TMO</span>
+        <select value={u.tmo ?? ''} onChange={(e) => conn.send({ a: 'setTmo', unitIds: [u.id], group: e.target.value })} title="Gruppenwechsel anweisen">
+          {(scn.tmoGroups ?? []).map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="row">
         {u.speak && !u.speak.answered && (

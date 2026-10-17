@@ -72,6 +72,17 @@ export interface Station {
   x: number;
   y: number;
   vehicles: VehicleDef[];
+  /** TMO-Rufgruppe, in der die Fahrzeuge der Wache standardmäßig funken */
+  tmo?: string;
+}
+
+/** Digitalfunk-Rufgruppe (TMO) */
+export interface TmoGroup {
+  id: string;
+  /** z. B. "FW WÜ 1" */
+  name: string;
+  /** Wofür die Gruppe gedacht ist */
+  use: 'RD' | 'FW' | 'Einsatz' | 'Übergreifend';
 }
 
 export interface Hospital {
@@ -150,6 +161,8 @@ export interface Scenario {
   geo?: GeoRef;
   /** Nur bei echten Karten: echte Hausnummern */
   addresses?: Address[];
+  /** Digitalfunk-Rufgruppen; fehlen sie, werden Standardgruppen erzeugt */
+  tmoGroups?: TmoGroup[];
 }
 
 // ---------- Laufzeitzustand (Server -> Client) ----------
@@ -210,6 +223,8 @@ export interface UnitState {
   hasPatient?: boolean;
   /** Hinweis für die Besatzung (Rolle Fahrzeugbesatzung) */
   hint?: string;
+  /** Aktuell geschaltete TMO-Rufgruppe */
+  tmo?: string;
 }
 
 export interface CallLine {
@@ -218,7 +233,23 @@ export interface CallLine {
   t: number;
 }
 
-export type QuestionId = 'wo' | 'was' | 'wer' | 'wieviele' | 'zustand' | 'gefahr' | 'tcpr' | 'beruhigen';
+export type QuestionId =
+  | 'wo'
+  | 'was'
+  | 'wer'
+  | 'wieviele'
+  | 'zustand'
+  | 'gefahr'
+  | 'tcpr'
+  | 'beruhigen'
+  | 'alter'
+  | 'atmung'
+  | 'bewusstsein'
+  | 'seitwann'
+  | 'vorerkrankung'
+  | 'zugang'
+  | 'rueckruf'
+  | 'ortbestaetigen';
 
 export interface CallState {
   id: string;
@@ -239,6 +270,8 @@ export interface CallState {
   typing?: boolean;
   /** Advanced Mobile Location: Handyortung mit Genauigkeit in Metern */
   aml?: { x: number; y: number; acc: number };
+  /** Festnetz: Anschlussadresse aus dem Teilnehmerverzeichnis */
+  landline?: { x: number; y: number; address: string };
   /** Bei BMA: Objekt und Adresse aus der Alarmübertragung */
   bma?: { text: string; x: number; y: number; address: string };
 }
@@ -269,6 +302,17 @@ export interface IncidentState {
   firstArrival?: number;
   alarmedAt?: number;
   closedAt?: number;
+  /** Zusatz zum Einsatzort, z. B. Stockwerk, Hinterhaus */
+  zusatz?: string;
+  objekt?: string;
+  /** Meldender und Rückrufnummer */
+  melder?: string;
+  rueckruf?: string;
+  /** Patientendaten (Name, Alter, Geschlecht) */
+  patient?: string;
+  sondersignal?: boolean;
+  /** Einsatz-Rufgruppe */
+  tmo?: string;
 }
 
 export interface RadioMessage {
@@ -278,6 +322,8 @@ export interface RadioMessage {
   to: string;
   text: string;
   kind: 'fms' | 'voice' | 'system';
+  /** TMO-Rufgruppe des Funkspruchs (FMS-Status ohne Gruppe) */
+  group?: string;
 }
 
 export interface ScoreBoard {

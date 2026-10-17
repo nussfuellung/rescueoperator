@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyQuestion } from '../server/callgen';
+import { classifyAll, classifyQuestion } from '../server/callgen';
 import { zipSync } from 'fflate';
 import { gunzipSync } from 'fflate';
 import { zipToModelTarGz } from '../shared/modelpack';
@@ -10,12 +10,20 @@ describe('gesprochene Fragen', () => {
     expect(classifyQuestion('wo genau befinden sie sich')).toBe('wo');
     expect(classifyQuestion('was ist passiert')).toBe('was');
     expect(classifyQuestion('wie viele personen sind verletzt')).toBe('wieviele');
-    expect(classifyQuestion('atmet die person normal')).toBe('zustand');
+    expect(classifyQuestion('atmet die person normal')).toBe('atmung');
+    expect(classifyQuestion('ist er wach und ansprechbar')).toBe('bewusstsein');
+    expect(classifyQuestion('wie alt ist der patient')).toBe('alter');
+    expect(classifyQuestion('nimmt sie irgendwelche medikamente')).toBe('vorerkrankung');
+    expect(classifyQuestion('seit wann hat er die schmerzen')).toBe('seitwann');
+    expect(classifyQuestion('in welchem stock wohnen sie')).toBe('zugang');
+    expect(classifyQuestion('unter welcher nummer erreichen wir sie')).toBe('rueckruf');
+    expect(classifyQuestion('ich wiederhole hauptstraße zwölf in kitzingen stimmt das')).toBe('ortbestaetigen');
     expect(classifyQuestion('wie ist ihr name')).toBe('wer');
     expect(classifyQuestion('brennt es noch')).toBe('gefahr');
     expect(classifyQuestion('bleiben sie ruhig')).toBe('beruhigen');
     expect(classifyQuestion('drücken sie fest auf die brust')).toBe('tcpr');
     expect(classifyQuestion('hallo')).toBeNull();
+    expect(classifyAll('wie alt ist er und atmet er normal')).toEqual(['alter', 'atmung']);
   });
 });
 

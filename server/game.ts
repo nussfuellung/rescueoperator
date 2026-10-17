@@ -18,15 +18,21 @@ import type {
   Vec,
   VehicleType,
 } from '../shared/types';
+import { ensureTmo } from '../shared/fleet';
 import {
   BMA_REAL_LAGE,
   BMA_TEMPLATE,
-  DEFAULT_ANSWERS,
   FIRST_NAMES,
+  FLOORS,
   LAST_NAMES,
+  NOT_UNDERSTOOD,
   TEMPLATES,
-  classifyQuestion,
+  YES_NO,
+  classifyAll,
+  fallbackAnswers,
+  isYesNoQuestion,
   questionText,
+  type CallerFacts,
   type IncidentTemplate,
 } from './callgen';
 
@@ -50,6 +56,7 @@ interface Truth {
   workMs: number;
   name: string;
   alter: number;
+  facts?: CallerFacts;
   objekt?: string;
   fake: boolean;
   tcprGiven?: boolean;
@@ -121,6 +128,7 @@ export class Game {
     this.types = new Map(scn.vehicleTypes.map((t) => [t.id, t]));
     this.rng = mulberry32(opts.seed ?? Date.now() & 0xffffffff);
     this.events = opts.events ?? {};
+    ensureTmo(scn);
     for (const st of scn.stations) {
       for (const v of st.vehicles) {
         this.units.push({
@@ -135,6 +143,7 @@ export class Game {
           y: st.y,
           heading: 0,
           routeIdx: 0,
+          tmo: st.tmo,
         });
       }
     }
@@ -164,8 +173,10 @@ export class Game {
   private log(inc: IncidentState, text: string) {
     inc.log.push({ t: this.time, text });
   }
-  private radioMsg(from: string, to: string, text: string, kind: RadioMessage['kind']) {
-    this.radio.push({ id: ++this.seq.radio, t: this.time, from, to, text, kind });
+  private radioMsg(from: string, to: string, text: string, kind: RadioMessage['kind'], group?: string) {
+    // Sprechfunk läuft in der Rufgruppe des Fahrzeugs, FMS-Status per Kurzdatennachricht ohne Gruppe
+    if (!group && kind !== 'fms') group = this.units.find((u) => u.callsign === from || u.callsign === to)?.tmo;
+    this.radio.push({ id: ++this.seq.radio, t: this.time, from, to, text, kind, group });
     if (this.radio.length > 300) this.radio.splice(0, this.radio.length - 300);
   }
   private unit(id: string) {
@@ -181,10 +192,21 @@ export class Game {
     return this.scn.stations.find((s) => s.id === u.stationId)!;
   }
   private fill(text: string, t: Truth, phone = '') {
+    const f = t.facts;
+    const m = (f?.sex ?? 'm') === 'm';
     return text
       .replace(/\{wo\}/g, t.spokenWhere)
       .replace(/\{name\}/g, t.name)
-      .replace(/\{alter\}/g, String(t.alter))
+      .replace(/\{vorname\}/g, t.name.split(' ')[0])
+      .replace(/\{nachname\}/g, f?.nachname ?? t.name.split(' ').pop()!)
+      .replace(/\{nachnameP\}/g, this.pick(LAST_NAMES))
+      .replace(/\{alterRund\}/g, String(Math.max(20, Math.round(t.alter / 10) * 10)))
+      .replace(/\{alter\}/g, t.alter <= 1 ? 'eineinhalb' : String(t.alter))
+      .replace(/\{floor\}/g, f?.floor ?? 'erster Stock')
+      .replace(/\{min\}/g, String(f?.minutes ?? 10))
+      .replace(/\{Er\}/g, m ? 'Er' : 'Sie')
+      .replace(/\{er\}/g, m ? 'er' : 'sie')
+      .replace(/\{ihn\}/g, m ? 'ihn' : 'sie')
       .replace(/\{objekt\}/g, t.objekt ?? 'Heim')
       .replace(/\{phone\}/g, phone);
   }
@@ -280,6 +302,19 @@ export class Game {
     if (!loc) return null;
     const sw = this.scn.stichworte.find((s) => s.code === tpl.stichwort);
     const needs = { ...(tpl.needs ?? sw?.aao ?? {}) };
+    const name = `${this.pick(FIRST_NAMES)} ${this.pick(LAST_NAMES)}`;
+    const age = tpl.age ?? [55, 89];
+    const alter = Math.floor(this.rand(age[0], age[1] + 0.99));
+    const facts: CallerFacts = {
+      name,
+      nachname: name.split(' ')[1],
+      alter,
+      sex: tpl.sex ?? (this.rng() < 0.5 ? 'm' : 'w'),
+      role: tpl.role ?? (tpl.where === 'objekt' ? 'personal' : tpl.patients?.length ? 'angehoerig' : 'passant'),
+      floor: this.pick(FLOORS),
+      minutes: Math.round(this.rand(5, 40)),
+      vorerkrankung: '',
+    };
     // Fahrzeugtypen, die im Szenario nicht existieren, ignorieren
     for (const k of Object.keys(needs)) if (!this.units.some((u) => this.typeOf(u)?.fills.includes(k))) delete needs[k];
     return {
@@ -293,8 +328,9 @@ export class Game {
       patients: (tpl.patients ?? []).map((p) => ({ ...p, done: false })),
       lage: tpl.lage,
       workMs: this.rand(tpl.workMin[0], tpl.workMin[1]) * 60_000,
-      name: `${this.pick(FIRST_NAMES)} ${this.pick(LAST_NAMES)}`,
-      alter: Math.floor(this.rand(55, 89)),
+      name,
+      alter,
+      facts,
       fake,
     };
   }
@@ -340,6 +376,10 @@ export class Game {
       const ang = this.rand(0, Math.PI * 2);
       const off = this.rand(0, acc * 0.7);
       call.aml = { x: truth.pos.x + Math.cos(ang) * off, y: truth.pos.y + Math.sin(ang) * off, acc };
+    }
+    // Festnetz: Anschlussadresse aus dem Teilnehmerverzeichnis (meist der Notfallort)
+    if (!mobile && !truth.fake && truth.tpl.where === 'wohnung' && this.rng() < 0.85) {
+      call.landline = { x: truth.pos.x, y: truth.pos.y, address: truth.address };
     }
     truth.callStart ??= this.time;
     this.calls.push(call);
@@ -438,6 +478,38 @@ export class Game {
           inc.label = sw?.label ?? inc.label;
         }
         if (action.note !== undefined) inc.note = action.note;
+        if (action.tmo !== undefined && action.tmo !== inc.tmo) {
+          const g = this.tmoName(action.tmo);
+          inc.tmo = action.tmo || undefined;
+          this.log(inc, inc.tmo ? `Einsatz-Rufgruppe ${g}` : 'Einsatz-Rufgruppe aufgehoben');
+          for (const id of inc.unitIds) {
+            const u = this.unit(id);
+            if (u) this.switchTmo(u, inc.tmo ?? this.station(u).tmo);
+          }
+        }
+        return;
+      }
+      case 'setTmo': {
+        if (!this.scn.tmoGroups?.some((g) => g.id === action.group)) return 'Unbekannte Rufgruppe';
+        for (const id of action.unitIds) {
+          const u = this.unit(id);
+          if (u) this.switchTmo(u, action.group);
+        }
+        return;
+      }
+      case 'groupCall': {
+        const text = action.text.trim().slice(0, 300);
+        if (!text || !this.scn.tmoGroups?.some((g) => g.id === action.group)) return;
+        this.radioMsg(this.scn.ilsName, `alle in ${this.tmoName(action.group)}`, text, 'voice', action.group);
+        const first = this.units.find((u) => u.tmo === action.group && !u.crewPlayerId && u.status !== 6);
+        if (first) this.after(this.rand(2500, 5000), () => this.radioMsg(first.callsign, this.scn.ilsName, 'Verstanden.', 'voice', action.group));
+        return;
+      }
+      case 'crewTmo': {
+        const u = player.unitId ? this.unit(player.unitId) : undefined;
+        if (!u) return 'Kein Fahrzeug besetzt';
+        if (!this.scn.tmoGroups?.some((g) => g.id === action.group)) return 'Unbekannte Rufgruppe';
+        u.tmo = action.group;
         return;
       }
       case 'alarm':
@@ -536,24 +608,31 @@ export class Game {
     if (call.takerId !== player.id) return 'Das Gespräch führt ein anderer Calltaker';
     if (call.kind === 'bma') return;
     const truth = this.callTruth.get(call.id)!;
-    let q: QuestionId | null = question === 'frei' ? null : question;
-    let said = q ? questionText(q) : '';
-    if (freeText) {
-      said = freeText.slice(0, 300);
-      q = classifyQuestion(freeText);
-    }
+    const q: QuestionId | null = question === 'frei' ? null : question;
+    const said = freeText ? freeText.slice(0, 300) : q ? questionText(q) : '';
     call.transcript.push({ from: 'calltaker', text: said, t: this.time });
-    if (!q) {
-      this.callerSays(call, this.pick(['Wie bitte? Ich versteh Sie nicht.', 'Was meinen Sie?', 'Hä? Bitte schicken Sie einfach jemanden!']));
+    const qs: QuestionId[] = freeText ? classifyAll(freeText) : q ? [q] : [];
+    if (!qs.length) {
+      const pool = freeText && isYesNoQuestion(freeText) ? YES_NO : NOT_UNDERSTOOD;
+      this.callerSays(call, this.pick(pool));
       return;
     }
-    if (!call.asked.includes(q)) call.asked.push(q);
-    if (q === 'tcpr' && truth.tpl.tcpr && !truth.tcprGiven) {
-      truth.tcprGiven = true;
-      this.addScore(15, 'Telefonreanimation angeleitet');
+    const parts: string[] = [];
+    for (const qq of qs) {
+      const repeated = call.asked.includes(qq) && qq !== 'wo' && qq !== 'tcpr' && qq !== 'beruhigen';
+      if (!call.asked.includes(qq)) call.asked.push(qq);
+      if (qq === 'tcpr' && truth.tpl.tcpr && !truth.tcprGiven) {
+        truth.tcprGiven = true;
+        this.addScore(15, 'Telefonreanimation angeleitet');
+      }
+      const pool =
+        truth.tpl.answers[qq] ??
+        (truth.fake && truth.tpl.answers.was ? truth.tpl.answers.was : fallbackAnswers(qq, truth.tpl, truth.facts?.role ?? 'angehoerig'));
+      let text = this.fill(this.pick(pool), truth, call.phone);
+      if (repeated && this.rng() < 0.6) text = `${this.pick(['Das hab ich doch schon gesagt!', 'Wie gesagt:', 'Nochmal:'])} ${text}`;
+      parts.push(text);
     }
-    const pool = truth.tpl.answers[q] ?? DEFAULT_ANSWERS[q];
-    this.callerSays(call, this.fill(this.pick(pool), truth, call.phone), this.rand(1200, 2600));
+    this.callerSays(call, parts.join(' '), this.rand(1200, 2600));
   }
 
   private endCall(player: Player, callId: string): string | void {
@@ -598,6 +677,12 @@ export class Game {
       status: 'offen',
       unitIds: [],
       log: [],
+      zusatz: a.zusatz?.slice(0, 120) || undefined,
+      objekt: a.objekt?.slice(0, 120) || undefined,
+      melder: a.melder?.slice(0, 80) || undefined,
+      rueckruf: (a.rueckruf ?? call?.phone)?.slice(0, 40) || undefined,
+      patient: a.patient?.slice(0, 120) || undefined,
+      sondersignal: a.sondersignal ?? true,
     };
     this.log(inc, `Einsatz angelegt von ${player.name}: ${sw.code} ${sw.label}`);
     this.incidents.push(inc);
@@ -632,6 +717,7 @@ export class Game {
     } else {
       this.incTruth.set(inc.id, this.genericTruth(inc, 'Keine besondere Lage, Einsatzstelle erkundet.'));
     }
+    if (a.alarmUnitIds?.length) this.alarm(player, inc.id, a.alarmUnitIds);
   }
 
   private genericTruth(inc: IncidentState, lage: string): Truth {
@@ -682,7 +768,8 @@ export class Game {
         : this.time + (atStation ? (career ? this.rand(40, 90) : this.rand(180, 330)) : this.rand(5, 12)) * 1000;
       inc.unitIds.push(u.id);
       alarmed.push(shortCallsign(u.callsign));
-      this.radioMsg(this.scn.ilsName, u.callsign, `Alarmierung: ${inc.stichwort} ${inc.address}`, 'system');
+      this.radioMsg(this.scn.ilsName, u.callsign, `Alarmierung: ${inc.stichwort} ${inc.address}${inc.sondersignal === false ? ' – ohne Sondersignal' : ''}${inc.tmo ? ` – Einsatzgruppe ${this.tmoName(inc.tmo)}` : ''}`, 'system');
+      if (inc.tmo) u.tmo = inc.tmo;
     }
     if (!alarmed.length) return 'Keine verfügbaren Fahrzeuge ausgewählt';
     this.log(inc, `Alarmiert (${player.name}): ${alarmed.join(', ')}`);
@@ -714,6 +801,7 @@ export class Game {
     u.hospitalId = undefined;
     u.speak = undefined;
     u.hint = undefined;
+    if (inc?.tmo && u.tmo === inc.tmo) u.tmo = this.station(u).tmo;
     if (u.task === 'alarmed' && u.status === 2) {
       u.task = 'station';
       u.baseStatus = 2;
@@ -723,6 +811,19 @@ export class Game {
     }
     this.returnToStation(u);
     if (inc) this.checkClose(inc);
+  }
+
+  private tmoName(id?: string) {
+    return this.scn.tmoGroups?.find((g) => g.id === id)?.name ?? id ?? '';
+  }
+
+  /** Gruppenwechsel: Anweisung in der alten Gruppe, Bestätigung in der neuen */
+  private switchTmo(u: UnitState, group?: string) {
+    if (!group || u.tmo === group) return;
+    const old = u.tmo;
+    this.radioMsg(this.scn.ilsName, u.callsign, `Wechseln Sie in Rufgruppe ${this.tmoName(group)}.`, 'voice', old);
+    u.tmo = group;
+    if (!u.crewPlayerId) this.after(this.rand(3000, 6000), () => this.radioMsg(u.callsign, this.scn.ilsName, `In ${this.tmoName(group)}, kommen.`, 'voice', group));
   }
 
   private returnToStation(u: UnitState) {

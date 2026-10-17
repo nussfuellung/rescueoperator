@@ -33,7 +33,7 @@ interface Props {
   version?: number;
   data?: MapData;
   editor?: EditorOverlay;
-  focus?: { x: number; y: number; seq: number } | null;
+  focus?: { x: number; y: number; seq: number; scale?: number } | null;
   onClick?: (p: Vec, hit: Hit | null, ev: MouseEvent) => void;
   onContext?: (p: Vec, hit: Hit | null) => void;
   /** Gibt true zurück, wenn das Objekt verschoben werden darf */
@@ -119,7 +119,7 @@ export function MapView(props: Props) {
     if (props.focus) {
       view.current.cx = props.focus.x;
       view.current.cy = props.focus.y;
-      view.current.scale = Math.max(view.current.scale, 0.18);
+      view.current.scale = props.focus.scale ?? Math.max(view.current.scale, 0.18);
     }
   }, [props.focus?.seq]);
 

@@ -3,6 +3,12 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { getSettings, subscribeSettings } from '../settings';
 import { onSpeaking, stopSpeaking } from './tts';
 import type { Model, KaldiRecognizer } from 'vosk-browser';
+import { postProcess, type Vocab } from '../../../shared/speechfix';
+
+/** Audio vor dem Drücken der Sprechtaste mitnehmen (Anfang des ersten Worts) */
+const PREROLL_BUFFERS = 4;
+/** Nach dem Loslassen noch kurz weiterhören (Ende des letzten Worts) */
+const POSTROLL_MS = 450;
 
 export type SttStatus = 'aus' | 'lädt' | 'bereit' | 'fehler';
 
@@ -40,6 +46,17 @@ class SpeechInput {
   private loadingUrl?: string;
   private source?: MediaStreamAudioSourceNode;
   private proc?: ScriptProcessorNode;
+  private ring: AudioBuffer[] = [];
+  private tailUntil = 0;
+  private tailTimer?: ReturnType<typeof setTimeout>;
+  private vocab?: Vocab;
+  private funkNrs: number[] = [];
+
+  /** Orts-, Straßen- und Funkrufnamen der aktuellen Karte für die Nachkorrektur */
+  setVocabulary(vocab: Vocab | undefined, funkNrs: number[] = []) {
+    this.vocab = vocab;
+    this.funkNrs = funkNrs;
+  }
 
   constructor() {
     onSpeaking((s) => {
@@ -76,8 +93,9 @@ class SpeechInput {
         const text = (m as { result: { text: string } }).result.text.trim();
         this.set({ partial: '' });
         // Einzelne Silben und Geräusche ignorieren
-        const clean = text.replace(/\[unk\]/g, '').trim();
-        if (clean.length < 3 || !/[a-zäöüß]{2}/i.test(clean)) return;
+        const raw = text.replace(/\[unk\]/g, '').trim();
+        if (raw.length < 3 || !/[a-zäöüß]{2}/i.test(raw)) return;
+        const clean = postProcess(raw, this.vocab, this.funkNrs);
         const t = this.activeTarget();
         this.set({ lastHeard: { text: clean, target: t?.id, at: Date.now() } });
         t?.onText(clean);
@@ -103,12 +121,12 @@ class SpeechInput {
     const deviceId = getSettings().micDeviceId;
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) },
       });
     } catch (e) {
       // Gewähltes Gerät gibt es nicht mehr: Standardmikrofon nehmen
       if (!deviceId) throw e;
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
     }
     const rec = this.recognizer;
     this.source = this.ctx.createMediaStreamSource(this.stream);
@@ -119,7 +137,15 @@ class SpeechInput {
       let peak = 0;
       for (let i = 0; i < data.length; i += 16) peak = Math.max(peak, Math.abs(data[i]));
       if (Math.abs(peak - this.snap.level) > 0.03) this.set({ level: peak });
-      if (this.snap.listening) rec.acceptWaveform(e.inputBuffer);
+      if (this.snap.listening || Date.now() < this.tailUntil) {
+        rec.acceptWaveform(e.inputBuffer);
+      } else {
+        // Ringpuffer: die letzten Blöcke vor dem Drücken der Sprechtaste
+        const copy = this.ctx!.createBuffer(1, data.length, e.inputBuffer.sampleRate);
+        copy.copyToChannel(data, 0);
+        this.ring.push(copy);
+        if (this.ring.length > PREROLL_BUFFERS) this.ring.shift();
+      }
     };
     this.source.connect(proc);
     proc.connect(this.ctx.destination);
@@ -171,8 +197,22 @@ class SpeechInput {
       // Sprechtaste hört immer zu (auch ohne Ziel, damit man sieht, was erkannt wird)
       (this.pttHeld || (s.sttMode === 'continuous' && !!t?.continuous));
     if (want !== this.snap.listening || t?.id !== this.snap.targetId) {
-      // Beim Loslassen den Rest als Endergebnis abholen
-      if (!want && this.snap.listening) this.recognizer?.retrieveFinalResult();
+      if (want && !this.snap.listening) {
+        clearTimeout(this.tailTimer);
+        this.tailUntil = 0;
+        // Vorlauf einspeisen, damit das erste Wort nicht abgeschnitten wird
+        for (const b of this.ring) this.recognizer?.acceptWaveform(b);
+        this.ring = [];
+      }
+      if (!want && this.snap.listening) {
+        // Nachlauf: kurz weiterhören, dann den Rest als Endergebnis abholen
+        this.tailUntil = Date.now() + POSTROLL_MS;
+        clearTimeout(this.tailTimer);
+        this.tailTimer = setTimeout(() => {
+          this.tailUntil = 0;
+          if (!this.snap.listening) this.recognizer?.retrieveFinalResult();
+        }, POSTROLL_MS + 50);
+      }
       this.set({ listening: want, targetId: t?.id });
     }
   }

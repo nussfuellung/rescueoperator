@@ -19,8 +19,19 @@ export type Action =
       y: number;
       note: string;
       patients: number;
+      zusatz?: string;
+      objekt?: string;
+      melder?: string;
+      rueckruf?: string;
+      patient?: string;
+      sondersignal?: boolean;
+      /** Fahrzeuge, die direkt mit dem Anlegen alarmiert werden */
+      alarmUnitIds?: string[];
     }
-  | { a: 'updateIncident'; incidentId: string; stichwort?: string; note?: string }
+  | { a: 'updateIncident'; incidentId: string; stichwort?: string; note?: string; tmo?: string }
+  | { a: 'setTmo'; unitIds: string[]; group: string }
+  | { a: 'groupCall'; group: string; text: string }
+  | { a: 'crewTmo'; group: string }
   | { a: 'alarm'; incidentId: string; unitIds: string[] }
   | { a: 'releaseUnit'; unitId: string }
   | { a: 'closeIncident'; incidentId: string }

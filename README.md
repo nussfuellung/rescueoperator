@@ -2,11 +2,11 @@
 
 Multiplayer-Leitstellensimulator nach dem Vorbild der bayerischen Integrierten Leitstellen (ILS). Mehrere Spieler besetzen gemeinsam eine Leitstelle im LAN: Notrufe annehmen und abfragen, Einsätze anlegen, Fahrzeuge nach Alarm- und Ausrückeordnung (AAO) alarmieren, Funkverkehr mit FMS-Status führen und Patienten in passende Kliniken bringen. Ein Editor erlaubt eigene Leitstellenbereiche mit simuliertem GIS.
 
-Stand: dritter Playtest-Build (Version 0.3.0). Neu: **ILS Würzburg** als mitgelieferte Musterleitstelle auf echter OpenStreetMap-Karte, realistischeres Routing (Tempolimits, Einbahnstraßen, Fahrt je Straße unterschiedlich schnell), sichtbare Fahrten auf der Karte, die Einsatzmaske als eigenes Fenster und eine überarbeitete Spracheingabe mit Mikrofonwahl und Pegelanzeige.
+Stand: vierter Playtest-Build (Version 0.4.0). Neu: Wachenbelegung der ILS Würzburg mit bayerischen Fahrzeugkennzahlen und Fahrzeuglisten-Import im Editor, eine umfangreichere Einsatzmaske im Stil von ELDIS III mit AML-Übernahme und Kartensprung, TMO-Rufgruppen im Funk, präzisere Spracherkennung und Anrufer, die auf deutlich mehr Fragen antworten.
 
 ## Schnellstart unter Windows
 
-1. `release/Leitstellensimulator-0.3.0-win.zip` entpacken.
+1. `release/Leitstellensimulator-0.4.0-win.zip` entpacken.
 2. `Leitstellensimulator.exe` starten. Das Paket ist nicht signiert; Windows SmartScreen fragt deshalb einmal nach („Weitere Informationen“ → „Trotzdem ausführen“).
 3. Namen eingeben, **Schicht hosten** → Leitstelle wählen (vorinstalliert: **ILS Würzburg**) → **Server starten**.
 4. Beim ersten Hosten fragt die Windows-Firewall nach. Für Mitspieler im LAN „Private Netzwerke“ erlauben.
@@ -78,7 +78,9 @@ Unter **⚙ Einstellungen** (im Hauptmenü und oben rechts im Spiel) lässt sich
 
 ### Musterleitstelle ILS Würzburg
 
-Mitgeliefert ist der Bereich der ILS Würzburg (Stadt Würzburg, Landkreise Würzburg, Kitzingen und Main-Spessart) auf echter Karte: rund 60.000 Straßenabschnitte mit Namen, Tempolimits und Einbahnstraßen, gut 400 Orte, die Feuerwehren und Rettungswachen aus den Kartendaten (fehlende Rettungswachen in Kleinstädten ergänzt) und die Kliniken Universitätsklinikum, Juliusspital, König-Ludwig-Haus, Missioklinik, Main-Klinik Ochsenfurt und Klinik Kitzinger Land. Die Fahrzeugbelegung der Wachen ist geschätzt (Berufsfeuerwehr Würzburg voll ausgestattet, Ortsfeuerwehren mit HLF, größere Orte zusätzlich mit ELW, LF und DLK) und kann im Editor an die Wirklichkeit angepasst werden. Hausnummern sind entlang der Straßen geschätzt, weil die offenen Adressdaten Bayern noch nicht enthalten. Kartendaten © OpenStreetMap-Mitwirkende (ODbL), bezogen über Overture Maps.
+Mitgeliefert ist der Bereich der ILS Würzburg (Stadt Würzburg, Landkreise Würzburg, Kitzingen und Main-Spessart) auf echter Karte: rund 60.000 Straßenabschnitte mit Namen, Tempolimits und Einbahnstraßen, gut 400 Orte, die Feuerwehren und Rettungswachen aus den Kartendaten (fehlende Rettungswachen in Kleinstädten ergänzt) und die Kliniken Universitätsklinikum, Juliusspital, König-Ludwig-Haus, Missioklinik, Main-Klinik Ochsenfurt und Klinik Kitzinger Land. Die Fahrzeuge tragen Funkrufnamen nach den bayerischen Fahrzeugkennzahlen (10 KdoW, 11 MZF, 12 ELW 1, 21 TLF 3000, 30 DLK, 40 HLF 20, 42 HLF 10, 43 LF 10, 44 TSF, 46 TSF-W, 47 MLF, 56 GW-L2, 61 RW, 71 RTW, 72 KTW, 76 NEF, 79 First Responder). Die Belegung folgt dem bayerischen Muster und ist geschätzt: Berufsfeuerwehr Würzburg, Kreisstädte (Kitzingen, Karlstadt, Lohr, Marktheidenfeld, Ochsenfurt, Gemünden) voll ausgestattet, Stützpunktwehren mit MZF, HLF und teils DLK, Ortsteilwehren mit TSF, TSF-W oder MLF, Notärzte in Würzburg, Kitzingen, Ochsenfurt, Marktheidenfeld, Karlstadt, Lohr und Gemünden. Die echte Belegung lässt sich im Editor einfügen (siehe „Fahrzeuge/Funk“).
+
+Funk läuft in TMO-Rufgruppen: RD WÜ 1 für den Rettungsdienst, FW WÜ 1, FW KT 1 und FW MSP 1 für die Feuerwehren der drei Landkreise, ILS WÜ Ü 1 übergreifend und WÜ EINS 1 bis 3 als Einsatzgruppen. Hausnummern sind entlang der Straßen geschätzt, weil die offenen Adressdaten Bayern noch nicht enthalten. Kartendaten © OpenStreetMap-Mitwirkende (ODbL), bezogen über Overture Maps.
 
 Fahrzeuge fahren auf den echten Straßen: auf der Autobahn schnell, in der Altstadt langsam, Einbahnstraßen werden nur langsam mit Sonderrechten gegen die Richtung befahren, Autobahnen nie. Die restliche Route jedes fahrenden Fahrzeugs ist auf der Karte eingezeichnet (durchgezogen bei Einsatzfahrt, gestrichelt sonst).
 
@@ -91,6 +93,21 @@ Notrufgespräche und Funk lassen sich sprechen statt tippen. Die Erkennung läuf
 - Klappt es nicht, steht der Grund in den Einstellungen unter „Status“. Häufigste Ursache unter Windows: Einstellungen → Datenschutz und Sicherheit → Mikrofon → „Desktop-Apps Zugriff auf das Mikrofon erlauben“ ist aus, oder ein anderes Programm (Teams, Discord) belegt das Mikrofon.
 - **Freisprechen**: Während eines eigenen Notrufgesprächs ist das Mikrofon dauerhaft offen; jeder erkannte Satz geht als Frage an den Anrufer. Während die Sprachausgabe spricht, hört das Mikrofon nicht zu.
 - Wohin das Gesagte geht: im Notrufgespräch an den Anrufer („Wo genau ist der Notfallort?“, „Atmet die Person?“), beim Disponenten mit ausgewähltem Fahrzeug als Funkspruch an dieses Fahrzeug, bei der Besatzung als Funkspruch an die Leitstelle. „Status drei“ setzt als Besatzung direkt den Status.
+- Genauigkeit: Die Sprechtaste nimmt einen kurzen Vorlauf mit und hört nach dem Loslassen noch einen Moment weiter, damit erstes und letztes Wort nicht abgeschnitten werden. Zahlwörter werden zu Ziffern („vierzig strich eins“ → 40/1, „zwölf“ → 12), getrennt oder leicht falsch erkannte Orts- und Straßennamen der Karte werden korrigiert („julius promenade“ → Juliuspromenade, „kizingen“ → Kitzingen).
+- Der Anrufer versteht neben den Grundfragen auch Alter, Atmung, Bewusstsein, seit wann, Vorerkrankungen und Medikamente, Stockwerk und Zugang, Rückrufnummer und das Wiederholen der Adresse, auch zwei Fragen in einem Satz („Wie alt ist er und atmet er normal?“). Angehörige, Passanten und Pflegepersonal antworten unterschiedlich.
+
+### Einsatzmaske
+
+Die Einsatzmaske ist an ELDIS III angelehnt, aber aufgeräumt:
+- **Ortung**: Bei Handy-Notrufen mit AML springt die Karte beim Annehmen auf die Ortung (Kreis mit Genauigkeit). **Übernehmen** (oder `Alt+A`) setzt den Einsatzort auf die nächste Adresse. Bei Festnetz kommt die Anschlussadresse mit, die meist, aber nicht immer der Notfallort ist.
+- **Einsatzort**: Straße und Hausnummer suchen, Zusatz (Stockwerk, Hinterhaus), Objekt. Darunter Gemeinde und zuständige Feuerwehr und Rettungswache. Liegt ein offener Einsatz in weniger als 300 m, erscheint eine Warnung (Doppelmeldung?).
+- **Einsatz**: Schlagwortsuche („atem“, „ölspur“, „vu eingekl“) setzt das passende Stichwort, dazu Sondersignal und Meldebild.
+- **Patient** und **Meldender** mit Rückrufnummer (vom Anruf vorbelegt).
+- **Alarmierungsvorschlag** schon vor dem Anlegen. **Anlegen und alarmieren** (`Strg+Enter`) erledigt beides auf einmal, **Nur anlegen** überlässt die Alarmierung dem Disponenten.
+
+### Funk und TMO-Rufgruppen
+
+Jede Wache funkt in ihrer Rufgruppe. Oben im Funkbereich lassen sich Gruppen ein- und ausblenden (eine grün hinterlegte Gruppe ist gerade belegt), unten geht ein Gruppenruf an alle in einer Gruppe. Im Einsatz kann der Disponent eine Einsatzgruppe (z. B. WÜ EINS 1) zuweisen: Alle Fahrzeuge des Einsatzes bekommen die Anweisung zum Gruppenwechsel und melden sich dort, nachalarmierte Fahrzeuge schalten direkt um, nach dem Einsatz geht es zurück in die Heimatgruppe. Einzelne Fahrzeuge lassen sich in der Fahrzeugleiste umschalten. FMS-Status laufen unabhängig von der Gruppe. In der Fahrzeugleiste filtern Suche und Rufgruppe die vielen Wachen.
 
 ### Fenster auf mehrere Monitore verteilen
 
@@ -120,7 +137,8 @@ Werkzeuge links:
 - **Löschen**: Element anklicken.
 
 Reiter rechts:
-- **Eigenschaften**: Namen, Fahrzeuge einer Wache mit Funkrufnamen, hauptamtlich/ehrenamtlich (Ausrückzeit), Fachrichtungen der Kliniken.
+- **Eigenschaften**: Namen, Fahrzeuge einer Wache mit Funkrufnamen, hauptamtlich/ehrenamtlich (Ausrückzeit), TMO-Rufgruppe, Fachrichtungen der Kliniken.
+- **Fahrzeuge/Funk**: alle Wachen nach bayerischem Muster neu belegen, eine Fahrzeugliste einfügen (z. B. von lstsim.de markiert und kopiert: erkannt wird alles wie „Florian Kitzingen 40/1“ oder „Rotkreuz Würzburg 71/3“, der Typ folgt aus der Kennzahl, genannte Wachen bekommen genau diese Fahrzeuge, fehlende werden angelegt) und die TMO-Rufgruppen bearbeiten.
 - **Stichworte/AAO**: Stichwortkatalog und Fahrzeuge je Stichwort.
 - **Fahrzeugtypen**: Funkkenner-Nummer (40 = HLF, 71 = RTW …), Tempo, Transportfähigkeit und welche Anforderungen ein Typ erfüllt (HLF erfüllt auch LF).
 - **Einstellungen**: Notrufe und BMA-Auslösungen pro Stunde, Uhrzeit bei Schichtbeginn.
@@ -147,7 +165,8 @@ tests/     Vitest: GIS, Einsatzablauf, Spracherkennung, OSM-Import mit echten Da
 ## Bekannte Grenzen dieses Playtest-Builds
 
 - Funk zwischen Spielern ist Text bzw. erkannte Sprache mit Vorlesen, keine echte Sprachübertragung.
-- Die Spracherkennung mit dem kleinen deutschen Modell versteht kurze, deutliche Sätze am besten; die Zuordnung zu den Abfragefragen läuft über Stichworte (wo, was passiert, atmet, wie viele …).
+- Die Spracherkennung mit dem kleinen deutschen Modell versteht kurze, deutliche Sätze am besten; die Zuordnung zu den Abfragefragen läuft über Stichworte (wo, was passiert, atmet, wie alt, seit wann …).
+- Die Fahrzeugbelegung der ILS Würzburg ist nach bayerischem Muster geschätzt, nicht die echte.
 - Echte Karten: Sehr große Gebiete (über 15 km Umkreis) sind nicht vorgesehen. Hausnummern gibt es nur, wo OpenStreetMap sie kennt; sonst werden sie entlang der Straße geschätzt.
 - Kein Verkehr, keine Polizei als eigene Organisation, keine Hubschrauber.
 - Eine laufende Schicht wird nicht gespeichert; Verlassen beendet sie für den Host.

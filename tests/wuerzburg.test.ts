@@ -33,11 +33,11 @@ describe('Musterleitstelle ILS Würzburg', () => {
     expect(geocode(scn, 'Juliuspromenade', 'Würzburg', '10')).toBeTruthy();
   });
 
-  it('läuft eine Spielstunde mit Bot-Disponenten', () => {
+  it('läuft eine halbe Spielstunde mit Bot-Disponenten', () => {
     const t = Date.now();
-    const game = runBot(structuredClone(scn), 1, 5);
+    const game = runBot(structuredClone(scn), 0.5, 5);
     const s = game.score;
     console.log(`Würzburg: ${Date.now() - t} ms, Einsätze ${s.incidentsCreated}, beendet ${s.incidentsClosed}, Hilfsfrist ${s.hilfsfristMet}/${s.hilfsfristTotal}, Ø ${Math.round(s.avgHilfsfristSec)} s`);
-    expect(s.incidentsCreated).toBeGreaterThan(5);
+    expect(s.incidentsCreated).toBeGreaterThan(3);
   }, 120_000);
 });

@@ -49,8 +49,8 @@ describe('Import echter Karten', () => {
     expect(along).toBeLessThan(air * 4 + 2000);
   });
 
-  it('läuft eine Spielstunde mit Bot-Disponenten', () => {
-    const game = runBot(structuredClone(scn), 1, 3);
+  it('läuft zwei Spielstunden mit Bot-Disponenten', () => {
+    const game = runBot(structuredClone(scn), 2, 3);
     const s = game.score;
     console.log(`OSM: Punkte ${s.points}, Einsätze ${s.incidentsCreated}, beendet ${s.incidentsClosed}, Ø Hilfsfrist ${Math.round(s.avgHilfsfristSec)} s`);
     expect(s.incidentsCreated).toBeGreaterThan(5);

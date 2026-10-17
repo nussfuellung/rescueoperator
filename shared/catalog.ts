@@ -1,17 +1,26 @@
 import type { FmsStatus, Stichwort, VehicleType } from './types';
 
-// Fahrzeugtypen mit bayerischen Funkkenner-Nummern (anpassbar im Editor).
+// Fahrzeugtypen mit bayerischen Fahrzeugkennzahlen (Funkrufnamen-Richtlinie, anpassbar im Editor).
 export const DEFAULT_VEHICLE_TYPES: VehicleType[] = [
   { id: 'KDOW', label: 'KdoW', org: 'FW', funkNr: 10, fills: ['KDOW', 'ELW'], speedFactor: 1.1 },
-  { id: 'ELW', label: 'ELW 1', org: 'FW', funkNr: 11, fills: ['ELW', 'KDOW'], speedFactor: 1.0 },
-  { id: 'TLF', label: 'TLF 4000', org: 'FW', funkNr: 21, fills: ['TLF', 'LF'], speedFactor: 0.85 },
+  { id: 'MZF', label: 'MZF', org: 'FW', funkNr: 11, fills: ['MZF'], speedFactor: 1.0 },
+  { id: 'ELW', label: 'ELW 1', org: 'FW', funkNr: 12, fills: ['ELW', 'KDOW'], speedFactor: 1.0 },
+  { id: 'TLF', label: 'TLF 3000', org: 'FW', funkNr: 21, fills: ['TLF', 'LF'], speedFactor: 0.85 },
+  { id: 'TLF4000', label: 'TLF 4000', org: 'FW', funkNr: 23, fills: ['TLF', 'LF'], speedFactor: 0.82 },
   { id: 'DLK', label: 'DLK 23/12', org: 'FW', funkNr: 30, fills: ['DLK'], speedFactor: 0.85 },
   { id: 'HLF', label: 'HLF 20', org: 'FW', funkNr: 40, fills: ['HLF', 'LF'], speedFactor: 0.9 },
-  { id: 'LF', label: 'LF 10', org: 'FW', funkNr: 44, fills: ['LF'], speedFactor: 0.9 },
+  { id: 'LF20', label: 'LF 20', org: 'FW', funkNr: 41, fills: ['LF', 'HLF'], speedFactor: 0.9 },
+  { id: 'HLF10', label: 'HLF 10', org: 'FW', funkNr: 42, fills: ['HLF', 'LF'], speedFactor: 0.92 },
+  { id: 'LF', label: 'LF 10', org: 'FW', funkNr: 43, fills: ['LF'], speedFactor: 0.92 },
+  { id: 'TSF', label: 'TSF', org: 'FW', funkNr: 44, fills: ['TSF', 'LF'], speedFactor: 0.95 },
+  { id: 'TSFW', label: 'TSF-W', org: 'FW', funkNr: 46, fills: ['TSF', 'LF'], speedFactor: 0.95 },
+  { id: 'MLF', label: 'MLF', org: 'FW', funkNr: 47, fills: ['LF', 'TSF'], speedFactor: 0.95 },
+  { id: 'GWL', label: 'GW-L2', org: 'FW', funkNr: 56, fills: ['GWL'], speedFactor: 0.85 },
   { id: 'RW', label: 'RW', org: 'FW', funkNr: 61, fills: ['RW'], speedFactor: 0.85 },
   { id: 'RTW', label: 'RTW', org: 'RD', funkNr: 71, fills: ['RTW', 'KTW'], speedFactor: 1.0, transport: true },
   { id: 'KTW', label: 'KTW', org: 'RD', funkNr: 72, fills: ['KTW'], speedFactor: 1.0, transport: true },
   { id: 'NEF', label: 'NEF', org: 'RD', funkNr: 76, fills: ['NEF'], speedFactor: 1.15 },
+  { id: 'HVO', label: 'First Responder', org: 'RD', funkNr: 79, fills: ['HVO'], speedFactor: 1.1 },
 ];
 
 // Einsatzstichworte angelehnt an die bayerische Alarmierungsbekanntmachung.
@@ -101,7 +110,7 @@ export function shortCallsign(cs: string): string {
 
 /** Funkrufname ohne Organisation, für Funkprotokolle: "Florian Würzburg 40/1" -> "Würzburg 40/1" */
 export function radioName(cs: string): string {
-  return cs.replace(/^(Florian|Rotkreuz|Johannes|Akkon|Sama|Samariter|Kater|Heros|Pelikan)\s+/, '');
+  return cs.replace(/^(Florian|Rotkreuz|Johannes|Akkon|Malteser|Sama|Samariter|Kater|Heros|Pelikan|Christoph)\s+/, '');
 }
 
 export function orgPrefix(org: 'FW' | 'RD'): string {

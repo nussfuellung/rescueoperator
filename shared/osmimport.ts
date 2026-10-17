@@ -1,6 +1,7 @@
 // Import echter Kartendaten aus OpenStreetMap (Overpass-JSON) in ein Szenario.
 // Straßen werden zu einem routingfähigen Graphen, Hausnummern zu Adressen,
 // Ortsnamen zu Orten, Feuerwehren, Rettungswachen und Kliniken zu Wachen und Krankenhäusern.
+import { assignFleet } from './fleet';
 import { DEFAULT_STICHWORTE, DEFAULT_VEHICLE_TYPES, SPECIALTIES, orgPrefix } from './catalog';
 import { dist, recomputeHouseNumbers, townAt, nearestTown } from './geo';
 import type { Address, GeoRef, Hospital, MapObject, Road, RoadNode, RoadType, Scenario, Station, Town, Vec, VehicleTypeId } from './types';
@@ -166,7 +167,8 @@ export function importOsm(json: string | { elements: OsmElement[] }, opts: OsmIm
   const towns: Town[] = [];
   for (const e of elements) {
     const place = e.tags?.place;
-    if (!place || !e.tags?.name || e.type !== 'node') continue;
+    // Verwaltungsgemeinschaften sind keine Orte
+    if (!place || !e.tags?.name || e.type !== 'node' || /^Verwaltungsgemeinschaft\b/.test(e.tags.name)) continue;
     const p = posOf(e);
     if (!p) continue;
     towns.push({ id: `t_${e.id}`, name: e.tags.name, x: Math.round(p.x), y: Math.round(p.y), radius: PLACE_RADIUS[place] ?? 600 });
@@ -535,6 +537,7 @@ export function importOsm(json: string | { elements: OsmElement[] }, opts: OsmIm
     addresses,
   };
   recomputeHouseNumbers(scenario);
+  notes.push(...assignFleet(scenario));
   notes.unshift(
     `${keptRoads.length} Straßenabschnitte, ${addresses.length} Hausnummern, ${keptTowns.length} Orte, ${stations.length} Wachen, ${hospitals.length} Kliniken übernommen.`,
   );

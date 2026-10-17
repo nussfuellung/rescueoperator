@@ -1262,3 +1262,187 @@ html:has(.popout-body),
   background: var(--ok);
   transition: width 0.1s;
 }
+
+/* ---------- Einsatzmaske (ELDIS-Stil, modern) ---------- */
+.em {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.em-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.em-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+.em fieldset {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px 8px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.em legend {
+  padding: 0 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.em-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+@media (max-width: 520px) {
+  .em-two {
+    grid-template-columns: 1fr;
+  }
+}
+.em-locate {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+}
+.em-locate.has {
+  border-color: #2f81f7;
+  background: rgba(47, 129, 247, 0.12);
+}
+.em-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: #fff;
+}
+.em-badge.aml {
+  background: #2f81f7;
+}
+.em-badge.fest {
+  background: #6e7681;
+}
+.em-pos {
+  padding: 2px 0;
+}
+.em-area {
+  line-height: 1.4;
+}
+.em-warn {
+  color: var(--accent);
+}
+.em-sw-search {
+  position: relative;
+}
+.em-sw-search input {
+  width: 100%;
+}
+.em-sw-hits {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.em-sw-hits button {
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.em-sw-hits button:hover {
+  background: var(--panel2);
+}
+.em-sw-hits b {
+  display: inline-block;
+  min-width: 78px;
+  color: var(--accent);
+}
+.em-proposal {
+  display: flex;
+  flex-direction: column;
+  max-height: 160px;
+  overflow: auto;
+}
+.detail-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 2px 0 4px;
+}
+.detail-facts .warn {
+  color: var(--accent);
+}
+
+/* ---------- TMO-Rufgruppen ---------- */
+.tmo-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.tmo-chip {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+.tmo-chip.on {
+  border-color: #2f81f7;
+}
+.tmo-chip.off {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.tmo-chip.busy.on {
+  background: rgba(63, 185, 80, 0.25);
+  border-color: var(--ok);
+}
+.tmo-tag {
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.group-call {
+  padding: 4px 6px;
+  border-top: 1px solid var(--line);
+}
+.unit-filter {
+  padding: 4px 6px;
+}
+.incident-form.em {
+  background: var(--panel);
+  border-color: var(--line);
+}
+.incident-form.em .row select {
+  width: auto;
+}
+.em input,
+.em textarea {
+  min-width: 0;
+}
+.em-proposal .free-row {
+  grid-template-columns: 18px 1fr 50px;
+}
+.incident-detail .row select:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.incident-detail .tmo-select {
+  flex: 0 1 150px;
+  min-width: 0;
+}

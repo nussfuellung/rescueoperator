@@ -27,13 +27,14 @@ const fileFor = (id: string) => join(libDir(), `${id.replace(/[^a-zA-Z0-9_-]/g, 
 
 function listScenarios() {
   const dir = libDir();
-  // Musterleitstelle ILS Würzburg einmalig in die Bibliothek legen (nicht erneut, wenn gelöscht)
+  // Musterleitstelle ILS Würzburg einmal je Datenstand in die Bibliothek legen (nicht erneut, wenn gelöscht)
   const marker = join(dir, '.wuerzburg-installiert');
-  if (!existsSync(marker)) {
+  const WUE_DATA = '4';
+  if (!existsSync(marker) || readFileSync(marker, 'utf8').trim() !== WUE_DATA) {
     try {
       const scn = gunzipSync(readFileSync(join(__dirname, '../assets/ils-wuerzburg.json.gz')));
       writeFileSync(fileFor('scn_ils_wuerzburg'), scn);
-      writeFileSync(marker, new Date().toISOString());
+      writeFileSync(marker, WUE_DATA);
     } catch (e) {
       console.error('Musterleitstelle fehlt', e);
     }

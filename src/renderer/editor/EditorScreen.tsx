@@ -7,6 +7,8 @@ import type { MapObject, RoadType, Scenario, Station, Vec } from '../../../share
 import { api, type ScenarioInfo } from '../api';
 import { MapView, type Hit } from '../MapView';
 import { OsmImportDialog } from './OsmImportDialog';
+import { applyFleetText, assignFleet, ensureTmo } from '../../../shared/fleet';
+import type { TmoGroup } from '../../../shared/types';
 
 export function EditorScreen({ onBack }: { onBack: () => void }) {
   const [list, setList] = useState<ScenarioInfo[]>([]);
@@ -121,7 +123,7 @@ export function EditorScreen({ onBack }: { onBack: () => void }) {
 }
 
 type Tool = 'select' | 'road' | 'town' | 'feuerwache' | 'rettungswache' | 'hospital' | 'object' | 'delete';
-type Tab = 'props' | 'aao' | 'types' | 'settings' | 'check';
+type Tab = 'props' | 'fleet' | 'aao' | 'types' | 'settings' | 'check';
 
 const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: 'select', label: '↖ Auswählen', hint: 'Klicken zum Auswählen, Ziehen zum Verschieben' },
@@ -379,7 +381,8 @@ function Editor({ initial, onClose, notes = [] }: { initial: Scenario; onClose: 
           onDone={(g, n) => {
             setOsm(false);
             if (!confirm('Die aktuelle Karte samt Wachen und Kliniken wird ersetzt. Fortfahren?')) return;
-            Object.assign(scn, { ...g, id: scn.id, name: scn.name, ilsName: scn.ilsName, stichworte: scn.stichworte, vehicleTypes: scn.vehicleTypes, settings: scn.settings });
+            Object.assign(scn, { ...g, id: scn.id, name: scn.name, ilsName: scn.ilsName, stichworte: scn.stichworte, vehicleTypes: [...scn.vehicleTypes, ...g.vehicleTypes.filter((t) => !scn.vehicleTypes.some((x) => x.id === t.id))], settings: scn.settings, tmoGroups: undefined });
+            ensureTmo(scn);
             setImportNotes(n);
             setSel(null);
             changed();
@@ -449,6 +452,7 @@ function Editor({ initial, onClose, notes = [] }: { initial: Scenario; onClose: 
             {(
               [
                 ['props', 'Eigenschaften'],
+                ['fleet', 'Fahrzeuge/Funk'],
                 ['aao', 'Stichworte/AAO'],
                 ['types', 'Fahrzeugtypen'],
                 ['settings', 'Einstellungen'],
@@ -462,6 +466,7 @@ function Editor({ initial, onClose, notes = [] }: { initial: Scenario; onClose: 
           </div>
           <div className="tab-body">
             {tab === 'props' && <Props scn={scn} sel={sel} changed={changed} callsignFor={callsignFor} onDelete={(h) => { deleteHit(h); changed(true); }} />}
+            {tab === 'fleet' && <FleetTab scn={scn} changed={changed} />}
             {tab === 'aao' && <AaoTab scn={scn} changed={changed} />}
             {tab === 'types' && <TypesTab scn={scn} changed={changed} />}
             {tab === 'settings' && <SettingsTab scn={scn} changed={changed} />}
@@ -584,6 +589,16 @@ function Props({ scn, sel, changed, callsignFor, onDelete }: PropsArgs) {
         <label className="inline">
           <input type="checkbox" checked={st.career} onChange={(e) => { st.career = e.target.checked; changed(); }} />
           Hauptamtlich besetzt (kurze Ausrückzeit)
+        </label>
+        <label>
+          TMO-Rufgruppe
+          <select value={st.tmo ?? ''} onChange={(e) => { st.tmo = e.target.value; changed(); }}>
+            {ensureTmo(scn).map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name} ({g.use})
+              </option>
+            ))}
+          </select>
         </label>
         <h4>Fahrzeuge</h4>
         {st.vehicles.map((v) => (
@@ -815,6 +830,88 @@ function TypesTab({ scn, changed }: { scn: Scenario; changed: () => void }) {
         }}
       >
         + Fahrzeugtyp
+      </button>
+    </div>
+  );
+}
+
+function FleetTab({ scn, changed }: { scn: Scenario; changed: () => void }) {
+  const [text, setText] = useState('');
+  const [out, setOut] = useState<string[]>([]);
+  const groups = ensureTmo(scn);
+  const count = scn.stations.reduce((n, s) => n + s.vehicles.length, 0);
+  return (
+    <div className="form">
+      <h3>Fahrzeugbelegung</h3>
+      <p className="small muted">
+        {scn.stations.length} Wachen, {count} Fahrzeuge. Funkrufnamen folgen den bayerischen Fahrzeugkennzahlen (z. B. 40 = HLF 20, 46 = TSF-W, 71 = RTW,
+        76 = NEF).
+      </p>
+      <button
+        onClick={() => {
+          if (!confirm('Alle Fahrzeuge aller Wachen werden neu verteilt. Fortfahren?')) return;
+          setOut(assignFleet(scn));
+          changed();
+        }}
+      >
+        Nach bayerischem Muster neu verteilen
+      </button>
+      <h4>Fahrzeugliste einfügen</h4>
+      <p className="small muted">
+        Liste mit Funkrufnamen hier einfügen, z. B. von lstsim.de die Fahrzeugübersicht der Leitstelle markieren und kopieren. Erkannt wird alles wie
+        „Florian Kitzingen 40/1“ oder „Rotkreuz Würzburg 71/3“, der Typ ergibt sich aus der Kennzahl. Genannte Wachen bekommen genau diese Fahrzeuge, fehlende
+        Wachen werden am Ortsmittelpunkt angelegt.
+      </p>
+      <textarea rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder={'Florian Kitzingen 12/1\nFlorian Kitzingen 40/1\nRotkreuz Kitzingen 71/1\n…'} />
+      <button
+        disabled={!text.trim()}
+        onClick={() => {
+          setOut(applyFleetText(scn, text));
+          changed();
+        }}
+      >
+        Liste übernehmen
+      </button>
+      {out.length > 0 && (
+        <div className="import-notes small">
+          <div>
+            {out.map((n, i) => (
+              <div key={i}>{n}</div>
+            ))}
+          </div>
+        </div>
+      )}
+      <h3>TMO-Rufgruppen</h3>
+      <p className="small muted">Jede Wache funkt in ihrer Rufgruppe. Einsatzgruppen kann der Disponent einem Einsatz zuweisen.</p>
+      {groups.map((g) => (
+        <div key={g.id} className="row">
+          <input className="grow" value={g.name} onChange={(e) => { g.name = e.target.value; changed(); }} />
+          <select value={g.use} onChange={(e) => { g.use = e.target.value as TmoGroup['use']; changed(); }}>
+            {(['RD', 'FW', 'Einsatz', 'Übergreifend'] as const).map((u) => (
+              <option key={u}>{u}</option>
+            ))}
+          </select>
+          <span className="small muted">{scn.stations.filter((s) => s.tmo === g.id).length} Wachen</span>
+          <button
+            className="small-btn"
+            disabled={groups.length <= 1}
+            onClick={() => {
+              scn.tmoGroups = groups.filter((x) => x !== g);
+              ensureTmo(scn);
+              changed();
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <button
+        onClick={() => {
+          groups.push({ id: newId('tmo'), name: `Gruppe ${groups.length + 1}`, use: 'FW' });
+          changed();
+        }}
+      >
+        + Rufgruppe
       </button>
     </div>
   );

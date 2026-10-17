@@ -21,6 +21,25 @@ export interface IncidentTemplate {
   lage: string;
   workMin: [number, number];
   tcpr?: boolean;
+  /** Wer anruft: Patient selbst, Angehörige, Passanten oder Personal einer Einrichtung */
+  role?: CallerRole;
+  /** Alter des Patienten (Standard 55–89) */
+  age?: [number, number];
+  sex?: 'm' | 'w';
+}
+
+export type CallerRole = 'selbst' | 'angehoerig' | 'passant' | 'personal';
+
+/** Erfundene Einzelheiten zum Anruf, damit Nachfragen stimmig beantwortet werden */
+export interface CallerFacts {
+  name: string;
+  nachname: string;
+  alter: number;
+  sex: 'm' | 'w';
+  role: CallerRole;
+  floor: string;
+  minutes: number;
+  vorerkrankung: string;
 }
 
 export const FIRST_NAMES = ['Anna', 'Josef', 'Maria', 'Thomas', 'Sabine', 'Michael', 'Stefanie', 'Franz', 'Katharina', 'Andreas', 'Monika', 'Florian', 'Theresa', 'Sebastian', 'Lena', 'Georg'];
@@ -29,6 +48,7 @@ export const LAST_NAMES = ['Huber', 'Maier', 'Gruber', 'Bauer', 'Wimmer', 'Schmi
 export const TEMPLATES: IncidentTemplate[] = [
   {
     id: 'rd_cpr',
+    role: 'angehoerig', sex: 'm',
     stichwort: 'RD 2',
     weight: 1,
     where: 'wohnung',
@@ -47,6 +67,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   {
     id: 'rd_stroke',
+    role: 'angehoerig', sex: 'w',
     stichwort: 'RD 2',
     weight: 1,
     where: 'wohnung',
@@ -63,6 +84,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   {
     id: 'rd_chest',
+    role: 'selbst', age: [48, 76],
     stichwort: 'RD 2',
     weight: 1.2,
     where: 'wohnung',
@@ -79,6 +101,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   {
     id: 'rd_fall',
+    role: 'angehoerig', sex: 'w', age: [74, 94],
     stichwort: 'RD 1',
     weight: 1.4,
     where: 'wohnung',
@@ -95,6 +118,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   {
     id: 'rd_breath',
+    role: 'angehoerig', sex: 'm', age: [16, 18],
     stichwort: 'RD 2',
     weight: 0.9,
     where: 'wohnung',
@@ -111,6 +135,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   {
     id: 'rd_child',
+    role: 'angehoerig', sex: 'w', age: [1, 1],
     stichwort: 'RD 2',
     weight: 0.6,
     where: 'wohnung',
@@ -127,6 +152,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   {
     id: 'rd_hilflos',
+    role: 'passant', sex: 'm', age: [35, 60],
     stichwort: 'RD 1',
     weight: 0.8,
     where: 'strasse',
@@ -143,6 +169,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   {
     id: 'rd_sport',
+    role: 'passant', sex: 'm', age: [19, 30],
     stichwort: 'RD 1',
     weight: 0.7,
     where: 'strasse',
@@ -159,6 +186,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   {
     id: 'rd_ktp',
+    role: 'personal', sex: 'm', age: [78, 95],
     stichwort: 'RD KTP',
     weight: 0.8,
     where: 'objekt',
@@ -283,6 +311,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   {
     id: 'thl_tuer',
+    role: 'passant', sex: 'w', age: [78, 92],
     stichwort: 'THL Person',
     weight: 0.8,
     where: 'wohnung',
@@ -299,6 +328,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   {
     id: 'thl_vu_klemm',
+    role: 'passant',
     stichwort: 'THL 3',
     weight: 0.5,
     where: 'ausserorts',
@@ -319,6 +349,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   {
     id: 'thl_vu_leicht',
+    role: 'passant', sex: 'w', age: [25, 60],
     stichwort: 'THL 2',
     weight: 0.7,
     where: 'strasse',
@@ -336,6 +367,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   {
     id: 'thl_ab_vu',
+    role: 'passant',
     stichwort: 'THL 3',
     weight: 0.35,
     where: 'autobahn',
@@ -353,6 +385,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   {
     id: 'rd_manv',
+    role: 'passant',
     stichwort: 'RD MANV',
     weight: 0.15,
     where: 'ausserorts',
@@ -371,6 +404,47 @@ export const TEMPLATES: IncidentTemplate[] = [
     },
     lage: 'Kleinbus verunfallt, 8 Betroffene, 3 Verletzte, davon 1 schwer, Sichtung durchgeführt.',
     workMin: [30, 45],
+  },
+  {
+    id: 'rd_hypo',
+    role: 'angehoerig',
+    sex: 'm',
+    age: [40, 75],
+    stichwort: 'RD 2',
+    weight: 0.6,
+    where: 'wohnung',
+    patients: [{ specialty: 'Innere Medizin', desc: 'Hypoglykämie, nach Glukosegabe wach' }],
+    opening: ['Mein Mann ist ganz komisch, er schwitzt und redet wirres Zeug!', 'Hallo? Mein Mann ist Diabetiker und reagiert kaum noch!'],
+    answers: {
+      was: ['Er ist Diabetiker, spritzt Insulin. Heute Mittag hat er fast nichts gegessen.'],
+      zustand: ['Er ist total verschwitzt und zittert, er macht die Augen auf, aber antwortet nicht richtig.'],
+      bewusstsein: ['Er macht die Augen auf, aber er redet nur Unsinn.'],
+      vorerkrankung: ['Zucker, Typ 1, seit zwanzig Jahren. Und Bluthochdruck.'],
+      seitwann: ['Seit vielleicht einer Viertelstunde wird es immer schlimmer.'],
+      gefahr: ['Nein. Soll ich ihm was Süßes geben?'],
+    },
+    lage: 'Patient mit Hypoglykämie (BZ 28 mg/dl), nach Glukosegabe wach und orientiert, Transport zur Abklärung.',
+    workMin: [10, 15],
+  },
+  {
+    id: 'rd_kollaps',
+    role: 'passant',
+    sex: 'w',
+    age: [60, 85],
+    stichwort: 'RD 1',
+    weight: 0.8,
+    where: 'strasse',
+    patients: [{ specialty: 'Innere Medizin', desc: 'Synkope, jetzt wach' }],
+    opening: ['Hallo, hier ist eine ältere Dame vor dem Bäcker umgekippt!', 'Grüß Gott, eine Frau ist hier gerade zusammengesackt, beim Einkaufen.'],
+    answers: {
+      was: ['Sie stand in der Schlange und ist einfach umgefallen, ganz langsam, nicht hart aufgeschlagen.'],
+      zustand: ['Jetzt ist sie wieder wach, aber ganz blass und ein bisschen durcheinander.'],
+      atmung: ['Ja, sie atmet ganz normal.'],
+      seitwann: ['Gerade eben, vor zwei Minuten vielleicht.'],
+      gefahr: ['Nein, sie sitzt jetzt auf einem Stuhl.'],
+    },
+    lage: 'Ältere Patientin nach kurzer Synkope, jetzt wach, RR niedrig, Transport zur Abklärung.',
+    workMin: [12, 18],
   },
   {
     id: 'fehl_tasche',
@@ -419,39 +493,170 @@ export const BMA_REAL_LAGE = 'BMA ausgelöst, Entstehungsbrand in einem Technikr
 const QUESTION_TEXT: Record<QuestionId, string> = {
   wo: 'Wo genau ist der Notfallort? Straße, Hausnummer, Ort?',
   was: 'Was ist genau passiert?',
-  wer: 'Wie ist Ihr Name und unter welcher Nummer erreichen wir Sie?',
+  wer: 'Wie ist Ihr Name?',
   wieviele: 'Wie viele Personen sind betroffen oder verletzt?',
-  zustand: 'Ist die Person wach und ansprechbar? Atmet sie normal?',
+  zustand: 'Wie geht es der Person gerade?',
   gefahr: 'Gibt es besondere Gefahren, zum Beispiel Feuer, Rauch oder eingeklemmte Personen?',
   tcpr: 'Ich leite Sie jetzt zur Herzdruckmassage an: Legen Sie Ihre Hände in die Brustmitte und drücken Sie fest und schnell, zweimal pro Sekunde.',
   beruhigen: 'Bleiben Sie ruhig, Hilfe ist organisiert. Ich bleibe bei Ihnen am Telefon.',
+  alter: 'Wie alt ist die Person?',
+  atmung: 'Atmet die Person normal?',
+  bewusstsein: 'Ist die Person wach und ansprechbar?',
+  seitwann: 'Seit wann geht das so?',
+  vorerkrankung: 'Hat die Person Vorerkrankungen oder nimmt sie Medikamente?',
+  zugang: 'In welchem Stock, und wie kommen die Einsatzkräfte zu Ihnen?',
+  rueckruf: 'Unter welcher Nummer erreichen wir Sie, falls die Verbindung abbricht?',
+  ortbestaetigen: 'Ich wiederhole die Adresse: Stimmt das so?',
 };
 
 export function questionText(q: QuestionId): string {
   return QUESTION_TEXT[q];
 }
 
-/** Ordnet eine frei getippte Frage einem Fragentyp zu */
+/** Gesprochenen oder getippten Text vereinheitlichen (Kleinschrift, Umlaute, Satzzeichen) */
+export function normalizeSpoken(text: string): string {
+  return ` ${text
+    .toLowerCase()
+    .replace(/ae/g, 'ä')
+    .replace(/oe/g, 'ö')
+    .replace(/ue/g, 'ü')
+    .replace(/[.,!?;:"„“]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()} `;
+}
+
+// Reihenfolge zählt: spezifische Fragen vor allgemeinen
+const RULES: [QuestionId, RegExp][] = [
+  ['tcpr', /reanimation|herzdruck|drücken sie|fest drücken|cpr|massage|hände auf die brust|brustmitte/],
+  ['ortbestaetigen', /wiederhole|stimmt (das|die adresse)|ist das richtig|habe ich (das )?richtig|korrekt/],
+  ['rueckruf', /rückruf|zurückrufen|(ihre|eine|welche[rn]?|die) (telefon|handy)?nummer|erreichen wir sie|erreichbar|telefonnummer/],
+  ['beruhigen', /ruhig|beruhig|keine angst|keine sorge|hilfe (ist|kommt) (unterwegs|organisiert)|tief durchatmen/],
+  ['alter', /wie alt|alter |jahre alt|geburtsjahr|welches alter/],
+  ['vorerkrankung', /vorerkrank|krankheit|medikament|tabletten|diabet|zucker|herzkrank|blutverdünn|allergi|krank (ist|war)/],
+  ['seitwann', /seit wann|wie lange (schon|geht)|wann (ist|hat|war) (das|es)|wann (hat|fing) es|seit wie viel/],
+  ['zugang', /stock|etage|klingel|zugang|eingang|haustür|tür (offen|auf)|wie komm|einweis|hinterhaus|aufzug|zufahrt|winken|hund/],
+  ['atmung', /atme|atmung|luft (holen|bekommen|kriegen)|schnapp|röchel/],
+  ['bewusstsein', /ansprechbar|bewusst|wach |reagier|augen (auf|offen)|antwortet/],
+  ['wieviele', /wie ?viele|anzahl|mehrere|noch (jemand|weitere|andere)|wer (ist )?(noch )?(verletzt|betroffen)|verletzte/],
+  ['gefahr', /feuer|rauch|qualm|gefahr|eingeklemmt|brennt|brand|gas |strom|flammen|ausl(ä|a)uf|explosion|benzin|verkehr/],
+  ['zustand', /zustand|wie geht|blut|schmerz|verletz|bewegt sich|blass|schwitz|kalt|farbe/],
+  ['wer', /name|wer sind|wer ist am|mit wem spreche|wie heißen|ihr name/],
+  ['wo', / wo |adresse|straße|hausnummer|welche[mrn]? ort|ortschaft|notfallort|einsatzort|wohin|befinden sie|genau|in welche[mr]|wie heißt die/],
+  ['was', / was |passiert| los |geschehen|vorgefallen|notfall|erzählen|beschreiben/],
+];
+
+/** Ordnet eine frei getippte oder gesprochene Frage einem Fragentyp zu */
 export function classifyQuestion(text: string): QuestionId | null {
-  const t = ` ${text.toLowerCase().replace(/[.,!?;:]+/g, ' ').replace(/\s+/g, ' ')} `;
-  if (/reanimation|herzdruck|drücken|cpr|massage/.test(t)) return 'tcpr';
-  if (/ruhig|beruhig|keine angst/.test(t)) return 'beruhigen';
-  if (/wie ?viele|anzahl|verletzte|personen|betroffen/.test(t)) return 'wieviele';
-  if (/name|wer sind|wer ist am|mit wem|rückruf|nummer|telefon/.test(t)) return 'wer';
-  if (/atmet|atmung|ansprechbar|bewusst|zustand|wach|blut|schmerz|reagiert/.test(t)) return 'zustand';
-  if (/feuer|rauch|gefahr|eingeklemmt|brennt|gas|strom|flammen/.test(t)) return 'gefahr';
-  if (/ wo |adresse|straße|hausnummer|welche[mrn]? ort|ortschaft|notfallort|einsatzort|wohin|befinden sie|genau/.test(t)) return 'wo';
-  if (/ was |passiert| los |geschehen|vorgefallen|notfall/.test(t)) return 'was';
-  return null;
+  return classifyAll(text)[0] ?? null;
+}
+
+/** Alle Fragen in einem Satz, z. B. "Wie alt ist er und atmet er?" -> alter, atmung */
+export function classifyAll(text: string): QuestionId[] {
+  const out: QuestionId[] = [];
+  const parts = text.split(/\?|\bund\b|\bsowie\b/i).filter((p) => p.trim().length > 2);
+  for (const part of parts.length ? parts : [text]) {
+    const t = normalizeSpoken(part);
+    const hit = RULES.find(([, re]) => re.test(t));
+    if (hit && !out.includes(hit[0])) out.push(hit[0]);
+  }
+  return out.slice(0, 2);
+}
+
+/** Ja/Nein-Frage, die keinem Thema zugeordnet werden kann ("Ist er gestürzt?") */
+export function isYesNoQuestion(text: string): boolean {
+  return /^\s*(ist|hat|haben|sind|kann|können|gibt|war|waren|liegt|sitzt|steht|blutet|hört|sieht|braucht|wissen|wurde)\b/i.test(text);
+}
+
+const SELF: Partial<Record<QuestionId, string[]>> = {
+  alter: ['Ich bin {alter}.', '{alter} Jahre.'],
+  atmung: ['Ich krieg schon Luft, ja... aber schwer.', 'Atmen geht, ja.'],
+  bewusstsein: ['Ich red doch mit Ihnen!', 'Ja, ich bin wach.'],
+  vorerkrankung: ['Ich hab Bluthochdruck, dafür nehm ich Tabletten.', 'Eigentlich nichts. Nur was mit dem Blutdruck.'],
+  zustand: ['Mir geht es nicht gut, ehrlich gesagt.'],
+};
+
+const RELATIVE: Partial<Record<QuestionId, string[]>> = {
+  alter: ['{Er} ist {alter}.', '{alter} Jahre alt.', 'Äh... {alter}. Ja, {alter}.'],
+  atmung: ['Ja, {er} atmet normal.', 'Ja, man sieht, wie sich der Brustkorb hebt.'],
+  bewusstsein: ['Ja, {er} ist wach und redet mit mir.', 'Ja, {er} macht die Augen auf, wenn ich {ihn} anspreche.'],
+  vorerkrankung: [
+    '{Er} hat Bluthochdruck und nimmt Tabletten.',
+    'Zucker hat {er}, und was mit dem Herzen.',
+    '{Er} nimmt Blutverdünner, Marcumar glaub ich.',
+    'Nein, eigentlich ist {er} gesund.',
+    'COPD, {er} hat ein Sauerstoffgerät daheim.',
+  ],
+};
+
+const BYSTANDER: Partial<Record<QuestionId, string[]>> = {
+  alter: ['Keine Ahnung, so um die {alterRund}.', 'Schwer zu sagen... vielleicht {alterRund}?'],
+  atmung: ['Ich glaub schon, ja.', 'Ja, {er} atmet.'],
+  bewusstsein: ['{Er} reagiert, wenn man {ihn} anspricht.', 'Ja, {er} hat die Augen offen.'],
+  vorerkrankung: ['Keine Ahnung, ich kenn {ihn} nicht.', 'Das weiß ich nicht, ich bin nur vorbeigekommen.'],
+  wer: ['{name}, ich bin nur zufällig vorbeigekommen.', 'Mein Name ist {name}.'],
+};
+
+const STAFF: Partial<Record<QuestionId, string[]>> = {
+  alter: ['Herr {nachnameP} ist {alter}.', '{alter} Jahre, Moment, ich schau in die Akte... ja, {alter}.'],
+  vorerkrankung: ['Er hat Herzinsuffizienz, Diabetes und eine Demenz. Die Medikamentenliste geben wir mit.'],
+  atmung: ['Er atmet etwas schnell, Sättigung 91 Prozent.'],
+  bewusstsein: ['Er ist wach, aber wie immer etwas verwirrt.'],
+  zugang: ['Haupteingang, dann zweiter Stock, Station B. Ich warte am Eingang.'],
+  wer: ['Schwester {vorname} vom {objekt}.', 'Pfleger {vorname}, Station B.'],
+};
+
+const NO_PATIENT: Partial<Record<QuestionId, string[]>> = {
+  alter: ['Es ist doch niemand verletzt.', 'Wieso? Es geht doch um keinen Menschen.'],
+  atmung: ['Verletzt ist niemand, zum Glück.'],
+  bewusstsein: ['Es ist niemand verletzt.'],
+  vorerkrankung: ['Es ist doch niemand verletzt.'],
+};
+
+const BY_PLACE: Partial<Record<LocationKind, string[]>> = {
+  wohnung: ['{floor}, bei {nachname} klingeln.', 'Im {floor}. Ich mach unten die Haustür auf.', '{floor}, die Wohnungstür ist offen.'],
+  strasse: ['Wir sind direkt am Gehweg, Sie sehen uns.', 'Ich stell mich an die Straße und winke.'],
+  ausserorts: ['Ich bleib an der Straße stehen und mach das Warnblinklicht an.', 'Ich steh am Straßenrand, Sie sehen das Auto.'],
+  autobahn: ['Ich stehe hinter der Leitplanke, das Warndreieck ist aufgestellt.'],
+  objekt: ['Am Haupteingang, da wartet jemand von uns.'],
+};
+
+/** Standardantworten, wenn die Vorlage nichts Eigenes vorsieht */
+export function fallbackAnswers(q: QuestionId, tpl: IncidentTemplate, role: CallerRole): string[] {
+  const hasPatient = !!tpl.patients?.length || tpl.stichwort.startsWith('RD');
+  if (!hasPatient && NO_PATIENT[q]) return NO_PATIENT[q]!;
+  const byRole = { selbst: SELF, angehoerig: RELATIVE, passant: BYSTANDER, personal: STAFF }[role];
+  if (byRole[q]) return byRole[q]!;
+  if (q === 'zugang') return BY_PLACE[tpl.where] ?? ['Sie sehen uns, wir warten draußen.'];
+  if (q === 'seitwann') {
+    if (tpl.stichwort.startsWith('B')) return ['Hab es gerade eben gesehen.', 'Vielleicht seit fünf Minuten, ich weiß nicht genau.'];
+    if (tpl.stichwort.startsWith('THL')) return ['Gerade eben passiert.', 'Vor ein paar Minuten.'];
+    return ['Seit ungefähr {min} Minuten.', 'Das ging vor vielleicht {min} Minuten los.'];
+  }
+  if (q === 'rueckruf') return ['Ja, unter {phone}.', 'Das ist meine Nummer, {phone}.', 'Hier unter dieser Nummer, {phone}.'];
+  if (q === 'ortbestaetigen') return ['Ja, genau.', 'Ja, richtig. Bitte beeilen Sie sich!', 'Ja, stimmt.'];
+  if (q === 'atmung' || q === 'bewusstsein') return RELATIVE[q]!;
+  return DEFAULT_ANSWERS[q];
 }
 
 export const DEFAULT_ANSWERS: Record<QuestionId, string[]> = {
   wo: ['{wo}'],
   was: ['Das hab ich doch schon gesagt!'],
-  wer: ['Mein Name ist {name}, Sie erreichen mich unter dieser Nummer.'],
+  wer: ['Mein Name ist {name}.', '{name}. Ich bin unter dieser Nummer erreichbar.'],
   wieviele: ['Ich glaub, nur eine Person.'],
   zustand: ['Das weiß ich nicht genau.'],
-  gefahr: ['Nein, ich glaube nicht.'],
+  gefahr: ['Nein, ich glaube nicht.', 'Nein, nichts Besonderes.'],
   tcpr: ['Was? Wieso denn? Das ist doch nicht nötig!'],
-  beruhigen: ['Okay... okay. Ich versuch es.'],
+  beruhigen: ['Okay... okay. Ich versuch es.', 'Ja... danke. Bitte beeilen Sie sich.'],
+  alter: ['Ich weiß es nicht genau.'],
+  atmung: ['Ich glaube schon.'],
+  bewusstsein: ['Ja.'],
+  seitwann: ['Gerade eben.'],
+  vorerkrankung: ['Keine Ahnung.'],
+  zugang: ['Sie sehen uns, wir warten draußen.'],
+  rueckruf: ['Unter dieser Nummer, {phone}.'],
+  ortbestaetigen: ['Ja, genau.'],
 };
+
+export const NOT_UNDERSTOOD = ['Wie bitte? Ich versteh Sie nicht.', 'Was meinen Sie?', 'Das weiß ich nicht.', 'Bitte, schicken Sie einfach jemanden!', 'Hä? Nochmal bitte.'];
+export const YES_NO = ['Ja, schon.', 'Nein, ich glaube nicht.', 'Das kann ich nicht sagen.', 'Ich glaub nicht, nein.'];
+export const FLOORS = ['Erdgeschoss', 'erster Stock', 'zweiter Stock', 'dritter Stock', 'Dachgeschoss', 'erster Stock links', 'zweiter Stock rechts'];

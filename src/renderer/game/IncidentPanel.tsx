@@ -101,7 +101,22 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
           ✕
         </button>
       </div>
-      <div className="detail-addr">{inc.address}</div>
+      <div className="detail-addr">
+        {inc.address}
+        {inc.zusatz && <span className="muted"> · {inc.zusatz}</span>}
+      </div>
+      {(inc.objekt || inc.melder || inc.rueckruf || inc.patient || inc.sondersignal === false) && (
+        <div className="detail-facts small">
+          {inc.objekt && <span>Objekt: {inc.objekt}</span>}
+          {inc.patient && <span>Patient: {inc.patient}</span>}
+          {(inc.melder || inc.rueckruf) && (
+            <span>
+              Meldender: {inc.melder || '–'} {inc.rueckruf && `☎ ${inc.rueckruf}`}
+            </span>
+          )}
+          {inc.sondersignal === false && <span className="warn">ohne Sondersignal</span>}
+        </div>
+      )}
       <div className="row">
         <select
           value={inc.stichwort}
@@ -115,6 +130,20 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
           ))}
         </select>
         {inc.patients > 0 && <span className="muted small">{inc.patients} Pat.</span>}
+        <select
+          className="tmo-select"
+          title="Einsatz-Rufgruppe (TMO)"
+          value={inc.tmo ?? ''}
+          onChange={(e) => conn.send({ a: 'updateIncident', incidentId: inc.id, tmo: e.target.value })}
+          disabled={inc.status === 'abgeschlossen'}
+        >
+          <option value="">TMO: Heimatgruppen</option>
+          {(scn.tmoGroups ?? []).map((g) => (
+            <option key={g.id} value={g.id}>
+              TMO: {g.name}
+            </option>
+          ))}
+        </select>
       </div>
       {inc.note && <div className="note">{inc.note}</div>}
       {inc.lage && <div className="lage">Lage vor Ort: {inc.lage}</div>}

@@ -14,7 +14,9 @@ import { PANEL_TITLES, Popout, type PanelId } from '../Popout';
 import { SettingsModal, useSttAutoload } from '../SettingsModal';
 import { getSettings } from '../settings';
 import { radioSpeech, say, stopSpeaking } from '../audio/tts';
-import { attachPttKeys } from '../audio/stt';
+import { attachPttKeys, speechInput } from '../audio/stt';
+import { buildVocab } from '../../../shared/speechfix';
+import { radioName } from '../../../shared/catalog';
 import { MicStatus } from '../audio/SpeechUi';
 
 export interface GameCtx {
@@ -26,7 +28,8 @@ export interface GameCtx {
   setSelectedIncident: (id: string | null) => void;
   selectedUnit: string | null;
   setSelectedUnit: (id: string | null) => void;
-  focus: (p: Vec) => void;
+  /** Karte auf einen Punkt setzen, optional mit Maßstab (Pixel je Meter) */
+  focus: (p: Vec, scale?: number) => void;
   marker: Vec | null;
   setMarker: (p: Vec | null) => void;
   /** Kartenklick an das Einsatzformular weiterleiten */
@@ -57,7 +60,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
   const graph = useMemo(() => new RoadGraph(scn), [scn]);
   const [selectedIncident, setSelectedIncident] = useState<string | null>(null);
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
-  const [focusPt, setFocusPt] = useState<{ x: number; y: number; seq: number } | null>(null);
+  const [focusPt, setFocusPt] = useState<{ x: number; y: number; seq: number; scale?: number } | null>(null);
   const [marker, setMarker] = useState<Vec | null>(null);
   const [showScore, setShowScore] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -72,6 +75,18 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
   useSounds(state);
   useSttAutoload();
   useEffect(() => attachPttKeys(window), []);
+  // Wortschatz der Karte für die Nachkorrektur der Spracherkennung
+  useEffect(() => {
+    const places = new Set<string>([...scn.towns].sort((a, b) => b.radius - a.radius).map((t) => t.name));
+    for (const st of scn.stations) for (const v of st.vehicles) places.add(radioName(v.callsign).replace(/\s+\d.*$/, ''));
+    const streets = new Set<string>();
+    for (const r of scn.roads) if (r.name && r.type !== 'autobahn') streets.add(r.name);
+    for (const a of scn.addresses ?? []) streets.add(a.street);
+    speechInput.setVocabulary(buildVocab([...places, ...streets, ...scn.hospitals.map((h) => h.name)], [...places]), [
+      ...new Set(scn.vehicleTypes.map((t) => t.funkNr)),
+    ]);
+    return () => speechInput.setVocabulary(undefined);
+  }, [scn]);
   useReadAloud(state, net.playerId, scn.ilsName);
   useEffect(() => {
     try {
@@ -93,7 +108,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
     setSelectedIncident,
     selectedUnit,
     setSelectedUnit,
-    focus: (p) => setFocusPt({ x: p.x, y: p.y, seq: Date.now() }),
+    focus: (p, scale) => setFocusPt({ x: p.x, y: p.y, seq: Date.now() + Math.random(), scale }),
     marker,
     setMarker,
     mapPickRef,
