@@ -1,7 +1,7 @@
 {
   "name": "leitstellensimulator",
   "productName": "Leitstellensimulator",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Multiplayer-Leitstellensimulator nach Vorbild der bayerischen Integrierten Leitstellen",
   "main": "dist/electron/main.js",
   "private": true,
@@ -17,7 +17,7 @@
     "dist:win": "npm run build && electron-builder --win zip --x64",
     "dist:linux": "npm run build && electron-builder --linux dir --x64",
     "dist:mac": "npm run build && electron-builder --mac dir --x64 --arm64",
-    "dist:all": "npm run build && electron-builder --win dir --x64 && electron-builder --linux dir --x64 && electron-builder --mac dir --x64 --arm64 && node scripts/pack-release.mjs"
+    "dist:all": "npm run build && node scripts/piper-holen.mjs && electron-builder --win dir --x64 && electron-builder --linux dir --x64 && electron-builder --mac dir --x64 --arm64 && node scripts/pack-release.mjs"
   },
   "build": {
     "appId": "de.leitstellensimulator.app",
@@ -30,11 +30,23 @@
       "output": "release"
     },
     "win": {
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "extraResources": [
+        {
+          "from": "vendor/piper/win-x64",
+          "to": "piper/win-x64"
+        }
+      ]
     },
     "linux": {
       "category": "Education",
-      "executableName": "leitstellensimulator"
+      "executableName": "leitstellensimulator",
+      "extraResources": [
+        {
+          "from": "vendor/piper/linux-x64",
+          "to": "piper/linux-x64"
+        }
+      ]
     },
     "mac": {
       "category": "public.app-category.simulation-games",

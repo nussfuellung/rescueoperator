@@ -29,7 +29,7 @@ function listScenarios() {
   const dir = libDir();
   // Musterleitstelle ILS Würzburg einmal je Datenstand in die Bibliothek legen (nicht erneut, wenn gelöscht)
   const marker = join(dir, '.wuerzburg-installiert');
-  const WUE_DATA = '6';
+  const WUE_DATA = '7';
   if (!existsSync(marker) || readFileSync(marker, 'utf8').trim() !== WUE_DATA) {
     try {
       const scn = gunzipSync(readFileSync(join(__dirname, '../assets/ils-wuerzburg.json.gz')));

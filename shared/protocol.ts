@@ -10,6 +10,10 @@ export type Action =
   | { a: 'answerCall'; callId: string }
   | { a: 'ask'; callId: string; question: QuestionId; text?: string }
   | { a: 'endCall'; callId: string }
+  /** Anrufer an den ärztlichen Bereitschaftsdienst (116117) weiterverbinden */
+  | { a: 'transferKvb'; callId: string }
+  /** Polizei zum Einsatz verständigen */
+  | { a: 'requestPolice'; incidentId: string }
   | {
       a: 'createIncident';
       callId?: string;
@@ -29,6 +33,8 @@ export type Action =
       sondersignal?: boolean;
       /** Fahrzeuge, die direkt mit dem Anlegen alarmiert werden */
       alarmUnitIds?: string[];
+      /** Direkt nach AAO alarmieren (Tablet ohne Straßennetz) */
+      alarmAao?: boolean;
     }
   | { a: 'updateIncident'; incidentId: string; stichwort?: string; schlagwort?: string; note?: string; tmo?: string }
   | { a: 'setTmo'; unitIds: string[]; group: string }

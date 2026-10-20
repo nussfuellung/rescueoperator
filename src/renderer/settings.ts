@@ -1,7 +1,7 @@
 // Lokale Einstellungen pro Arbeitsplatz (Ton, Sprache, Fenster, Karte).
 import { useSyncExternalStore } from 'react';
 
-export type TtsEngine = 'auto' | 'browser' | 'system';
+export type TtsEngine = 'auto' | 'piper' | 'browser' | 'system';
 
 export interface Settings {
   ttsEnabled: boolean;

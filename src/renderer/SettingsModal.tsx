@@ -105,6 +105,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             Stimme
             <select value={s.ttsEngine} onChange={(e) => updateSettings({ ttsEngine: e.target.value as TtsEngine })}>
               <option value="auto">Automatisch</option>
+              <option value="piper" disabled={!info.piper}>
+                Piper, natürliche Stimmen {info.piper ? `(${info.piper.join(', ')})` : '(nicht gefunden)'}
+              </option>
               <option value="browser">Browser-Stimme ({info.browserVoices.length} deutsche Stimmen)</option>
               <option value="system" disabled={!info.system}>
                 Systemstimme {isDesktop ? '(Windows/macOS/Linux)' : '(nur Desktop-App)'}
@@ -115,7 +118,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         </div>
         {ttsResult && (
           <p className="small muted">
-            Letzte Ausgabe: {ttsResult === 'browser' ? 'Browser-Stimme' : ttsResult === 'system' ? 'Systemstimme' : ttsResult === 'fehler' ? 'fehlgeschlagen' : ttsResult}
+            Letzte Ausgabe: {ttsResult === 'piper' ? 'Piper' : ttsResult === 'browser' ? 'Browser-Stimme' : ttsResult === 'system' ? 'Systemstimme' : ttsResult === 'fehler' ? 'fehlgeschlagen' : ttsResult}
             {ttsResult === 'fehler' && ' – bitte andere Stimme wählen oder unter Windows eine deutsche Sprachausgabe installieren.'}
           </p>
         )}

@@ -34,7 +34,7 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
   const calls = state.calls;
   const ringing = calls.filter((c) => c.state === 'ringing').sort((a, b) => a.ringStart - b.ringStart);
   const mine = calls.find((c) => c.state === 'active' && c.takerId === ctx.me && c.kind === '112');
-  const myBma = calls.filter((c) => c.state === 'active' && c.takerId === ctx.me && c.kind === 'bma' && !c.incidentId);
+  const myBma = calls.filter((c) => c.state === 'active' && c.takerId === ctx.me && c.kind !== '112' && !c.incidentId);
   const others = calls.filter((c) => c.state === 'active' && c.takerId !== ctx.me);
   const setBmaCall = ctx.setFormCallId;
 
@@ -47,7 +47,8 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
       if (e.key === 'F2' && firstRinging) {
         e.preventDefault();
         conn.send({ a: 'answerCall', callId: firstRinging.id });
-        if (firstRinging.kind === 'bma') setBmaCall(firstRinging.id);
+        if (firstRinging.kind !== '112') setBmaCall(firstRinging.id);
+        if (firstRinging.kvb) ctx.focus(firstRinging.kvb, 0.6);
         if (firstRinging.aml) ctx.focus(firstRinging.aml, Math.max(0.15, Math.min(1.5, 90 / firstRinging.aml.acc)));
         if (firstRinging.bma) ctx.focus(firstRinging.bma, 0.6);
       }
@@ -66,7 +67,7 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
         {ringing.map((c) => (
           <div key={c.id} className={`call-row ringing ${c.kind}`}>
             <div>
-              <b>{c.kind === 'bma' ? 'BMA' : '112'}</b> {c.kind === 'bma' ? c.bma?.text : c.phone}
+              <b>{c.kind === 'bma' ? 'BMA' : c.kind === 'kvb' ? 'KVB' : '112'}</b> {c.kind === 'bma' ? c.bma?.text : c.kind === 'kvb' ? c.kvb?.text : c.phone}
               <div className="muted small">
                 klingelt seit {formatDuration(state.time - c.ringStart)}
                 {c.aml ? ' · AML-Ortung vorhanden' : ''}
@@ -77,7 +78,8 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
               className="primary"
               onClick={() => {
                 conn.send({ a: 'answerCall', callId: c.id });
-                if (c.kind === 'bma') setBmaCall(c.id);
+                if (c.kind !== '112') setBmaCall(c.id);
+                if (c.kvb) ctx.focus(c.kvb, 0.6);
                 if (c.aml) ctx.focus(c.aml, Math.max(0.15, Math.min(1.5, 90 / c.aml.acc)));
                 if (c.bma) ctx.focus(c.bma, 0.6);
               }}
@@ -89,9 +91,34 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
         {myBma.map((c) => (
           <div key={c.id} className="call-row bma">
             <div>
-              <b>BMA</b> {c.bma?.address}
+              <b>{c.kind === 'kvb' ? 'KVB' : 'BMA'}</b> {c.bma?.address ?? c.kvb?.address}
             </div>
-            <button onClick={() => setBmaCall(c.id)}>Einsatz anlegen</button>
+            {c.kind === 'kvb' && ctx.mobile ? (
+              <span className="small muted">Einsatz am Rechner anlegen</span>
+            ) : ctx.mobile ? (
+              <button
+                className="primary"
+                onClick={() =>
+                  conn.send({
+                    a: 'createIncident',
+                    callId: c.id,
+                    stichwort: 'B BMA',
+                    schlagwort: formatSchlagwort(schlagwortByNr('#B1610')!),
+                    address: c.bma!.address,
+                    x: c.bma!.x,
+                    y: c.bma!.y,
+                    objekt: c.bma!.text.replace(/^BMA-Auslösung\s*/, '').replace(/,.*$/, ''),
+                    note: '',
+                    patients: 0,
+                    alarmAao: true,
+                  })
+                }
+              >
+                Anlegen und alarmieren
+              </button>
+            ) : (
+              <button onClick={() => setBmaCall(c.id)}>Einsatz anlegen</button>
+            )}
           </div>
         ))}
         {others.map((c) => (
@@ -112,7 +139,11 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
 export function IncidentFormPanel({ ctx }: { ctx: GameCtx }) {
   const calls = ctx.state.calls;
   const mine = calls.find((c) => c.state === 'active' && c.takerId === ctx.me && c.kind === '112');
-  const formCall = (mine && !mine.incidentId ? mine : undefined) ?? calls.find((c) => c.id === ctx.formCallId && !c.incidentId);
+  // Eine am Tablet angenommene BMA öffnet die Einsatzmaske am Rechner
+  const formCall =
+    (mine && !mine.incidentId ? mine : undefined) ??
+    calls.find((c) => c.id === ctx.formCallId && !c.incidentId) ??
+    calls.find((c) => c.kind !== '112' && c.state === 'active' && c.takerId === ctx.me && !c.incidentId);
   const showForm = !!formCall || ctx.formManual;
   return (
     <div className="panel einsatzmaske">
@@ -209,6 +240,11 @@ function Conversation({ ctx, call }: { ctx: GameCtx; call: CallState }) {
         <button type="submit">Fragen</button>
       </form>
       <MicButton targetId={`call-${call.id}`} label="Frage sprechen" />
+      {!call.incidentId && (
+        <button onClick={() => conn.send({ a: 'transferKvb', callId: call.id })} title="Kein Notfall: an den ärztlichen Bereitschaftsdienst weiterverbinden">
+          An KVB 116117
+        </button>
+      )}
       <button className="danger" onClick={() => conn.send({ a: 'endCall', callId: call.id })}>
         Gespräch beenden
       </button>
@@ -276,6 +312,11 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
       setStichwort('B BMA');
       setSchlagwort(formatSchlagwort(schlagwortByNr('#B1610')!));
       setObjekt(call.bma.text.replace(/^BMA-Auslösung\s*/, '').replace(/,.*$/, ''));
+    } else if (call?.kvb) {
+      applyPos(call.kvb, 'KVB-Übergabe', call.kvb.address);
+      setNote(call.kvb.text.replace(/^Übergabe KVB 116117:\s*/, ''));
+      setMelder('KVB 116117');
+      setRueckruf('116117');
     } else if (call?.aml) {
       ctx.focus(call.aml, Math.max(0.15, Math.min(1.5, 90 / call.aml.acc)));
     } else if (call?.landline) {
@@ -407,7 +448,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
       <div className="em-head">
         <span className="em-title">Neuer Einsatz</span>
         <span className="muted small">
-          {call ? (call.kind === 'bma' ? 'BMA-Auslösung' : `Notruf ${call.phone} · ${formatDuration(state.time - (call.answeredAt ?? call.ringStart))}`) : 'ohne Anruf'}
+          {call ? (call.kind === 'bma' ? 'BMA-Auslösung' : call.kind === 'kvb' ? 'Übergabe KVB 116117' : `Notruf ${call.phone} · ${formatDuration(state.time - (call.answeredAt ?? call.ringStart))}`) : 'ohne Anruf'}
         </span>
       </div>
 

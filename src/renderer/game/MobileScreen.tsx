@@ -102,6 +102,7 @@ export function MobileScreen({ code, areas }: { code: string; areas: Tab[] }) {
     setFormManual: () => undefined,
     formCallId,
     setFormCallId,
+    mobile: true,
   };
   const me = state.players.find((p) => p.id === net.playerId);
 

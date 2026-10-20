@@ -55,6 +55,8 @@ export interface VehicleType {
   speedFactor: number;
   /** Kann Patienten transportieren */
   transport?: boolean;
+  /** Luftfahrzeug: fliegt in gerader Linie */
+  air?: boolean;
 }
 
 export interface VehicleDef {
@@ -75,6 +77,8 @@ export interface Dienstzeit {
   tage?: number[];
   /** Nur in geraden bzw. ungeraden Kalenderwochen */
   kw?: 'gerade' | 'ungerade';
+  /** Ende bei Sonnenuntergang (Luftrettung); bis gilt dann nur als Näherung */
+  sunset?: boolean;
 }
 
 export interface Station {
@@ -270,8 +274,8 @@ export type QuestionId =
 export interface CallState {
   id: string;
   phone: string;
-  /** 112 oder BMA */
-  kind: '112' | 'bma';
+  /** 112, BMA oder Übergabe der KVB (116117) */
+  kind: '112' | 'bma' | 'kvb';
   state: 'ringing' | 'active' | 'ended';
   takerId?: string;
   ringStart: number;
@@ -290,6 +294,10 @@ export interface CallState {
   landline?: { x: number; y: number; address: string };
   /** Bei BMA: Objekt und Adresse aus der Alarmübertragung */
   bma?: { text: string; x: number; y: number; address: string };
+  /** Übergabe der KVB (ärztlicher Bereitschaftsdienst 116117) über die Schnittstelle */
+  kvb?: { text: string; x: number; y: number; address: string };
+  /** An die KVB weiterverbunden */
+  toKvb?: boolean;
 }
 
 export interface IncidentLog {
@@ -331,6 +339,8 @@ export interface IncidentState {
   sondersignal?: boolean;
   /** Einsatz-Rufgruppe */
   tmo?: string;
+  /** Polizei verständigt */
+  polizei?: 'angefordert' | 'vor Ort';
 }
 
 export interface RadioMessage {

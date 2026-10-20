@@ -18,7 +18,7 @@ describe('ABek-Schlagworte', () => {
     const codes = new Set(DEFAULT_STICHWORTE.map((s) => s.code));
     expect(SCHLAGWORTE.filter((s) => !codes.has(s.code))).toEqual([]);
     for (const t of [...TEMPLATES, BMA_TEMPLATE]) {
-      if (!t.stichwort) continue;
+      if (!t.stichwort || t.kvb) continue;
       expect(codes.has(t.stichwort), t.id).toBe(true);
       expect(schlagwortByNr(t.schlagwort, t.stichwort)?.code, t.id).toBe(t.stichwort);
     }

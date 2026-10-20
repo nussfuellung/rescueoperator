@@ -1,4 +1,5 @@
 // AAO-Logik: Abdeckung von Anforderungen und Alarmierungsvorschlag.
+import { AIR_SPEED, AIR_TURNOUT } from './catalog';
 import type { RoadGraph } from './geo';
 import type { IncidentState, Scenario, UnitState, VehicleType } from './types';
 
@@ -57,6 +58,7 @@ export function computeProposal(
       const factor = 1.2 * (types.get(u.type)?.speedFactor ?? 1);
       const st = stations.get(u.stationId);
       const career = st?.career || types.get(u.type)?.org === 'RD';
+      if (types.get(u.type)?.air) return { u, seconds: Math.hypot(u.x - inc.x, u.y - inc.y) / AIR_SPEED + (u.baseStatus === 2 ? AIR_TURNOUT : 8) };
       const turnout = u.baseStatus === 2 ? (career ? 60 : 250) : 8;
       return { u, seconds: (n >= 0 ? time[n] : Infinity) / factor + turnout };
     })

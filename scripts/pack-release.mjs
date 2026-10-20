@@ -27,7 +27,13 @@ const files = [
   ['LIESMICH.txt', 'LIESMICH.txt'],
 ];
 for (const [from, to] of files) cpSync(join('scripts/startdateien', from), join(out, to));
+// Piper-Stimmen einmal für alle Plattformen (das Programm sucht den Ordner "stimmen" oberhalb seiner Dateien)
+if (existsSync('vendor/stimmen')) cpSync('vendor/stimmen', join(out, 'programm', 'stimmen'), { recursive: true });
 for (const f of ['Start Linux.sh', 'Start Mac.command', 'programm/linux/leitstellensimulator']) chmodSync(join(out, f), 0o755);
+for (const f of ['piper', 'piper_phonemize', 'espeak-ng']) {
+  const p = join(out, 'programm/linux/resources/piper/linux-x64/piper', f);
+  if (existsSync(p)) chmodSync(p, 0o755);
+}
 
 const zip = `${name}.zip`;
 rmSync(join('release', zip), { force: true });

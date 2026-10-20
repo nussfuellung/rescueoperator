@@ -79,7 +79,7 @@ export function parseDienst(s: string): Dienstzeit | null {
   // Sonnenuntergang: grob 19:00
   const bis = m[3] !== undefined ? Number(m[3]) * 60 + Number(m[4]) : 19 * 60;
   const rest = m[5];
-  const d: Dienstzeit = { von, bis };
+  const d: Dienstzeit = { von, bis, ...(m[3] === undefined ? { sunset: true } : {}) };
   const tage = TAGE.map((t, i) => (new RegExp(`\\b${t}\\b`).test(rest) ? i : -1)).filter((i) => i >= 0);
   if (tage.length && tage.length < 7) d.tage = tage;
   if (/ungeraden/i.test(rest)) d.kw = 'ungerade';
@@ -234,6 +234,13 @@ export function applyLstsim(scn: Scenario, text: string): LstsimResult {
         skipped.inaktiv++;
         continue;
       }
+      if (v.typ === 'RTH' && /^Christoph\s+\S+$/.test(v.funk.trim())) {
+        const dienst = v.dienst.map(parseDienst).filter((d): d is Dienstzeit => !!d);
+        const def: VehicleDef = { id: `v_lst_${v.id ?? seq}_${seq++}`, callsign: v.funk.trim(), type: 'RTH', ...(dienst.length ? { dienst } : {}) };
+        byCallsign.set(def.callsign, def);
+        fresh.push(def);
+        continue;
+      }
       if (v.typ === 'RTH' || /Zubringer\)/.test(v.funk) && /CH\d+/.test(v.funk)) {
         skipped.rth++;
         continue;
@@ -316,6 +323,28 @@ export function isoWeek(d: Date): number {
   return 1 + Math.round(((t.getTime() - firstThu.getTime()) / 86400000 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
 }
 
+/** Sonnenuntergang in Minuten nach Mitternacht (mitteleuropäische Zeit mit Sommerzeit), für Unterfranken */
+export function sunsetMinute(date: Date, lat = 49.8, lon = 9.95): number {
+  const y = date.getFullYear();
+  const n = Math.round((Date.UTC(y, date.getMonth(), date.getDate()) - Date.UTC(y, 0, 0)) / 86400000);
+  const rad = Math.PI / 180;
+  const decl = -23.44 * Math.cos(((2 * Math.PI) / 365) * (n + 10));
+  const b = ((2 * Math.PI) / 365) * (n - 81);
+  const eot = 9.87 * Math.sin(2 * b) - 7.53 * Math.cos(b) - 1.5 * Math.sin(b);
+  const cosH = (Math.sin(-0.833 * rad) - Math.sin(lat * rad) * Math.sin(decl * rad)) / (Math.cos(lat * rad) * Math.cos(decl * rad));
+  const h = Math.acos(Math.max(-1, Math.min(1, cosH))) / rad;
+  const utc = 720 - 4 * lon - eot + 4 * h;
+  // Sommerzeit vom letzten Sonntag im März bis zum letzten Sonntag im Oktober
+  const lastSun = (mo: number) => {
+    const d = new Date(Date.UTC(y, mo + 1, 0));
+    return d.getUTCDate() - d.getUTCDay();
+  };
+  const mo = date.getMonth();
+  const dd = date.getDate();
+  const dst = (mo > 2 && mo < 9) || (mo === 2 && dd >= lastSun(2)) || (mo === 9 && dd < lastSun(9));
+  return Math.round(utc + (dst ? 120 : 60));
+}
+
 /** Ist das Fahrzeug zur Minute `minute` (seit Mitternacht des Starttages `start`) im Dienst? */
 export function inDienst(dienst: Dienstzeit[] | undefined, start: Date, minute: number): boolean {
   if (!dienst?.length) return true;
@@ -332,6 +361,10 @@ export function inDienst(dienst: Dienstzeit[] | undefined, start: Date, minute: 
     return true;
   };
   return dienst.some((d) => {
+    if (d.sunset) {
+      const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + day);
+      return m >= d.von && m < sunsetMinute(date) && dayOk(day, d);
+    }
     if (d.von < d.bis) return m >= d.von && m < d.bis && dayOk(day, d);
     return (m >= d.von && dayOk(day, d)) || (m < d.bis && dayOk(day - 1, d));
   });
@@ -342,6 +375,6 @@ export function dienstText(dienst?: Dienstzeit[]): string {
   if (!dienst?.length) return 'rund um die Uhr';
   const hm = (m: number) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
   return dienst
-    .map((d) => `${hm(d.von)}–${hm(d.bis)}${d.tage ? ' ' + d.tage.map((t) => TAGE[t]).join(',') : ''}${d.kw ? ` (${d.kw} KW)` : ''}`)
+    .map((d) => `${hm(d.von)}–${d.sunset ? "Sonnenuntergang" : hm(d.bis)}${d.tage ? ' ' + d.tage.map((t) => TAGE[t]).join(',') : ''}${d.kw ? ` (${d.kw} KW)` : ''}`)
     .join(' · ');
 }

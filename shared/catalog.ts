@@ -21,6 +21,7 @@ export const DEFAULT_VEHICLE_TYPES: VehicleType[] = [
   { id: 'KTW', label: 'KTW', org: 'RD', funkNr: 72, fills: ['KTW'], speedFactor: 1.0, transport: true },
   { id: 'NEF', label: 'NEF', org: 'RD', funkNr: 76, fills: ['NEF'], speedFactor: 1.15 },
   { id: 'HVO', label: 'First Responder', org: 'RD', funkNr: 79, fills: ['HVO'], speedFactor: 1.1 },
+  { id: 'RTH', label: 'RTH', org: 'RD', funkNr: 0, fills: ['RTH', 'NEF'], speedFactor: 1, air: true },
   { id: 'GWW', label: 'GW-Wasserrettung', org: 'FW', funkNr: 91, fills: ['GWW'], speedFactor: 0.9 },
 ];
 
@@ -152,6 +153,11 @@ export function formatDuration(ms: number): string {
 }
 
 /** Kurzform eines Funkrufnamens, z. B. "40/1" aus "Florian Ammerbach 40/1" */
+/** Reisegeschwindigkeit eines Rettungshubschraubers in m/s (ca. 220 km/h) */
+export const AIR_SPEED = 61;
+/** Zeit vom Alarm bis zum Abheben in Sekunden */
+export const AIR_TURNOUT = 150;
+
 export function shortCallsign(cs: string): string {
   const m = cs.match(/(\d+\/\d+)\s*$/);
   return m ? m[1] : cs;
@@ -159,7 +165,7 @@ export function shortCallsign(cs: string): string {
 
 /** Funkrufname ohne Organisation, für Funkprotokolle: "Florian Würzburg 40/1" -> "Würzburg 40/1" */
 export function radioName(cs: string): string {
-  return cs.replace(/^(Florian|Rotkreuz|Johannes|Akkon|Malteser|Sama|Samariter|Kater|Heros|Pelikan|Christoph)\s+/, '');
+  return cs.replace(/^(Florian|Rotkreuz|Johannes|Akkon|Malteser|Sama|Samariter|Kater|Heros|Pelikan)\s+/, '');
 }
 
 export function orgPrefix(org: 'FW' | 'RD'): string {

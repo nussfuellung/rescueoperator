@@ -58,7 +58,9 @@ export function MapView(props: Props) {
   const view = useRef({ cx: 0, cy: 0, scale: 0.05, init: false });
   // Zwischengespeicherte Grundkarte (Straßen ändern sich selten, Fahrzeuge ständig)
   const layer = useRef<HTMLCanvasElement | null>(null);
-  const layerKey = useRef('');
+  const layerState = useRef<{ other: string; view: string; tiles: number; cx: number; cy: number; scale: number } | null>(null);
+  const lastView = useRef({ key: '', t: 0 });
+  const segVersion = useRef(0);
   const layerTiles = useRef(false);
   // Weich gleitende Fahrzeugpositionen zwischen den Server-Updates
   const glide = useRef(new Map<string, { fx: number; fy: number; tx: number; ty: number; t0: number }>());
@@ -112,6 +114,7 @@ export function MapView(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.scenario, props.version]);
   const segmentsRef = useRef(segments);
+  if (segmentsRef.current !== segments) segVersion.current++;
   segmentsRef.current = segments;
 
   // Fokus setzen (z. B. auf ausgewählten Einsatz)
@@ -391,24 +394,117 @@ export function MapView(props: Props) {
         return tiles;
       };
 
-      // Hintergrund, Straßen und Straßennamen nur neu zeichnen, wenn sich Ansicht oder Karte ändern
+      const isSel = (kind: HitKind, id: string) => p.editor?.selected?.kind === kind && p.editor.selected.id === id;
+
+      // Ortsnamen, Objekte, Kliniken und Wachen: ändern sich nur mit der Ansicht (außer im Editor)
+      const drawStatic = (ctx: CanvasRenderingContext2D) => {
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        // Ortsnamen
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (const t of scn.towns) {
+          const [x, y] = toScreen(t);
+          const big = t.radius > 1200;
+          ctx.font = `${big ? 'bold ' : ''}${big ? 17 : 14}px "Segoe UI", sans-serif`;
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+          const ty = y - t.radius * v.scale * (v.scale > 0.28 ? 0.85 : 1.08) - 10;
+          ctx.strokeText(t.name, x, ty);
+          ctx.fillStyle = '#2b2b2b';
+          ctx.fillText(t.name, x, ty);
+          if (p.editor?.selected?.kind === 'town' && p.editor.selected.id === t.id) {
+            ctx.strokeStyle = '#ff006e';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x, y, t.radius * v.scale, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+
+        // Objekte
+        for (const o of scn.objects) {
+          const [x, y] = toScreen(o);
+          ctx.fillStyle = o.bma ? '#9d4edd' : '#7a7a7a';
+          ctx.beginPath();
+          ctx.moveTo(x, y - 6);
+          ctx.lineTo(x + 6, y);
+          ctx.lineTo(x, y + 6);
+          ctx.lineTo(x - 6, y);
+          ctx.closePath();
+          ctx.fill();
+          if (isSel('object', o.id)) ring(ctx, x, y, 10);
+          if (v.scale > 0.35) label(ctx, o.name, x, y + 14, '#3c096c');
+        }
+
+        // Kliniken
+        for (const hsp of scn.hospitals) {
+          const [x, y] = toScreen(hsp);
+          ctx.fillStyle = '#0353a4';
+          ctx.fillRect(x - 9, y - 9, 18, 18);
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 13px sans-serif';
+          ctx.fillText('H', x, y + 1);
+          if (isSel('hospital', hsp.id)) ring(ctx, x, y, 14);
+          if (v.scale > 0.12) label(ctx, hsp.name, x, y + 18, '#023e7d');
+        }
+
+        // Wachen
+        for (const s of scn.stations) {
+          const [x, y] = toScreen(s);
+          const fw = s.kind === 'feuerwache';
+          ctx.fillStyle = fw ? '#c1121f' : '#ffffff';
+          ctx.strokeStyle = fw ? '#780000' : '#c1121f';
+          ctx.lineWidth = 2;
+          ctx.fillRect(x - 11, y - 8, 22, 16);
+          ctx.strokeRect(x - 11, y - 8, 22, 16);
+          ctx.fillStyle = fw ? '#fff' : '#c1121f';
+          ctx.font = 'bold 9px sans-serif';
+          ctx.fillText(fw ? 'FW' : 'RW', x, y + 1);
+          if (isSel('station', s.id)) ring(ctx, x, y, 15);
+          if (v.scale > 0.2) label(ctx, s.name, x, y - 16, '#7a0000');
+        }
+      };
+
+      // Hintergrund, Straßen, Straßennamen und Wachen liegen in einer zwischengespeicherten Ebene. Beim Verschieben und
+      // Zoomen wird diese Ebene nur verschoben bzw. skaliert und erst neu gezeichnet, wenn die Bewegung kurz ruht.
       const settings0 = getSettings();
-      const baseKey = [v.cx, v.cy, v.scale, w, h, dpr, segmentsRef.current, labelsRef.current, tileVersion, settings0.mapTiles, settings0.tileUrl, p.editor?.selected?.id].join('|');
+      const otherKey = [w, h, dpr, segVersion.current, labelsRef.current.length, settings0.mapTiles, settings0.tileUrl, p.editor?.selected?.id, scn.stations.length, scn.hospitals.length, scn.objects.length].join('|');
+      const viewKey = `${v.cx}|${v.cy}|${v.scale}`;
+      if (viewKey !== lastView.current.key) lastView.current = { key: viewKey, t: now };
+      const moving = now - lastView.current.t < 160;
       if (!layer.current || layer.current.width !== canvas.width || layer.current.height !== canvas.height) {
         layer.current = canvas.ownerDocument.createElement('canvas');
         layer.current.width = canvas.width;
         layer.current.height = canvas.height;
-        layerKey.current = '';
+        layerState.current = null;
       }
-      if (layerKey.current !== baseKey) {
+      const ls = layerState.current;
+      const stale = !ls || ls.other !== otherKey || ls.view !== viewKey || ls.tiles !== tileVersion;
+      const fast = !!ls && ls.other === otherKey && moving && !p.editor;
+      if (stale && !fast) {
         const lctx = layer.current.getContext('2d')!;
         lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         layerTiles.current = drawBase(lctx);
-        layerKey.current = baseKey;
+        if (!p.editor) drawStatic(lctx);
+        layerState.current = { other: otherKey, view: viewKey, tiles: tileVersion, cx: v.cx, cy: v.cy, scale: v.scale };
       }
       const tiles = layerTiles.current;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.drawImage(layer.current, 0, 0);
+      const L = layerState.current!;
+      if (L.view === viewKey) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(layer.current, 0, 0);
+      } else {
+        // Ebene der letzten Ansicht passend verschoben und skaliert
+        const k = v.scale / L.scale;
+        const tx = w / 2 - (k * w) / 2 + (L.cx - v.cx) * v.scale;
+        const ty = h / 2 - (k * h) / 2 + (L.cy - v.cy) * v.scale;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = '#e9e5da';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * tx, dpr * ty);
+        ctx.drawImage(layer.current, 0, 0, w, h);
+      }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       // Editor: Knoten
@@ -424,72 +520,7 @@ export function MapView(props: Props) {
         }
       }
 
-      // Ortsnamen
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      for (const t of scn.towns) {
-        const [x, y] = toScreen(t);
-        const big = t.radius > 1200;
-        ctx.font = `${big ? 'bold ' : ''}${big ? 17 : 14}px "Segoe UI", sans-serif`;
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-        const ty = y - t.radius * v.scale * (v.scale > 0.28 ? 0.85 : 1.08) - 10;
-        ctx.strokeText(t.name, x, ty);
-        ctx.fillStyle = '#2b2b2b';
-        ctx.fillText(t.name, x, ty);
-        if (p.editor?.selected?.kind === 'town' && p.editor.selected.id === t.id) {
-          ctx.strokeStyle = '#ff006e';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(x, y, t.radius * v.scale, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-      }
-
-      const isSel = (kind: HitKind, id: string) => p.editor?.selected?.kind === kind && p.editor.selected.id === id;
-
-      // Objekte
-      for (const o of scn.objects) {
-        const [x, y] = toScreen(o);
-        ctx.fillStyle = o.bma ? '#9d4edd' : '#7a7a7a';
-        ctx.beginPath();
-        ctx.moveTo(x, y - 6);
-        ctx.lineTo(x + 6, y);
-        ctx.lineTo(x, y + 6);
-        ctx.lineTo(x - 6, y);
-        ctx.closePath();
-        ctx.fill();
-        if (isSel('object', o.id)) ring(ctx, x, y, 10);
-        if (v.scale > 0.35) label(ctx, o.name, x, y + 14, '#3c096c');
-      }
-
-      // Kliniken
-      for (const hsp of scn.hospitals) {
-        const [x, y] = toScreen(hsp);
-        ctx.fillStyle = '#0353a4';
-        ctx.fillRect(x - 9, y - 9, 18, 18);
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 13px sans-serif';
-        ctx.fillText('H', x, y + 1);
-        if (isSel('hospital', hsp.id)) ring(ctx, x, y, 14);
-        if (v.scale > 0.12) label(ctx, hsp.name, x, y + 18, '#023e7d');
-      }
-
-      // Wachen
-      for (const s of scn.stations) {
-        const [x, y] = toScreen(s);
-        const fw = s.kind === 'feuerwache';
-        ctx.fillStyle = fw ? '#c1121f' : '#ffffff';
-        ctx.strokeStyle = fw ? '#780000' : '#c1121f';
-        ctx.lineWidth = 2;
-        ctx.fillRect(x - 11, y - 8, 22, 16);
-        ctx.strokeRect(x - 11, y - 8, 22, 16);
-        ctx.fillStyle = fw ? '#fff' : '#c1121f';
-        ctx.font = 'bold 9px sans-serif';
-        ctx.fillText(fw ? 'FW' : 'RW', x, y + 1);
-        if (isSel('station', s.id)) ring(ctx, x, y, 15);
-        if (v.scale > 0.2) label(ctx, s.name, x, y - 16, '#7a0000');
-      }
+      if (p.editor) drawStatic(ctx);
 
       // Handyortung (AML) und BMA-Positionen
       for (const c of p.data?.calls ?? []) {
@@ -582,6 +613,7 @@ export function MapView(props: Props) {
         if (u.task === 'station' && v.scale < (scn.stations.length > 40 ? 0.3 : 0.12)) continue;
         const pos = u.task === 'station' ? unitDrawPos(u, scn, units, v.scale) : shown.get(u.id) ?? u;
         const [x, y] = toScreen(pos);
+        if (x < -60 || x > w + 60 || y < -20 || y > h + 20) continue;
         const text = shortCallsign(u.callsign);
         ctx.font = 'bold 10px "Segoe UI", sans-serif';
         const tw = ctx.measureText(text).width + 16;
@@ -659,14 +691,28 @@ export function MapView(props: Props) {
 }
 
 /** Fahrzeuge auf der Wache nebeneinander unter dem Wachensymbol anordnen */
+// Position der Fahrzeuge auf der Wache: einmal je Zustandsstand berechnen statt für jedes Fahrzeug alle zu durchsuchen
+const slotCache = new WeakMap<UnitState[], { idx: Map<string, number>; stations: Map<string, Vec> }>();
 function unitDrawPos(u: UnitState, scn: Scenario, all: UnitState[], scale: number): Vec {
   if (u.task !== 'station') return u;
-  const st = scn.stations.find((s) => s.id === u.stationId);
+  let c = slotCache.get(all);
+  if (!c) {
+    const idx = new Map<string, number>();
+    const count = new Map<string, number>();
+    for (const x of all) {
+      if (x.task !== 'station') continue;
+      const n = count.get(x.stationId) ?? 0;
+      idx.set(x.id, n);
+      count.set(x.stationId, n + 1);
+    }
+    c = { idx, stations: new Map(scn.stations.map((s) => [s.id, s])) };
+    slotCache.set(all, c);
+  }
+  const st = c.stations.get(u.stationId);
   if (!st) return u;
-  const here = all.filter((x) => x.stationId === u.stationId && x.task === 'station');
-  const idx = here.indexOf(u);
-  const col = idx % 3;
-  const row = Math.floor(idx / 3);
+  const i = c.idx.get(u.id) ?? 0;
+  const col = i % 3;
+  const row = Math.floor(i / 3);
   return { x: st.x + ((col - 1) * 58) / scale, y: st.y + (24 + row * 19) / scale };
 }
 

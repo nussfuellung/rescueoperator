@@ -1,5 +1,5 @@
 // Autoritative Spielsimulation: Notrufe, Einsätze, Fahrzeuge, Funk, Wertung.
-import { FMS_TEXT, HILFSFRIST_MS, ensureStichworte, shortCallsign } from '../shared/catalog';
+import { AIR_SPEED, AIR_TURNOUT, FMS_TEXT, HILFSFRIST_MS, ensureStichworte, shortCallsign } from '../shared/catalog';
 import { aaoMitSchlagwort, findSchlagwort, formatSchlagwort, schlagwortByNr } from '../shared/schlagworte';
 import { RoadGraph, dist, nearestTown, reverseGeocode } from '../shared/geo';
 import { mulberry32 } from '../shared/mapgen';
@@ -27,6 +27,7 @@ import {
   BMA_REAL_LAGE,
   BMA_TEMPLATE,
   FIRST_NAMES,
+  KVB_UEBERGABE,
   FLOORS,
   LAST_NAMES,
   NOT_UNDERSTOOD,
@@ -76,9 +77,13 @@ interface Truth {
   wrongPlaceUntil?: number;
   callStart?: number;
   retries?: number;
+  /** Lage hat sich vor Ort entwickelt (Nachforderung bereits ausgewürfelt) */
+  eskaliert?: boolean;
 }
 
 const MISSED_AFTER_MS = 90_000;
+/** Anteil der Übergaben von der KVB (116117) an allen Notrufen */
+const KVB_SHARE = 0.06;
 const SPEAK_PENALTY_MS = 180_000;
 
 export interface GameEvents {
@@ -134,6 +139,7 @@ export class Game {
   private seq = { call: 0, inc: 100, radio: 0, player: 0 };
   private nextCallAt = 15_000;
   private nextBmaAt = 0;
+  private nextKvbAt = Infinity;
   private answerSum = 0;
   private hilfsSum = 0;
   private penalized = new Set<string>();
@@ -171,6 +177,7 @@ export class Game {
     this.checkDienst();
     this.nextBmaAt = this.expDelay(scn.settings.bmaPerHour);
     if (scn.settings.callsPerHour <= 0) this.nextCallAt = Infinity;
+    else this.nextKvbAt = this.expDelay(scn.settings.callsPerHour * KVB_SHARE);
   }
 
   // ---------- Hilfsfunktionen ----------
@@ -471,6 +478,66 @@ export class Game {
     return call;
   }
 
+  /** Übergabe der KVB (116117): Der Bereitschaftsdienst schickt einen Fall, der doch Rettungsdienst braucht */
+  spawnKvb(templateId?: string): CallState | null {
+    const id = templateId ?? this.pick(Object.keys(KVB_UEBERGABE));
+    const tpl = TEMPLATES.find((t) => t.id === id);
+    if (!tpl) return null;
+    const truth = this.buildTruth(tpl);
+    if (!truth) return null;
+    truth.callStart = this.time;
+    const call: CallState = {
+      id: `c${++this.seq.call}`,
+      phone: '116117',
+      kind: 'kvb',
+      state: 'ringing',
+      ringStart: this.time,
+      transcript: [],
+      asked: [],
+      kvb: {
+        text: `Übergabe KVB 116117: ${KVB_UEBERGABE[id]}. Patient ${truth.facts?.nachname ?? truth.name.split(' ')[1] ?? ''}, ${truth.alter} J.`,
+        x: truth.pos.x,
+        y: truth.pos.y,
+        address: truth.address,
+      },
+    };
+    this.calls.push(call);
+    this.callTruth.set(call.id, truth);
+    return call;
+  }
+
+  private transferKvb(player: Player, callId: string): string | void {
+    const call = this.calls.find((c) => c.id === callId);
+    if (!call || call.state !== 'active' || call.kind !== '112') return 'Kein aktives Notrufgespräch';
+    if (call.takerId !== player.id) return 'Das Gespräch führt ein anderer Calltaker';
+    if (call.incidentId) return 'Zu diesem Anruf gibt es bereits einen Einsatz';
+    const truth = this.callTruth.get(call.id)!;
+    call.transcript.push({ from: 'calltaker', text: 'Ich verbinde Sie mit dem ärztlichen Bereitschaftsdienst unter 116117, bitte bleiben Sie dran.', t: this.time });
+    call.transcript.push({ from: 'system', text: 'An die KVB (116117) weiterverbunden.', t: this.time });
+    call.state = 'ended';
+    call.endedAt = this.time;
+    call.typing = false;
+    call.toKvb = true;
+    if (truth.tpl.kvb) this.addScore(10, 'Anrufer richtig an den ärztlichen Bereitschaftsdienst vermittelt');
+    else if (truth.fake) this.addScore(-5, 'Fehlanruf an die KVB weiterverbunden');
+    else this.addScore(-30, `Notfall an die KVB weiterverbunden (richtig wäre ${truth.stichwort})`);
+  }
+
+  private requestPolice(player: Player, incidentId: string): string | void {
+    const inc = this.incident(incidentId);
+    if (!inc) return 'Einsatz nicht gefunden';
+    if (inc.polizei) return 'Polizei ist bereits verständigt';
+    inc.polizei = 'angefordert';
+    this.log(inc, `Polizei verständigt (${player.name})`);
+    const truth = this.incTruth.get(inc.id);
+    if (truth?.tpl.polizei) this.addScore(5, `${inc.nr}: Polizei verständigt`);
+    this.after(this.rand(4, 12) * 60_000, () => {
+      if (inc.status === 'abgeschlossen') return;
+      inc.polizei = 'vor Ort';
+      this.log(inc, 'Polizei vor Ort');
+    });
+  }
+
   // ---------- Aktionen ----------
   handle(playerId: string, action: Action): string | void {
     const player = this.players.find((p) => p.id === playerId);
@@ -506,6 +573,10 @@ export class Game {
         return this.ask(player, action.callId, action.question, action.text);
       case 'endCall':
         return this.endCall(player, action.callId);
+      case 'transferKvb':
+        return this.transferKvb(player, action.callId);
+      case 'requestPolice':
+        return this.requestPolice(player, action.incidentId);
       case 'createIncident':
         return this.createIncident(player, action);
       case 'updateIncident': {
@@ -626,6 +697,11 @@ export class Game {
       this.addScore(5, 'BMA-Auslösung angenommen');
       return;
     }
+    if (call.kind === 'kvb') {
+      call.transcript.push({ from: 'system', text: `${call.kvb!.text} – ${call.kvb!.address}`, t: this.time });
+      this.addScore(5, 'Übergabe der KVB angenommen');
+      return;
+    }
     this.addScore(Math.max(0, Math.round(15 - waited / 4)), `Notruf nach ${Math.round(waited)} s angenommen`);
     call.transcript.push({
       from: 'calltaker',
@@ -654,7 +730,7 @@ export class Game {
     const call = this.calls.find((c) => c.id === callId);
     if (!call || call.state !== 'active') return 'Kein aktives Gespräch';
     if (call.takerId !== player.id) return 'Das Gespräch führt ein anderer Calltaker';
-    if (call.kind === 'bma') return;
+    if (call.kind !== '112') return;
     const truth = this.callTruth.get(call.id)!;
     const q: QuestionId | null = question === 'frei' ? null : question;
     const said = freeText ? freeText.slice(0, 300) : q ? questionText(q) : '';
@@ -693,6 +769,7 @@ export class Game {
     const truth = this.callTruth.get(call.id)!;
     if (!call.incidentId) {
       if (truth.fake) this.addScore(10, 'Fehlanruf korrekt ohne Einsatz beendet');
+      else if (truth.tpl.kvb) this.addScore(-10, 'Anrufer nicht an den ärztlichen Bereitschaftsdienst (116117) vermittelt');
       else this.addScore(-25, 'Notruf beendet, ohne einen Einsatz anzulegen');
     }
   }
@@ -741,6 +818,8 @@ export class Game {
       if (truth.fake) {
         this.addScore(-15, `${inc.nr}: Einsatz zu einem Fehlanruf angelegt`);
         truth = this.genericTruth(inc, 'An der Einsatzstelle nichts feststellbar, vermutlich Fehlanruf.');
+      } else if (truth.tpl.kvb) {
+        this.addScore(-5, `${inc.nr}: Fall für den ärztlichen Bereitschaftsdienst (116117), Rettungsdienst wäre nicht nötig gewesen`);
       } else {
         // Wertung Stichwort
         const trueSw = this.scn.stichworte.find((s) => s.code === truth!.stichwort);
@@ -770,6 +849,7 @@ export class Game {
       this.incTruth.set(inc.id, this.genericTruth(inc, 'Keine besondere Lage, Einsatzstelle erkundet.'));
     }
     if (a.alarmUnitIds?.length) this.alarm(player, inc.id, a.alarmUnitIds);
+    else if (a.alarmAao) this.alarm(player, inc.id, this.proposal(inc.id).map((p) => p.unitId));
   }
 
   private genericTruth(inc: IncidentState, lage: string): Truth {
@@ -815,9 +895,10 @@ export class Game {
       u.hint = `Alarm: ${inc.schlagwort ?? `${inc.stichwort} ${inc.label}`} – ${inc.address}${inc.note ? ' – ' + inc.note : ''}`;
       const career = this.station(u).career || this.typeOf(u)?.org === 'RD';
       const atStation = u.status === 2 || u.baseStatus === 2;
+      const air = this.typeOf(u)?.air;
       u.timer = u.crewPlayerId
         ? undefined
-        : this.time + (atStation ? (career ? this.rand(40, 90) : this.rand(180, 330)) : this.rand(5, 12)) * 1000;
+        : this.time + (atStation ? (air ? this.rand(AIR_TURNOUT - 30, AIR_TURNOUT + 30) : career ? this.rand(40, 90) : this.rand(180, 330)) : this.rand(5, 12)) * 1000;
       inc.unitIds.push(u.id);
       alarmed.push(shortCallsign(u.callsign));
       this.radioMsg(this.scn.ilsName, u.callsign, `Alarmierung: ${inc.schlagwort ?? inc.stichwort} – ${inc.address}${inc.sondersignal === false ? ' – ohne Sondersignal' : ''}${inc.tmo ? ` – Einsatzgruppe ${this.tmoName(inc.tmo)}` : ''}`, 'system');
@@ -1102,6 +1183,16 @@ export class Game {
 
   // ---------- Bewegung ----------
   private startRoute(u: UnitState, to: Vec, emergency: boolean) {
+    if (this.typeOf(u)?.air) {
+      // Luftlinie, in Abschnitte geteilt, damit die Bewegung auf der Karte gleichmäßig ist
+      const d = dist(u, to);
+      const n = Math.max(2, Math.ceil(d / 500));
+      u.route = Array.from({ length: n + 1 }, (_, i) => ({ x: u.x + ((to.x - u.x) * i) / n, y: u.y + ((to.y - u.y) * i) / n }));
+      this.routeTimes.set(u.id, { times: u.route.map((_, i) => (d * i) / n / AIR_SPEED), t: 0 });
+      u.eta = this.time + (d / AIR_SPEED) * 1000;
+      u.routeIdx = 0;
+      return;
+    }
     const r = this.graph.route(u, to);
     const factor = (emergency ? 1.2 : 1) * (this.typeOf(u)?.speedFactor ?? 1);
     if (!r) {
@@ -1195,6 +1286,7 @@ export class Game {
   }
 
   private revealAndReport(inc: IncidentState, truth: Truth, u: UnitState) {
+    this.escalate(truth);
     if (!inc.lage) {
       inc.lage = truth.lage;
       this.log(inc, `Lage: ${truth.lage}`);
@@ -1209,10 +1301,38 @@ export class Game {
     this.after(this.rand(25, 60) * 1000, () => {
       if (u.incidentId !== inc.id) return;
       const missing = this.missingNeeds(inc, truth, false);
-      const req = missing.length ? ` Wir fordern nach: ${missing.join(', ')}.` : ' Weitere Kräfte nicht erforderlich.';
-      this.requestSpeak(u, missing.length ? 'nachforderung' : 'lage', `Lagemeldung: ${truth.lage}${req}`);
+      const pol = truth.tpl.polizei && !inc.polizei;
+      const req =
+        (missing.length ? ` Wir fordern nach: ${missing.join(', ')}.` : pol ? '' : ' Weitere Kräfte nicht erforderlich.') +
+        (pol ? ' Bitte Polizei verständigen.' : '');
+      this.requestSpeak(u, missing.length || pol ? 'nachforderung' : 'lage', `Lagemeldung: ${truth.lage}${req}`);
       truth.lastRequest = this.time;
+      if (pol)
+        this.after(this.rand(5, 8) * 60_000, () => {
+          if (inc.polizei || inc.status === 'abgeschlossen') return;
+          const v = inc.unitIds.map((id) => this.unit(id)!).find((x) => x && x.task === 'onScene' && !x.crewPlayerId);
+          if (v) this.requestSpeak(v, 'nachforderung', 'Die Polizei ist noch nicht vor Ort. Bitte Polizei verständigen.');
+        });
     });
+  }
+
+  /** Lageentwicklung vor Ort: Patient verschlechtert sich, Tragehilfe, zweiter Rettungsweg */
+  private escalate(truth: Truth) {
+    if (truth.eskaliert || truth.fake || truth.tpl === BMA_TEMPLATE || truth.tpl.kvb) return;
+    truth.eskaliert = true;
+    const has = (k: string) => this.units.some((x) => this.typeOf(x)?.fills.includes(k));
+    const r = this.rng();
+    if (truth.stichwort === 'RD 1' && truth.patients.length && r < 0.12 && has('NEF') && !truth.needs.NEF) {
+      truth.needs.NEF = 1;
+      truth.lage += ' Patient trübt zunehmend ein, Notarzt erforderlich.';
+      for (const p of truth.patients) p.pzc = p.pzc.slice(0, 5) + '1';
+    } else if (truth.patients.length && truth.tpl.where === 'wohnung' && r > 0.93 && has('HLF')) {
+      truth.needs.HLF = (truth.needs.HLF ?? 0) + 1;
+      truth.lage += ' Patient ca. 150 kg, 3. OG ohne Aufzug, Tragehilfe durch die Feuerwehr erforderlich.';
+    } else if (truth.stichwort.startsWith('B 3') && r > 0.88 && has('DLK') && !truth.needs.DLK) {
+      truth.needs.DLK = 1;
+      truth.lage += ' Personen am Fenster, zweiter Rettungsweg über Drehleiter erforderlich.';
+    }
   }
 
   /** Fehlende Kräfte; onSceneOnly = nur bereits eingetroffene Fahrzeuge zählen */
@@ -1350,6 +1470,7 @@ export class Game {
     this.score.incidentsClosed++;
     const truth = this.incTruth.get(inc.id);
     if (truth?.workDone) this.addScore(10, `${inc.nr}: Einsatz erfolgreich abgearbeitet`);
+    if (truth?.tpl.polizei && !truth.fake && !inc.polizei) this.addScore(-5, `${inc.nr}: Polizei nicht verständigt`);
     else if (manual && truth && truth.stichwort && truth.tpl !== BMA_TEMPLATE) this.addScore(-15, `${inc.nr}: Einsatz vorzeitig geschlossen`);
   }
 
@@ -1450,6 +1571,10 @@ export class Game {
     if (this.time >= this.nextBmaAt) {
       this.spawnBma();
       this.nextBmaAt = this.time + this.expDelay(this.scn.settings.bmaPerHour);
+    }
+    if (this.time >= this.nextKvbAt) {
+      this.spawnKvb();
+      this.nextKvbAt = this.time + this.expDelay(this.scn.settings.callsPerHour * KVB_SHARE);
     }
 
     // unbeantwortete Anrufe

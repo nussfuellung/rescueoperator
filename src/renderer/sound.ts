@@ -4,7 +4,7 @@ import { getSettings } from './settings';
 let ctx: AudioContext | null = null;
 let muted = false;
 
-function audio(): AudioContext | null {
+export function audio(): AudioContext | null {
   try {
     ctx ??= new AudioContext();
     if (ctx.state === 'suspended') void ctx.resume();

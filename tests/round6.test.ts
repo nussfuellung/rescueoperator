@@ -45,8 +45,9 @@ describe('lstsim-Liste', () => {
     // Landkreis-Doppelnamen wie "RK MSP 71/1" neben dem Ortsrufnamen fallen weg
     expect(cs.filter((c) => c.startsWith('Rotkreuz Main-Spessart 71'))).toEqual([]);
     expect(v.find((x) => x.callsign === 'Rotkreuz Kitzingen 71/1')?.dienst?.length).toBe(3);
-    // Keine Hubschrauber und keine inaktiven ELRD-Fahrzeuge
-    expect(cs.some((c) => /Christoph|10\/1 \(ELRD/.test(c))).toBe(false);
+    // Keine inaktiven ELRD-Fahrzeuge, Christoph 18 als RTH
+    expect(cs.some((c) => /10\/1 \(ELRD/.test(c))).toBe(false);
+    expect(v.find((x) => x.callsign === 'Christoph 18')?.type).toBe('RTH');
   });
 });
 

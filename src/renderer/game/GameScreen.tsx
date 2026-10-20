@@ -13,7 +13,7 @@ import { CrewView } from './CrewView';
 import { PANEL_TITLES, Popout, type PanelId } from '../Popout';
 import { SettingsModal, useSttAutoload } from '../SettingsModal';
 import { getSettings } from '../settings';
-import { radioSpeech, say, stopSpeaking } from '../audio/tts';
+import { piperInfo, radioSpeech, say, stopSpeaking } from '../audio/tts';
 import { attachPttKeys, speechInput } from '../audio/stt';
 import { buildVocab } from '../../../shared/speechfix';
 import { radioName } from '../../../shared/catalog';
@@ -42,6 +42,8 @@ export interface GameCtx {
   setFormManual: (v: boolean) => void;
   /** BMA-Anruf, zu dem die Einsatzmaske gehört */
   formCallId: string | null;
+  /** Web-App auf Tablet oder Handy: keine Karte und keine Einsatzmaske */
+  mobile?: boolean;
   setFormCallId: (id: string | null) => void;
 }
 
@@ -370,6 +372,10 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
 export function useReadAloud(state: PublicState | undefined, me: string | undefined, ilsName: string, only: { radio?: boolean; caller?: boolean } = { radio: true, caller: true }) {
   const lastRadio = useRef<number | null>(null);
   const lastCaller = useRef(new Map<string, number>());
+  // Beim Verbinden nachsehen, ob der Server Piper-Stimmen hat
+  useEffect(() => {
+    if (state) void piperInfo();
+  }, [!!state]);
   useEffect(() => {
     if (!state) return;
     const s = getSettings();
@@ -382,9 +388,9 @@ export function useReadAloud(state: PublicState | undefined, me: string | undefi
       if (!s.readRadio || !only.radio || m.kind !== 'voice') continue;
       // Eigene Funksprüche nicht vorlesen; Besatzungen hören die Leitstelle
       if (myCallsign) {
-        if (m.from === ilsName && m.to === myCallsign) say(`Leitstelle: ${m.text}`, 'radio');
+        if (m.from === ilsName && m.to === myCallsign) say(`Leitstelle: ${m.text}`, 'radio', false, ilsName);
       } else if (m.from !== ilsName) {
-        say(radioSpeech(m.from, m.text), 'radio');
+        say(radioSpeech(m.from, m.text), 'radio', false, m.from);
       }
     }
     lastRadio.current = maxId;
@@ -394,7 +400,7 @@ export function useReadAloud(state: PublicState | undefined, me: string | undefi
       c.transcript.forEach((l, i) => {
         if (i < seen || l.from !== 'caller' || !s.readCaller || !only.caller) return;
         const text = l.text.replace(/\([^)]*\)/g, '').trim();
-        if (text) say(text, 'caller');
+        if (text) say(text, 'caller', false, c.id);
       });
       lastCaller.current.set(c.id, c.transcript.length);
     }

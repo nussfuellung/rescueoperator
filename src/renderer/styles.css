@@ -1633,3 +1633,5 @@ button.attention { border-color: var(--accent); color: var(--accent); }
 .ivena-cell.an { background: rgba(63, 185, 80, 0.25); }
 .ivena-cell.ab { background: rgba(209, 36, 47, 0.4); font-weight: 600; }
 .ivena-cell.none { background: repeating-linear-gradient(45deg, transparent 0 4px, rgba(139, 154, 171, 0.15) 4px 8px); }
+.call-row.ringing.kvb { border-color: #2a9d8f; }
+.polizei-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: #1d3557; color: #fff; }

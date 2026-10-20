@@ -1,7 +1,7 @@
 // Einsatzliste, Einsatzdetails und Disposition nach AAO.
 import { aaoMitSchlagwort } from '../../../shared/schlagworte';
 import { useEffect, useMemo, useState } from 'react';
-import { FMS_COLOR, FMS_TEXT, formatClock, formatDuration, shortCallsign } from '../../../shared/catalog';
+import { AIR_SPEED, AIR_TURNOUT, FMS_COLOR, FMS_TEXT, formatClock, formatDuration, shortCallsign } from '../../../shared/catalog';
 import { computeProposal } from '../../../shared/dispatch';
 import type { IncidentState } from '../../../shared/types';
 import { conn } from '../net';
@@ -61,6 +61,7 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
         const n = graph.nearestNode(u);
         const t = types.get(u.type);
         const st = scn.stations.find((s) => s.id === u.stationId);
+        if (t?.air) return { u, seconds: Math.hypot(u.x - inc.x, u.y - inc.y) / AIR_SPEED + (u.baseStatus === 2 ? AIR_TURNOUT : 8) };
         const turnout = u.baseStatus === 2 ? (st?.career || t?.org === 'RD' ? 60 : 250) : 8;
         return { u, seconds: (n >= 0 ? time[n] : Infinity) / (1.2 * (t?.speedFactor ?? 1)) + turnout };
       })
@@ -132,6 +133,17 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
           ))}
         </select>
         {inc.patients > 0 && <span className="muted small">{inc.patients} Pat.</span>}
+        {inc.polizei ? (
+          <span className="polizei-tag" title="Polizei verständigt">
+            Polizei {inc.polizei === 'vor Ort' ? 'vor Ort' : 'verständigt'}
+          </span>
+        ) : (
+          inc.status !== 'abgeschlossen' && (
+            <button className="small-btn" onClick={() => conn.send({ a: 'requestPolice', incidentId: inc.id })} title="Polizei zum Einsatz verständigen (110)">
+              🚓 Polizei
+            </button>
+          )
+        )}
         <select
           className="tmo-select"
           title="Einsatz-Rufgruppe (TMO)"

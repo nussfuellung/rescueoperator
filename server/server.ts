@@ -8,6 +8,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import type { ClientMsg, ServerMsg } from '../shared/protocol';
 import type { Scenario } from '../shared/types';
 import { Game } from './game';
+import { Piper } from './tts';
 
 export class GameServer {
   game: Game;
@@ -20,6 +21,9 @@ export class GameServer {
   port = 0;
   /** Verzeichnis der gebauten Oberfläche, die Tablets im LAN als Web-App laden */
   staticDir?: string;
+  /** Neuronale Sprachausgabe; wird beim ersten Abruf gesucht */
+  private piper?: Piper;
+  private piperTest?: Promise<boolean>;
 
   constructor(scenario: Scenario, seed?: number) {
     this.game = new Game(scenario, {
@@ -32,7 +36,10 @@ export class GameServer {
 
   start(port: number): Promise<number> {
     return new Promise((resolve, reject) => {
-      this.http = createServer((req, res) => this.serveStatic(req, res));
+      this.http = createServer((req, res) => {
+        if ((req.url ?? '').startsWith('/tts')) void this.serveTts(req, res);
+        else this.serveStatic(req, res);
+      });
       this.wss = new WebSocketServer({ server: this.http, maxPayload: 1 << 20 });
       this.wss.on('connection', (ws) => this.onConnection(ws));
       this.http.once('error', reject);
@@ -51,6 +58,34 @@ export class GameServer {
         resolve(this.port);
       });
     });
+  }
+
+  /** Sprachausgabe für Oberfläche und Tablets: /tts/info und /tts?stimme=…&tempo=…&text=… */
+  private async serveTts(req: IncomingMessage, res: ServerResponse) {
+    const head = { 'access-control-allow-origin': '*', 'cache-control': 'no-store' };
+    this.piper ??= new Piper(this.staticDir ? [this.staticDir] : []);
+    this.piperTest ??= this.piper.selfTest();
+    const ok = await this.piperTest;
+    const url = new URL(req.url ?? '/', 'http://x');
+    if (url.pathname === '/tts/info') {
+      res.writeHead(200, { ...head, 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ...this.piper.info(), available: ok && this.piper.available }));
+      return;
+    }
+    const text = url.searchParams.get('text') ?? '';
+    if (!ok || !text) {
+      res.writeHead(503, head);
+      res.end();
+      return;
+    }
+    try {
+      const wav = await this.piper.synth(text, url.searchParams.get('stimme') ?? '', Math.max(0.6, Math.min(1.6, Number(url.searchParams.get('tempo')) || 1)));
+      res.writeHead(200, { ...head, 'content-type': 'audio/wav', 'content-length': wav.length });
+      res.end(wav);
+    } catch {
+      res.writeHead(500, head);
+      res.end();
+    }
   }
 
   /** Liefert die Web-App an Tablets und Handys im selben Netz aus */

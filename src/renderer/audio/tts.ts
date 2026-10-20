@@ -1,12 +1,128 @@
-// Sprachausgabe mit Warteschlange: Browser-Stimmen (Web Speech) oder Systemstimme über Electron.
+// Sprachausgabe mit Warteschlange: Piper-Stimmen vom Spielserver, Browser-Stimmen (Web Speech) oder Systemstimme über Electron.
+import { conn } from '../net';
 import { getSettings } from '../settings';
-import { isMuted } from '../sound';
+import { audio, isMuted } from '../sound';
 
 export type Voice = 'radio' | 'caller';
 
 interface Item {
   text: string;
   voice: Voice;
+  /** Sprecher (Funkrufname oder Anruf), damit jeder seine eigene Stimme behält */
+  speaker?: string;
+  /** Vorab angeforderte Piper-Ausgabe */
+  wav?: Promise<ArrayBuffer | null>;
+}
+
+// ---------- Piper (neuronale Stimmen, erzeugt vom Spielserver) ----------
+interface PiperInfo {
+  available: boolean;
+  stimmen: { id: string; name: string; geschlecht: 'm' | 'w' }[];
+}
+let piper: { base: string; info: Promise<PiperInfo | null>; value?: PiperInfo | null } | null = null;
+
+function httpBase(): string | null {
+  const url = conn.snap.url;
+  return url ? url.replace(/^ws/, 'http').replace(/\/+$/, '') : null;
+}
+
+/** Fragt den Server einmal, ob Piper-Stimmen bereitstehen */
+export function piperInfo(): Promise<PiperInfo | null> {
+  const base = httpBase();
+  if (!base) return Promise.resolve(null);
+  if (piper?.base !== base) {
+    const p: NonNullable<typeof piper> = {
+      base,
+      info: fetch(`${base}/tts/info`)
+        .then((r) => (r.ok ? (r.json() as Promise<PiperInfo>) : null))
+        .catch(() => null)
+        .then((v) => (p.value = v)),
+    };
+    piper = p;
+  }
+  return piper.info;
+}
+
+function piperReady() {
+  return !!piper && piper.base === httpBase() && !!piper.value?.available;
+}
+
+function hash(s: string) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function pickStimme(item: Item): string {
+  const all = piper?.value?.stimmen ?? [];
+  if (!all.length) return '';
+  const key = item.speaker ?? item.voice;
+  return all[hash(key) % all.length].id;
+}
+
+function fetchPiper(item: Item): Promise<ArrayBuffer | null> {
+  const base = httpBase();
+  if (!base) return Promise.resolve(null);
+  const q = new URLSearchParams({ text: item.text, stimme: pickStimme(item), tempo: item.voice === 'radio' ? '1.1' : '1' });
+  return fetch(`${base}/tts?${q}`)
+    .then((r) => (r.ok ? r.arrayBuffer() : null))
+    .catch(() => null);
+}
+
+let currentSource: AudioBufferSourceNode | null = null;
+
+/** Spielt die WAV ab; Funk klingt nach Funkgerät, Anrufer nach Telefon */
+async function playWav(data: ArrayBuffer, voice: Voice): Promise<boolean> {
+  const c = audio();
+  if (!c) return false;
+  const buf = await c.decodeAudioData(data.slice(0)).catch(() => null);
+  if (!buf) return false;
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const hp = c.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = voice === 'radio' ? 350 : 300;
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = voice === 'radio' ? 2800 : 3400;
+  const gain = c.createGain();
+  gain.gain.value = 0.9;
+  let node: AudioNode = src.connect(hp).connect(lp);
+  if (voice === 'radio') {
+    // leichte Übersteuerung wie beim Handfunkgerät
+    const shaper = c.createWaveShaper();
+    const curve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) {
+      const x = (i / 255) * 2 - 1;
+      curve[i] = Math.tanh(x * 2.2) / Math.tanh(2.2);
+    }
+    shaper.curve = curve;
+    node = node.connect(shaper);
+    squelch(c, c.currentTime);
+  }
+  node.connect(gain).connect(c.destination);
+  const start = c.currentTime + (voice === 'radio' ? 0.12 : 0);
+  src.start(start);
+  currentSource = src;
+  return new Promise((resolve) => {
+    src.onended = () => {
+      if (voice === 'radio') squelch(c, c.currentTime);
+      if (currentSource === src) currentSource = null;
+      resolve(true);
+    };
+  });
+}
+
+/** Kurzes Rauschen beim Drücken und Loslassen der Sprechtaste */
+function squelch(c: AudioContext, at: number) {
+  const len = Math.floor(c.sampleRate * 0.09);
+  const b = c.createBuffer(1, len, c.sampleRate);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * 0.05 * (1 - i / len);
+  const s = c.createBufferSource();
+  s.buffer = b;
+  s.connect(c.destination);
+  s.start(at);
 }
 
 const queue: Item[] = [];
@@ -40,8 +156,10 @@ function systemAvailable() {
   return !!window.lst?.ttsSpeak;
 }
 
-function chooseEngine(): 'browser' | 'system' | null {
+function chooseEngine(): 'piper' | 'browser' | 'system' | null {
   const s = getSettings();
+  if (s.ttsEngine === 'piper') return piperReady() ? 'piper' : null;
+  if (s.ttsEngine === 'auto' && piperReady()) return 'piper';
   const hasBrowser = 'speechSynthesis' in window && germanVoices().length > 0 && !browserBroken;
   if (s.ttsEngine === 'browser') return 'speechSynthesis' in window ? 'browser' : null;
   if (s.ttsEngine === 'system') return systemAvailable() ? 'system' : null;
@@ -104,7 +222,15 @@ async function pump() {
   try {
     const engine = chooseEngine();
     let ok = false;
-    if (engine === 'browser') {
+    if (engine === 'piper') {
+      const wav = await (item.wav ?? fetchPiper(item));
+      ok = !!wav && (await playWav(wav, item.voice));
+      // Server liefert nichts: auf Browser- oder Systemstimme ausweichen
+      if (!ok && getSettings().ttsEngine === 'auto') {
+        if (piper) piper.value = null;
+        ok = systemAvailable() ? await speakSystem(item) : await speakBrowser(item);
+      }
+    } else if (engine === 'browser') {
       ok = await speakBrowser(item);
       if (!ok && getSettings().ttsEngine === 'auto') {
         browserBroken = true;
@@ -122,33 +248,44 @@ async function pump() {
 
 let lastResult: string | null = null;
 
-/** Liefert, welche Ausgabe zuletzt funktioniert hat ("browser", "system" oder "fehler") */
+/** Liefert, welche Ausgabe zuletzt funktioniert hat ("piper", "browser", "system" oder "fehler") */
 export function lastTtsResult() {
   return lastResult;
 }
 
-export function say(text: string, voice: Voice = 'radio', force = false) {
+export function say(text: string, voice: Voice = 'radio', force = false, speaker?: string) {
   const s = getSettings();
   if (!force && (!s.ttsEnabled || isMuted())) return;
   const clean = text.replace(/\s+/g, ' ').trim();
   if (!clean) return;
   // Bei Rückstau alte Funksprüche verwerfen, damit die Ausgabe aktuell bleibt
   if (queue.length > 4) queue.splice(0, queue.length - 4);
-  queue.push({ text: clean, voice });
+  const item: Item = { text: clean, voice, speaker };
+  void piperInfo();
+  // Piper-Ausgabe schon anfordern, während noch etwas anderes gesprochen wird
+  if (piperReady() && getSettings().ttsEngine !== 'browser' && getSettings().ttsEngine !== 'system') item.wav = fetchPiper(item);
+  queue.push(item);
   void pump();
 }
 
 export function stopSpeaking() {
   queue.length = 0;
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  try {
+    currentSource?.stop();
+  } catch {
+    /* schon beendet */
+  }
   window.lst?.ttsStop?.();
 }
 
 export function ttsInfo() {
+  void piperInfo();
   return {
     browserVoices: germanVoices().map((v) => v.name),
     allBrowserVoices: 'speechSynthesis' in window ? window.speechSynthesis.getVoices().length : 0,
     system: systemAvailable(),
+    piper: piperReady() ? (piper?.value?.stimmen ?? []).map((v) => v.name) : null,
   };
 }
 
