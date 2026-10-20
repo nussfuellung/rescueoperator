@@ -21,6 +21,7 @@ export const DEFAULT_VEHICLE_TYPES: VehicleType[] = [
   { id: 'KTW', label: 'KTW', org: 'RD', funkNr: 72, fills: ['KTW'], speedFactor: 1.0, transport: true },
   { id: 'NEF', label: 'NEF', org: 'RD', funkNr: 76, fills: ['NEF'], speedFactor: 1.15 },
   { id: 'HVO', label: 'First Responder', org: 'RD', funkNr: 79, fills: ['HVO'], speedFactor: 1.1 },
+  { id: 'GWW', label: 'GW-Wasserrettung', org: 'FW', funkNr: 91, fills: ['GWW'], speedFactor: 0.9 },
 ];
 
 // Einsatzstichworte angelehnt an die bayerische Alarmierungsbekanntmachung.

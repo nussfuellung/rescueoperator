@@ -8,6 +8,7 @@ import { api, type ScenarioInfo } from '../api';
 import { MapView, type Hit } from '../MapView';
 import { OsmImportDialog } from './OsmImportDialog';
 import { applyFleetText, assignFleet, ensureTmo } from '../../../shared/fleet';
+import { applyLstsim } from '../../../shared/lstsim';
 import type { TmoGroup } from '../../../shared/types';
 
 export function EditorScreen({ onBack }: { onBack: () => void }) {
@@ -860,13 +861,15 @@ function FleetTab({ scn, changed }: { scn: Scenario; changed: () => void }) {
       <p className="small muted">
         Liste mit Funkrufnamen hier einfügen, z. B. von lstsim.de die Fahrzeugübersicht der Leitstelle markieren und kopieren. Erkannt wird alles wie
         „Florian Kitzingen 40/1“ oder „Rotkreuz Würzburg 71/3“, der Typ ergibt sich aus der Kennzahl. Genannte Wachen bekommen genau diese Fahrzeuge, fehlende
-        Wachen werden am Ortsmittelpunkt angelegt.
+        Wachen werden am Ortsmittelpunkt angelegt. Die Wachenliste von lstsim.de mit Koordinaten und Dienstzeiten wird erkannt: Sie ersetzt Rettungswachen,
+        NEF-Standorte, HvO und Berufsfeuerwehr samt Schichtplan.
       </p>
       <textarea rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder={'Florian Kitzingen 12/1\nFlorian Kitzingen 40/1\nRotkreuz Kitzingen 71/1\n…'} />
       <button
         disabled={!text.trim()}
         onClick={() => {
-          setOut(applyFleetText(scn, text));
+          // Wachenliste von lstsim.de (mit Koordinaten und Dienstzeiten) oder einfache Funkrufnamen
+          setOut(/^Koordinaten:/m.test(text) ? applyLstsim(scn, text).notes : applyFleetText(scn, text));
           changed();
         }}
       >

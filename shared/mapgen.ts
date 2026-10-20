@@ -423,7 +423,8 @@ export function validateScenario(scn: Scenario): string[] {
   const ids = new Set<string>();
   for (const s of scn.stations)
     for (const v of s.vehicles) {
-      if (callsigns.has(v.callsign)) problems.push(`Funkrufname doppelt: ${v.callsign}`);
+      // Wechselnde Standorte mit Schichtplan (z. B. NEF in geraden/ungeraden Wochen) dürfen den Rufnamen teilen
+      if (callsigns.has(v.callsign) && !v.dienst?.length) problems.push(`Funkrufname doppelt: ${v.callsign}`);
       callsigns.add(v.callsign);
       if (ids.has(v.id)) problems.push(`Fahrzeug-ID doppelt: ${v.id} (${v.callsign})`);
       ids.add(v.id);

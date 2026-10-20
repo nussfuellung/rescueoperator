@@ -6,8 +6,9 @@ import type { Scenario, Station, TmoGroup, VehicleDef, VehicleTypeId } from './t
 /** Organisationskenner im Funkrufnamen je Hilfsorganisation */
 export function rdPrefix(stationName: string): string {
   if (/\bASB\b|samariter/i.test(stationName)) return 'Sama';
-  if (/johanniter|\bJUH\b/i.test(stationName)) return 'Johannes';
-  if (/malteser|\bMHD\b/i.test(stationName)) return 'Malteser';
+  // In Bayern funken die Johanniter als "Akkon", die Malteser als "Johannes"
+  if (/johanniter|\bJUH\b/i.test(stationName)) return 'Akkon';
+  if (/malteser|\bMHD\b/i.test(stationName)) return 'Johannes';
   return 'Rotkreuz';
 }
 

@@ -2,7 +2,7 @@
 
 Multiplayer-Leitstellensimulator nach dem Vorbild der bayerischen Integrierten Leitstellen (ILS). Mehrere Spieler besetzen gemeinsam eine Leitstelle im LAN: Notrufe annehmen und abfragen, Einsätze anlegen, Fahrzeuge nach Alarm- und Ausrückeordnung (AAO) alarmieren, Funkverkehr mit FMS-Status führen und Patienten in passende Kliniken bringen. Ein Editor erlaubt eigene Leitstellenbereiche mit simuliertem GIS.
 
-Stand: fünfter Playtest-Build (Version 0.5.0). Neu: Telefon und Funk lassen sich als Web-App auf ein iPad, Tablet oder Handy im selben WLAN auslagern, und das Release enthält Startdateien für Windows, Linux (z. B. CachyOS) und macOS in einem Ordner.
+Stand: sechster Playtest-Build (Version 0.6.0). Neu: Rettungsdienst, NEF-Standorte, HvO und Berufsfeuerwehr der ILS Würzburg nach der lstsim.de-Liste mit echten Standorten und Dienstzeiten, Fahrzeuge antworten im Funk passend, 19 neue Einsatzarten mit weniger Wiederholungen, häufiger AML-Ortung und ein Adressvorschlag ohne zweites Enter. Seit 0.5.0: Telefon und Funk auf Tablet oder Handy und Startdateien für Windows, Linux und macOS.
 
 ## Schnellstart
 
@@ -84,7 +84,7 @@ Unter **⚙ Einstellungen** (im Hauptmenü und oben rechts im Spiel) lässt sich
 
 ### Musterleitstelle ILS Würzburg
 
-Mitgeliefert ist der Bereich der ILS Würzburg (Stadt Würzburg, Landkreise Würzburg, Kitzingen und Main-Spessart) auf echter Karte: rund 60.000 Straßenabschnitte mit Namen, Tempolimits und Einbahnstraßen, gut 400 Orte, die Feuerwehren und Rettungswachen aus den Kartendaten (fehlende Rettungswachen in Kleinstädten ergänzt) und die Kliniken Universitätsklinikum, Juliusspital, König-Ludwig-Haus, Missioklinik, Main-Klinik Ochsenfurt und Klinik Kitzinger Land. Die Fahrzeuge tragen Funkrufnamen nach den bayerischen Fahrzeugkennzahlen (10 KdoW, 11 MZF, 12 ELW 1, 21 TLF 3000, 30 DLK, 40 HLF 20, 42 HLF 10, 43 LF 10, 44 TSF, 46 TSF-W, 47 MLF, 56 GW-L2, 61 RW, 71 RTW, 72 KTW, 76 NEF, 79 First Responder). Die Belegung folgt dem bayerischen Muster und ist geschätzt: Berufsfeuerwehr Würzburg, Kreisstädte (Kitzingen, Karlstadt, Lohr, Marktheidenfeld, Ochsenfurt, Gemünden) voll ausgestattet, Stützpunktwehren mit MZF, HLF und teils DLK, Ortsteilwehren mit TSF, TSF-W oder MLF, Notärzte in Würzburg, Kitzingen, Ochsenfurt, Marktheidenfeld, Karlstadt, Lohr und Gemünden. Die echte Belegung lässt sich im Editor einfügen (siehe „Fahrzeuge/Funk“).
+Mitgeliefert ist der Bereich der ILS Würzburg (Stadt Würzburg, Landkreise Würzburg, Kitzingen und Main-Spessart) auf echter Karte: rund 60.000 Straßenabschnitte mit Namen, Tempolimits und Einbahnstraßen, gut 400 Orte, die Feuerwehren und Rettungswachen aus den Kartendaten (fehlende Rettungswachen in Kleinstädten ergänzt) und die Kliniken Universitätsklinikum, Juliusspital, König-Ludwig-Haus, Missioklinik, Main-Klinik Ochsenfurt und Klinik Kitzinger Land. Die Fahrzeuge tragen Funkrufnamen nach den bayerischen Fahrzeugkennzahlen (10 KdoW, 11 MZF, 12 ELW 1, 21 TLF 3000, 30 DLK, 40 HLF 20, 42 HLF 10, 43 LF 10, 44 TSF, 46 TSF-W, 47 MLF, 56 GW-L2, 61 RW, 71 RTW, 72 KTW, 76 NEF, 79 First Responder). Rettungsdienst, Notarztstandorte, Helfer vor Ort, First-Responder-Gruppen und die Berufsfeuerwehr stammen aus der Wachenliste von lstsim.de: echte Standorte, Funkrufnamen wie Rotkreuz Arnstein 71/1, Akkon Würzburg 71/2 oder Johannes Uettingen 71/1 und Dienstzeiten mit Wochentagen und geraden/ungeraden Kalenderwochen. Außerhalb seiner Schicht steht ein Fahrzeug auf Status 6; ein laufender Einsatz wird zu Ende gefahren. NEF, die je nach Woche an verschiedenen Standorten stehen, sind immer nur an einem Ort im Dienst. Oben neben der Uhr stehen Wochentag und Kalenderwoche, in der Fahrzeugleiste beim ausgewählten Fahrzeug die Dienstzeiten. Nicht übernommen sind inaktive Einheiten (ELRD, OrgL, LNA, Bereitschaftszüge), SEG und UG-Rett ohne festen Standort, Absicherungs-Platzhalter und der Rettungshubschrauber Christoph 18. Die freiwilligen Feuerwehren folgen weiter dem bayerischen Muster und sind geschätzt: Kreisstädte (Kitzingen, Karlstadt, Lohr, Marktheidenfeld, Ochsenfurt, Gemünden) voll ausgestattet, Stützpunktwehren mit MZF, HLF und teils DLK, Ortsteilwehren mit TSF, TSF-W oder MLF, Notärzte in Würzburg, Kitzingen, Ochsenfurt, Marktheidenfeld, Karlstadt, Lohr und Gemünden. Die echte Belegung lässt sich im Editor einfügen (siehe „Fahrzeuge/Funk“).
 
 Funk läuft in TMO-Rufgruppen: RD WÜ 1 für den Rettungsdienst, FW WÜ 1, FW KT 1 und FW MSP 1 für die Feuerwehren der drei Landkreise, ILS WÜ Ü 1 übergreifend und WÜ EINS 1 bis 3 als Einsatzgruppen. Hausnummern sind entlang der Straßen geschätzt, weil die offenen Adressdaten Bayern noch nicht enthalten. Kartendaten © OpenStreetMap-Mitwirkende (ODbL), bezogen über Overture Maps.
 
@@ -112,6 +112,8 @@ Die Einsatzmaske ist an ELDIS III angelehnt, aber aufgeräumt:
 - **Alarmierungsvorschlag** schon vor dem Anlegen. **Anlegen und alarmieren** (`Strg+Enter`) erledigt beides auf einmal, **Nur anlegen** überlässt die Alarmierung dem Disponenten.
 
 ### Funk und TMO-Rufgruppen
+
+Computergesteuerte Fahrzeuge antworten auf Funksprüche passend: Anruf mit „… kommen“ („Arnstein 71/1 hört“), Standort („Wo seid ihr?“), Eintreffzeit, Status, Lage vor Ort, Nachforderung, Patient und Zielklinik, Einrücken zur Wache, Sondersignal und Notarzt an Bord.
 
 Jede Wache funkt in ihrer Rufgruppe. Oben im Funkbereich lassen sich Gruppen ein- und ausblenden (eine grün hinterlegte Gruppe ist gerade belegt), unten geht ein Gruppenruf an alle in einer Gruppe. Im Einsatz kann der Disponent eine Einsatzgruppe (z. B. WÜ EINS 1) zuweisen: Alle Fahrzeuge des Einsatzes bekommen die Anweisung zum Gruppenwechsel und melden sich dort, nachalarmierte Fahrzeuge schalten direkt um, nach dem Einsatz geht es zurück in die Heimatgruppe. Einzelne Fahrzeuge lassen sich in der Fahrzeugleiste umschalten. FMS-Status laufen unabhängig von der Gruppe. In der Fahrzeugleiste filtern Suche und Rufgruppe die vielen Wachen.
 
@@ -176,7 +178,7 @@ tests/     Vitest: GIS, Einsatzablauf, Spracherkennung, OSM-Import mit echten Da
 
 - Funk zwischen Spielern ist Text bzw. erkannte Sprache mit Vorlesen, keine echte Sprachübertragung.
 - Die Spracherkennung mit dem kleinen deutschen Modell versteht kurze, deutliche Sätze am besten; die Zuordnung zu den Abfragefragen läuft über Stichworte (wo, was passiert, atmet, wie alt, seit wann …).
-- Die Fahrzeugbelegung der ILS Würzburg ist nach bayerischem Muster geschätzt, nicht die echte.
+- Die Fahrzeuge der freiwilligen Feuerwehren in Würzburg sind nach bayerischem Muster geschätzt; Rettungsdienst und Berufsfeuerwehr stammen aus der lstsim-Liste.
 - Echte Karten: Sehr große Gebiete (über 15 km Umkreis) sind nicht vorgesehen. Hausnummern gibt es nur, wo OpenStreetMap sie kennt; sonst werden sie entlang der Straße geschätzt.
 - Kein Verkehr, keine Polizei als eigene Organisation, keine Hubschrauber.
 - Eine laufende Schicht wird nicht gespeichert; Verlassen beendet sie für den Host.

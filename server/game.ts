@@ -6,6 +6,7 @@ import { computeProposal, coverage } from '../shared/dispatch';
 import type { Action } from '../shared/protocol';
 import type {
   CallState,
+  Dienstzeit,
   FmsStatus,
   IncidentState,
   Player,
@@ -19,6 +20,7 @@ import type {
   VehicleType,
 } from '../shared/types';
 import { ensureTmo } from '../shared/fleet';
+import { inDienst } from '../shared/lstsim';
 import {
   BMA_REAL_LAGE,
   BMA_TEMPLATE,
@@ -113,6 +115,11 @@ export class Game {
 
   private callTruth = new Map<string, Truth>();
   private incTruth = new Map<string, Truth>();
+  private recentTpl: string[] = [];
+  /** Dienstzeiten je Fahrzeug (nur Fahrzeuge mit Schichtplan) */
+  private dienst = new Map<string, Dienstzeit[]>();
+  private startDate: Date;
+  private lastDienstMinute = -1;
   private scheduled: { at: number; fn: () => void }[] = [];
   private seq = { call: 0, inc: 100, radio: 0, player: 0 };
   private nextCallAt = 15_000;
@@ -122,15 +129,18 @@ export class Game {
   private penalized = new Set<string>();
   private routeTimes = new Map<string, { times: number[]; t: number }>();
 
-  constructor(scn: Scenario, opts: { seed?: number; events?: GameEvents } = {}) {
+  constructor(scn: Scenario, opts: { seed?: number; events?: GameEvents; startDate?: Date } = {}) {
     this.scn = scn;
     this.graph = new RoadGraph(scn);
     this.types = new Map(scn.vehicleTypes.map((t) => [t.id, t]));
     this.rng = mulberry32(opts.seed ?? Date.now() & 0xffffffff);
     this.events = opts.events ?? {};
     ensureTmo(scn);
+    const d = opts.startDate ?? new Date();
+    this.startDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     for (const st of scn.stations) {
       for (const v of st.vehicles) {
+        if (v.dienst?.length) this.dienst.set(v.id, v.dienst);
         this.units.push({
           id: v.id,
           callsign: v.callsign,
@@ -147,6 +157,7 @@ export class Game {
         });
       }
     }
+    this.checkDienst();
     this.nextBmaAt = this.expDelay(scn.settings.bmaPerHour);
     if (scn.settings.callsPerHour <= 0) this.nextCallAt = Infinity;
   }
@@ -348,17 +359,31 @@ export class Game {
 
   private weightedTemplate(): IncidentTemplate {
     const usable = TEMPLATES.filter((t) => t.where !== 'objekt' || this.scn.objects.some((o) => !t.objectKinds || t.objectKinds.includes(o.kind)));
-    const total = usable.reduce((s, t) => s + t.weight, 0);
+    // Kürzlich gespielte Vorlagen seltener, damit sich Einsätze nicht ständig wiederholen
+    const w = (t: IncidentTemplate) => {
+      const i = this.recentTpl.lastIndexOf(t.id);
+      if (i < 0) return t.weight;
+      const age = this.recentTpl.length - i;
+      return t.weight * (age <= 3 ? 0.05 : age <= 8 ? 0.35 : 0.7);
+    };
+    const total = usable.reduce((s, t) => s + w(t), 0);
     let r = this.rng() * total;
+    let pick = usable[0];
     for (const t of usable) {
-      r -= t.weight;
-      if (r <= 0) return t;
+      r -= w(t);
+      if (r <= 0) {
+        pick = t;
+        break;
+      }
     }
-    return usable[0];
+    this.recentTpl.push(pick.id);
+    if (this.recentTpl.length > 14) this.recentTpl.shift();
+    return pick;
   }
 
   private ring(truth: Truth, again = false): CallState {
-    const mobile = this.rng() < 0.7;
+    // Heute kommen die meisten Notrufe vom Handy; moderne Smartphones senden fast immer eine AML-Ortung
+    const mobile = this.rng() < 0.8;
     const phone = mobile
       ? `0${this.pick(['151', '160', '170', '176'])} ${Math.floor(this.rand(1e6, 9e6))}`
       : `0${Math.floor(this.rand(8000, 9999))} ${Math.floor(this.rand(1000, 99999))}`;
@@ -371,7 +396,7 @@ export class Game {
       transcript: again ? [{ from: 'system', text: 'Anrufer ruft erneut an (vorheriger Anruf nicht angenommen).', t: this.time }] : [],
       asked: [],
     };
-    if (mobile && !truth.fake && this.rng() < 0.75) {
+    if (mobile && this.rng() < (truth.fake ? 0.6 : 0.92)) {
       const acc = Math.round(this.rand(30, 400));
       const ang = this.rand(0, Math.PI * 2);
       const off = this.rand(0, acc * 0.7);
@@ -538,7 +563,10 @@ export class Game {
         if (!text) return;
         this.radioMsg(this.scn.ilsName, u.callsign, text, 'voice');
         if (!u.crewPlayerId) {
-          this.after(this.rand(2500, 5000), () => this.radioMsg(u.callsign, this.scn.ilsName, 'Verstanden, kommen.', 'voice'));
+          this.after(this.rand(2500, 5000), () => {
+            const reply = this.radioReply(u, text);
+            if (reply) this.radioMsg(u.callsign, this.scn.ilsName, reply, 'voice');
+          });
         }
         return;
       }
@@ -811,6 +839,94 @@ export class Game {
     }
     this.returnToStation(u);
     if (inc) this.checkClose(inc);
+  }
+
+  /** Antwort einer computergesteuerten Besatzung auf einen Funkspruch der Leitstelle */
+  radioReply(u: UnitState, raw: string): string | null {
+    const t = raw
+      .toLowerCase()
+      .replace(/[.,!?;:]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const has = (re: RegExp) => re.test(t);
+    const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
+    const truth = inc ? this.incTruth.get(inc.id) : undefined;
+    const town = nearestTown(this.scn.towns, u)?.name ?? '';
+    const station = this.station(u);
+    const etaMin = u.eta ? Math.max(1, Math.round((u.eta - this.time) / 60000)) : undefined;
+    const hosp = u.hospitalId ? this.scn.hospitals.find((h) => h.id === u.hospitalId) : undefined;
+    const where = (() => {
+      switch (u.task) {
+        case 'station':
+          return `auf der Wache ${station.name.replace(/^(FF|BRK|Rettungswache)\s*/, '')}`;
+        case 'onScene':
+        case 'awaitHospital':
+          return `an der Einsatzstelle${inc ? ` ${inc.address}` : ''}`;
+        case 'atHospital':
+          return `am ${hosp?.name ?? 'Krankenhaus'}`;
+        default: {
+          const hit = reverseGeocode(this.scn, u);
+          return hit && hit.distance < 250 ? `${hit.street}${hit.town && !hit.street.includes(hit.town) ? ` in ${hit.town}` : ''}` : `bei ${town}`;
+        }
+      }
+    })();
+
+    // Ende oder Dank: keine Antwort nötig
+    if (has(/^(danke|ende|gut danke|alles klar ende)( ende)?$/)) return this.rng() < 0.4 ? 'Ende.' : null;
+    // Anruf "Florian ... von Leitstelle, kommen": Fahrzeug meldet sich
+    if (t.split(' ').length <= 9 && has(/kommen$/) && !has(/\b(wo|wann|wie|was|status|lage|eintreff|patient|klinik)/)) {
+      return this.pick([`${u.callsign} hört, kommen.`, `Hier ${u.callsign}, kommen.`, `${u.callsign} hört.`]);
+    }
+    if (has(/\b(wo (seid|sind|befindet|steht)|standort|position|aktuell(er)? ort)/)) {
+      const tail = etaMin && (u.task === 'toScene' || u.task === 'toHospital') ? `, Eintreffen in etwa ${etaMin} Minuten` : '';
+      return `Wir sind ${where}${tail}, kommen.`;
+    }
+    if (has(/\b(eintreff|ankunft|wie lange|wann (seid|sind|kommt|kommen)|eta|minuten bis)/)) {
+      if (u.task === 'toScene' || u.task === 'toHospital') return `Eintreffen in etwa ${etaMin ?? 5} Minuten${u.task === 'toHospital' && hosp ? ` am ${hosp.name}` : ''}, kommen.`;
+      if (u.task === 'alarmed') return 'Wir rücken gerade aus, melden Status 3, kommen.';
+      if (u.task === 'onScene' || u.task === 'awaitHospital') return 'Wir sind bereits an der Einsatzstelle, kommen.';
+      return `Wir sind ${where}, derzeit ohne Einsatz, kommen.`;
+    }
+    if (has(/\b(lage|rückmeldung|was ist (los|los vor ort)|situation|meldung von der einsatzstelle)/)) {
+      if (truth && (u.task === 'onScene' || u.task === 'awaitHospital')) {
+        const p = truth.patients.find((x) => x.unitId === u.id && !x.done);
+        return `${truth.lage}${p ? ` Wir versorgen: ${p.desc}.` : ''} Kommen.`;
+      }
+      if (inc) return 'Wir sind noch nicht vor Ort, Lagemeldung folgt, kommen.';
+      return 'Wir haben keinen Einsatz, keine besonderen Vorkommnisse, kommen.';
+    }
+    if (has(/\b(nachforder|weitere (kräfte|fahrzeuge|einheiten)|brauch(t|en) (ihr|sie)|unterstützung|reicht das)/)) {
+      if (!truth || !(u.task === 'onScene' || u.task === 'awaitHospital')) return 'Können wir erst vor Ort beurteilen, kommen.';
+      const missing = Object.entries(truth.needs).filter(([type, n]) => inc!.unitIds.filter((id) => this.unit(id)?.type === type).length < n);
+      return missing.length ? `Ja, wir benötigen noch ${missing.map(([type, n]) => `${n} ${type}`).join(' und ')}, kommen.` : 'Nein, die Kräfte reichen aus, kommen.';
+    }
+    if (has(/\b(patient|zustand|transport|klinik|krankenhaus|zielklinik|wohin)/)) {
+      const p = truth?.patients.find((x) => x.unitId === u.id && !x.done);
+      if (u.task === 'toHospital' && hosp) return `Wir transportieren ${p ? p.desc : 'den Patienten'} in das ${hosp.name}, kommen.`;
+      if (u.task === 'awaitHospital' && p) return `Patient: ${p.desc}. Wir benötigen eine Klinik mit ${p.specialty}, kommen.`;
+      if (u.hasPatient) return 'Patient ist stabil, wir sind transportbereit, kommen.';
+      return 'Wir haben keinen Patienten an Bord, kommen.';
+    }
+    if (has(/\bstatus\b|einsatzbereit|\bfrei\b|verfügbar/)) {
+      const label: Record<number, string> = { 1: 'frei über Funk', 2: 'einsatzbereit auf der Wache', 3: 'auf der Anfahrt', 4: 'am Einsatzort', 6: 'außer Dienst', 7: 'Patient aufgenommen', 8: 'am Transportziel' };
+      return `Wir sind Status ${u.status}, ${label[u.status] ?? 'im Einsatz'}, kommen.`;
+    }
+    if (has(/\b(einrücken|rückt ein|rücken ein|zurück (zur|auf die) wache|wache anfahren)/)) {
+      if (!u.incidentId && u.task !== 'station') {
+        this.returnToStation(u);
+        return 'Verstanden, rücken ein zur Wache.';
+      }
+      if (u.task === 'station') return 'Wir sind bereits auf der Wache, kommen.';
+      return 'Verstanden, wir rücken ein, sobald der Einsatz abgearbeitet ist.';
+    }
+    if (has(/ohne sondersignal|ohne sosi|sondersignal aus/)) return 'Verstanden, weiter ohne Sondersignal.';
+    if (has(/sondersignal|beeilt|dringend|zügig/)) return 'Verstanden, fahren mit Sondersignal.';
+    if (has(/\b(notarzt|arzt) (an bord|dabei|mit)/)) return u.type === 'NEF' ? 'Ja, Notarzt ist an Bord, kommen.' : 'Negativ, wir sind ohne Notarzt, kommen.';
+    if (has(/\b(besatzung|stärke|mann)\b/)) return `Besatzung ${this.pick(['1/5', '1/8', '1/2', '0/2', '0/3'])}, kommen.`;
+    if (has(/\b(wiederhol|nicht verstanden)/)) return u.speak?.text ? `Ich wiederhole: ${u.speak.text}` : 'Nichts weiter, kommen.';
+    if (has(/\?$/) || /\?\s*$/.test(raw)) return this.pick(['Bitte wiederholen, kommen.', 'Das können wir gerade nicht sagen, wir melden uns, kommen.', 'Kann ich nicht beurteilen, kommen.']);
+    if (has(/\b(fahrt|fahren sie|übernehmt|übernehmen sie|anfahren|alarm|einsatz)\b/)) return this.pick(['Verstanden, übernehmen.', 'Verstanden, sind unterwegs.', 'Habe verstanden, fahren an.']);
+    return this.pick(['Verstanden.', 'Verstanden, kommen.', 'Habe verstanden.', 'Verstanden, wird gemacht.', 'Alles klar, verstanden.']);
   }
 
   private tmoName(id?: string) {
@@ -1203,11 +1319,45 @@ export class Game {
     else if (manual && truth && truth.stichwort && truth.tpl !== BMA_TEMPLATE) this.addScore(-15, `${inc.nr}: Einsatz vorzeitig geschlossen`);
   }
 
+  /** Minute seit Mitternacht des Starttages */
+  private gameMinute() {
+    return Math.floor(this.scn.settings.startClock + this.time / 60000);
+  }
+
+  /** Schichtbeginn und -ende: freie Fahrzeuge auf der Wache gehen in Status 6 bzw. zurück in Status 2 */
+  private checkDienst() {
+    const minute = this.gameMinute();
+    if (minute === this.lastDienstMinute || !this.dienst.size) return;
+    this.lastDienstMinute = minute;
+    // Gleicher Rufname an mehreren Standorten (wechselnde NEF-Standorte): nur einer zur Zeit im Dienst
+    const active = new Map<string, UnitState>();
+    for (const u of this.units) {
+      if (u.task !== 'station' || u.incidentId) active.set(u.callsign, u);
+    }
+    for (const u of this.units) {
+      const plan = this.dienst.get(u.id);
+      if (!plan && !this.units.some((o) => o !== u && o.callsign === u.callsign)) continue;
+      let on = inDienst(plan, this.startDate, minute);
+      const other = active.get(u.callsign);
+      if (on && other && other !== u) on = false;
+      if (on && !other) active.set(u.callsign, u);
+      if (u.task !== 'station' || u.incidentId || u.crewPlayerId) continue;
+      if (!on && u.status === 2) {
+        u.status = 6;
+        u.baseStatus = 6;
+      } else if (on && u.status === 6) {
+        u.status = 2;
+        u.baseStatus = 2;
+      }
+    }
+  }
+
   // ---------- Takt ----------
   tick(realDtMs: number) {
     if (!this.running) return;
     const dt = realDtMs * this.speed;
     this.time += dt;
+    this.checkDienst();
 
     // geplante Ereignisse
     if (this.scheduled.length) {
@@ -1312,6 +1462,7 @@ export class Game {
       speed: this.speed,
       time: this.time,
       clockStart: this.scn.settings.startClock,
+      startDate: `${this.startDate.getFullYear()}-${String(this.startDate.getMonth() + 1).padStart(2, '0')}-${String(this.startDate.getDate()).padStart(2, '0')}`,
       players: this.players,
       calls: this.calls,
       incidents: this.incidents,

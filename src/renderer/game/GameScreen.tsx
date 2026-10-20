@@ -19,6 +19,7 @@ import { buildVocab } from '../../../shared/speechfix';
 import { radioName } from '../../../shared/catalog';
 import { MicStatus } from '../audio/SpeechUi';
 import { DeviceModal } from './DeviceModal';
+import { isoWeek } from '../../../shared/lstsim';
 
 export interface GameCtx {
   scn: Scenario;
@@ -189,6 +190,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
     <header className="topbar">
       <div className="brand">{scn.ilsName}</div>
       <div className="clock">{formatClock(state.clockStart, state.time)}</div>
+      {state.startDate && <div className="date small muted">{dayLabel(state.startDate, state.clockStart, state.time)}</div>}
       <div className="speed">
         <button
           onClick={() => conn.send(state.running ? { a: 'pause', paused: true } : state.started ? { a: 'pause', paused: false } : { a: 'start' })}
@@ -512,4 +514,13 @@ export function useSounds(state?: PublicState, only: { calls?: boolean; radio?: 
       }
     }
   }, [state]);
+}
+
+/** "Di 20.10. · KW 43" für die Kopfleiste (Dienstzeiten hängen von Wochentag und Kalenderwoche ab) */
+function dayLabel(startDate: string, clockStart: number, time: number): string {
+  const [y, m, d] = startDate.split('-').map(Number);
+  const day = Math.floor((clockStart * 60 + time / 1000) / 86400);
+  const date = new Date(y, m - 1, d + day);
+  const wd = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][date.getDay()];
+  return `${wd} ${date.getDate()}.${date.getMonth() + 1}. · KW ${isoWeek(date)}`;
 }

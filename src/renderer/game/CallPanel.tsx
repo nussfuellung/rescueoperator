@@ -246,6 +246,8 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
     return streets.filter((s) => s.label.toLowerCase().includes(q)).slice(0, 60);
   }, [streets, street]);
 
+  // Straße/Nr. aus Ortung oder Kartenklick lösen keine erneute Adresssuche aus
+  const skipAutoSearch = useRef(false);
   const applyPos = (p: Vec, source: string, label?: string) => {
     const hit = reverseGeocode(scn, p);
     const point = hit && hit.distance < 300 ? hit.point : p;
@@ -253,6 +255,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
     setPosSource(source);
     setAddress(label ?? hit?.text ?? `${Math.round(p.x)}/${Math.round(p.y)}`);
     if (hit) {
+      skipAutoSearch.current = true;
       setStreet(hit.road.type === 'ortsstrasse' ? `${hit.street}, ${hit.town}` : hit.street);
       setNumber(hit.houseNumber ?? (hit.number ? String(hit.number) : ''));
     }
@@ -297,11 +300,12 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [call?.aml]);
 
-  const search = () => {
+  const search = (silent = false) => {
     const [s, town] = street.split(',').map((x) => x.trim());
+    if (!s) return;
     const hit = geocode(scn, s, town ?? '', number.trim() || undefined);
     if (!hit) {
-      setErr('Adresse nicht gefunden. Straße aus der Liste wählen oder in die Karte klicken.');
+      if (!silent) setErr('Adresse nicht gefunden. Straße aus der Liste wählen oder in die Karte klicken.');
       return;
     }
     setErr('');
@@ -311,6 +315,20 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
     ctx.setMarker(hit.point);
     ctx.focus(hit.point, 0.6);
   };
+
+  // Sobald eine bekannte Straße (und ggf. Hausnummer) dasteht, Einsatzort ohne Enter setzen
+  useEffect(() => {
+    if (skipAutoSearch.current) {
+      skipAutoSearch.current = false;
+      return;
+    }
+    const label = street.trim().toLowerCase();
+    const known = streets.some((s) => s.label.toLowerCase() === label) || streets.filter((s) => s.street.toLowerCase() === label).length === 1;
+    if (!label || !known) return;
+    const t = setTimeout(() => search(true), 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [street, number]);
 
   // Zuständigkeit und mögliche Doppelalarmierung
   const area = useMemo(() => {
@@ -420,9 +438,16 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
       <fieldset>
         <legend>Einsatzort</legend>
         <div className="row">
-          <input list="streets" value={street} onChange={(e) => setStreet(e.target.value)} placeholder="Straße, Ort" className="grow" />
-          <input value={number} onChange={(e) => setNumber(e.target.value)} placeholder="Nr." className="num" onKeyDown={(e) => e.key === 'Enter' && search()} />
-          <button type="button" onClick={search}>
+          <input
+            list="streets"
+            value={street}
+            onChange={(e) => setStreet(e.target.value)}
+            placeholder="Straße, Ort"
+            className="grow"
+            onKeyDown={(e) => e.key === 'Enter' && !e.ctrlKey && !e.metaKey && search()}
+          />
+          <input value={number} onChange={(e) => setNumber(e.target.value)} placeholder="Nr." className="num" onKeyDown={(e) => e.key === 'Enter' && !e.ctrlKey && !e.metaKey && search()} />
+          <button type="button" onClick={() => search()}>
             Suchen
           </button>
         </div>

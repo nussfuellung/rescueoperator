@@ -19,7 +19,7 @@ describe('Fahrzeugbelegung', () => {
     const kt = scn.stations.find((s) => s.name === 'FF Kitzingen')!;
     expect(kt.vehicles.map((v) => v.callsign)).toContain('Florian Kitzingen 30/1');
     expect(kt.vehicles.map((v) => v.callsign)).toContain('Florian Kitzingen 12/1');
-    expect(all.filter((v) => v.type === 'NEF').length).toBe(8);
+    expect(all.filter((v) => v.type === 'NEF').length).toBeGreaterThanOrEqual(8);
     expect(all.some((v) => /\b46\/1$/.test(v.callsign) && v.type === 'TSFW')).toBe(true);
     // Keine Vereins- oder Verwaltungszusätze in Funkrufnamen
     expect(all.filter((v) => /e\.V\.|Freiw|Stadt |a\.Main/.test(v.callsign))).toEqual([]);

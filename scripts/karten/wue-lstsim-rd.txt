@@ -1,0 +1,977 @@
+0.0 Absicherung Aschfeld
+Organisation:	–
+Koordinaten:	49.9999358,9.815083
+Typ	Funkrufname	Dienstzeiten	ID
+FR	Dummy		3439831
+0.0 Absicherung Biebelried
+Organisation:	–
+Koordinaten:	49.7666545,10.0760259
+Typ	Funkrufname	Dienstzeiten	ID
+FR	Dummy		3718437
+1.0 BF Würzburg
+Organisation:	Berufsfeuerwehr
+Koordinaten:	49.795553,9.940864
+Typ	Funkrufname	Dienstzeiten	ID
+Kdow	FL WÜ 10/1 (KOW)		5501472
+NEF	FL WÜ 11/1 (NA Zubringer)		2174080
+ELW	FL WÜ 12/1 (ELW)		5501471
+DLK	FL WÜ 30/1 (DLK)		5501470
+HLF	FL WÜ 40/1 (HLF)		5501473
+FR	FL WÜ 40/2 (HLF)		5501765
+RW	FL WÜ 61/1 (RW)		5501474
+GW-WR	FL WÜ 91/1 (GW W)		5501764
+1.0 SEG
+Organisation:	Privat
+Koordinaten:	49.5638197,9.845331
+Typ	Funkrufname	Dienstzeiten	ID
+KTW	SEG Transport JUH 1		6577022
+1.0 UG-Rett/ELRD/OrgL/LNA
+Organisation:	Privat
+Koordinaten:	49.5635321,9.8456915
+Typ	Funkrufname	Dienstzeiten	ID
+NEF	Kater Kitzingen 6		6578267
+RTW	UG-Rett Giebelstadt		6577026
+1.1 ADAC Luftrettung Ochsenfurt
+Organisation:	ADAC Luftrettung
+Koordinaten:	49.6599729,10.0869941
+Typ	Funkrufname	Dienstzeiten	ID
+RTH	Christoph 18
+7:00 bis sunset.
+2173934
+1.1 NEF-Standort Gössenheim (GEM)
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	50.0215342,9.77994
+Typ	Funkrufname	Dienstzeiten	ID
+NEF	RK GEM 76/1
+7:00 bis 19:00. Mo, Di, Mi, Do, Fr. Nur in geraden Kalenderwochen.
+2589323
+NEF	RK MSP 76/1
+7:00 bis 19:00. Mo, Di, Mi, Do, Fr. Nur in geraden Kalenderwochen.
+2589324
+1.1 NEF-Standort Gössenheim (KAR)
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	50.017491,9.782378
+Typ	Funkrufname	Dienstzeiten	ID
+Inaktiv	KAT MSP 76/8 (LNA)
+7:00 bis 7:00. Mo, Di, Mi. Nur in ungeraden Kalenderwochen.
+2174071
+NEF	RK KAR 76/1
+7:00 bis 7:00. Do, Fr, Sa, So. Nur in ungeraden Kalenderwochen.
+3909775
+NEF	RK MSP 76/1
+7:00 bis 7:00. Do, Fr, Sa, So. Nur in ungeraden Kalenderwochen.
+3909776
+1.1 NEF-Standort Kitzingen
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.739342,10.1472195
+Typ	Funkrufname	Dienstzeiten	ID
+NEF	RK KT 76/1
+6:30 bis 18:30.
+2173937
+NEF	RK KT 76/2
+6:30 bis 18:30.
+2589498
+1.1 NEF-Standort KWM Juliusspital
+Organisation:	Malteser Hilfsdienst
+Koordinaten:	49.798523,9.93042
+Typ	Funkrufname	Dienstzeiten	ID
+NEF	JH WÜ 76/1
+6:30 bis 18:30.
+2953996
+Inaktiv	KAT WÜ 6/51 (ORGL)
+7:00 bis 7:00. Nur in geraden Kalenderwochen.
+4330293
+NEF	RK WÜ 76/2
+6:30 bis 18:30.
+2953997
+1.1 NEF-Standort Lohr
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.9932581,9.5916575
+Typ	Funkrufname	Dienstzeiten	ID
+NEF	RK LOH 76/1
+7:00 bis 7:00. Nur in geraden Kalenderwochen.
+2589300
+NEF	RK MSP 76/1
+7:00 bis 7:00. Nur in geraden Kalenderwochen.
+2589313
+1.1 NEF-Standort Main-Klinik Ochsenfurt
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.6604936,10.0886135
+Typ	Funkrufname	Dienstzeiten	ID
+NEF	RK OCH 76/1
+7:00 bis 19:00.
+2591173
+NEF	RK WÜ 76/2
+7:00 bis 19:00.
+2591224
+1.1 NEF-Standort Retzbach
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.908191,9.8229819
+Typ	Funkrufname	Dienstzeiten	ID
+Inaktiv	KAT MSP 76/5 (LNA)
+7:00 bis 7:00. Do, Fr, Sa, So. Nur in ungeraden Kalenderwochen.
+3666549
+NEF	RK KAR 76/1
+7:00 bis 7:00. Mo, Di, Mi. Nur in ungeraden Kalenderwochen.
+2955009
+NEF	RK MSP 76/1
+7:00 bis 7:00. Mo, Di, Mi. Nur in ungeraden Kalenderwochen.
+2955010
+1.2 RW Arnstein
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.9738509,9.9683336
+Typ	Funkrufname	Dienstzeiten	ID
+RTW	RK ARN 71/1 #
+7:00 bis 19:00.
+19:00 bis 7:00.
+2173939
+NEF	RK ARN 76/1
+17:30 bis 7:00.
+2173940
+RTW	RK MSP 71/1
+7:00 bis 19:00.
+19:00 bis 7:00.
+2173946
+NEF	RK MSP 76/1
+17:30 bis 7:00.
+2173942
+1.2 RW Burgsinn
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	50.153352,9.653782
+Typ	Funkrufname	Dienstzeiten	ID
+RTW	RK BGS 71/1
+7:00 bis 19:00.
+19:00 bis 7:00.
+2173943
+RTW	RK MSP 71/1
+7:00 bis 19:00.
+19:00 bis 7:00.
+2173941
+1.2 RW Gemünden
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	50.0492926,9.7021633
+Typ	Funkrufname	Dienstzeiten	ID
+RTW	RK GEM 71/1 #
+7:00 bis 19:00.
+19:00 bis 7:00.
+2173958
+NEF	RK GEM 76/1
+19:00 bis 7:00.
+7:00 bis 19:00. Nur in ungeraden Kalenderwochen.
+7:00 bis 19:00. Sa, So. Nur in geraden Kalenderwochen.
+2173947
+Inaktiv	RK MSP 10/2 (ELRD)
+8:00 bis 16:00. Mo, Di, Mi, Do, Fr.
+3035533
+RTW	RK MSP 71/1
+7:00 bis 19:00.
+19:00 bis 7:00.
+2173945
+NEF	RK MSP 76/1
+19:00 bis 7:00.
+7:00 bis 19:00. Nur in ungeraden Kalenderwochen.
+7:00 bis 19:00. Sa, So. Nur in geraden Kalenderwochen.
+2173948
+1.2 RW Giebelstadt
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.6579311,9.9433552
+Typ	Funkrufname	Dienstzeiten	ID
+RTW	RK GIE 71/1 #
+7:00 bis 19:00.
+19:00 bis 7:00.
+2173949
+RTW	RK GIE 71/70
+7:00 bis 19:00.
+19:00 bis 7:00.
+4539004
+RTW	RK WÜ 71/1 #
+7:00 bis 19:00.
+19:00 bis 7:00.
+2173983
+1.2 RW Karlstadt
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.954699,9.775919
+Typ	Funkrufname	Dienstzeiten	ID
+RTW	RK KAR 71/1 #
+7:00 bis 19:00.
+19:00 bis 7:00.
+2173944
+KTW	RK KAR 72/1 #
+8:00 bis 16:30. Mo, Di, Mi, Do, Fr.
+2173952
+KTW	RK KAR 72/2
+9:00 bis 14:00. Mo, Di, Mi, Do, Fr.
+7161148
+NEF	RK KAR 76/1
+7:00 bis 19:00. Nur in geraden Kalenderwochen.
+19:00 bis 7:00. Nur in geraden Kalenderwochen.
+2173955
+RTW	RK MSP 71/2
+7:00 bis 19:00.
+19:00 bis 7:00.
+2173951
+KTW	RK MSP 72/2
+8:00 bis 16:30. Mo, Di, Mi, Do, Fr.
+9:00 bis 14:00. Mo, Di, Mi, Do, Fr.
+2173954
+NEF	RK MSP 76/1
+7:00 bis 19:00. Nur in geraden Kalenderwochen.
+19:00 bis 7:00. Nur in geraden Kalenderwochen.
+2173956
+1.2 RW Kitzingen
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.735263,10.161052
+Typ	Funkrufname	Dienstzeiten	ID
+Inaktiv	RK KT 10/2 (ELRD)
+8:00 bis 16:00. Mo, Di, Mi, Do, Fr.
+2951252
+RTW	RK KT 71/1 #
+14:00 bis 22:00. Nur in ungeraden Kalenderwochen.
+6:00 bis 14:00. Nur in geraden Kalenderwochen.
+22:00 bis 6:00. Nur in geraden Kalenderwochen.
+2173960
+RTW	RK KT 71/2
+7:00 bis 15:30.
+15:30 bis 0:00.
+2173961
+RTW	RK KT 71/3
+6:00 bis 14:00. Nur in ungeraden Kalenderwochen.
+22:00 bis 6:00. Nur in ungeraden Kalenderwochen.
+14:00 bis 22:00. Nur in geraden Kalenderwochen.
+2173959
+RTW	RK KT 71/70
+6:00 bis 14:00.
+7:00 bis 15:30.
+14:00 bis 22:00.
+15:30 bis 0:00.
+22:00 bis 6:00.
+6305086
+KTW	RK KT 72/1
+7:00 bis 17:45.
+2173962
+NEF	RK KT 76/1
+18:30 bis 6:30.
+2175985
+NEF	RK KT 76/2
+18:30 bis 6:30.
+2173963
+1.2 RW Lohr
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.9900011,9.5727008
+Typ	Funkrufname	Dienstzeiten	ID
+RTW	RK LOH 71/1 #
+7:00 bis 19:00.
+19:00 bis 7:00.
+2173965
+KTW	RK LOH 72/1
+7:00 bis 14:30. Mo, Di, Mi, Do, Fr.
+2173967
+KTW	RK LOH 72/2
+14:30 bis 21:00. Mo, Di, Mi, Do, Fr.
+13:30 bis 22:00. Sa.
+2173969
+KTW	RK LOH 72/3 #
+9:00 bis 14:00. Mo, Di, Mi, Do, Fr.
+9:00 bis 18:45. So.
+2173968
+NEF	RK LOH 76/1
+7:00 bis 19:00. Nur in ungeraden Kalenderwochen.
+2173970
+NEF	RK LOH 76/1
+19:00 bis 7:00. Nur in ungeraden Kalenderwochen.
+2173971
+RTW	RK MSP 71/1
+7:00 bis 19:00.
+19:00 bis 7:00.
+2173966
+KTW	RK MSP 72/1
+7:00 bis 14:30. Mo, Di, Mi, Do, Fr.
+9:00 bis 14:00. Mo, Di, Mi, Do, Fr.
+13:30 bis 21:00. Mo, Di, Mi, Do, Fr.
+13:30 bis 22:00. Sa.
+9:00 bis 18:45. So.
+6450209
+NEF	RK MSP 76/1
+7:00 bis 19:00. Nur in ungeraden Kalenderwochen.
+2173964
+NEF	RK MSP 76/1
+19:00 bis 7:00. Nur in ungeraden Kalenderwochen.
+3354283
+1.2 RW Marktheidenfeld
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.8612975,9.5992521
+Typ	Funkrufname	Dienstzeiten	ID
+RTW	RK MAR 71/1 #
+7:00 bis 19:00.
+19:00 bis 7:00.
+2173973
+RTW	RK MAR 71/2 #
+9:00 bis 21:00.
+7222939
+KTW	RK MAR 72/1
+8:00 bis 15:30. Mo, Di, Mi, Do, Fr.
+7:00 bis 15:30. Sa.
+2173976
+Inaktiv	RK MAR 76/1
+7:00 bis 19:00. Nur in ungeraden Kalenderwochen.
+19:00 bis 7:00. Nur in ungeraden Kalenderwochen.
+2173978
+NEF	RK MAR 76/1
+7:00 bis 19:00.
+19:00 bis 7:00.
+2951247
+RTW	RK MSP 71/1
+7:00 bis 19:00.
+9:00 bis 21:00.
+19:00 bis 7:00.
+2173975
+KTW	RK MSP 72/2
+8:00 bis 15:30. Mo, Di, Mi, Do, Fr.
+7:00 bis 15:30. Sa.
+2173977
+Inaktiv	RK MSP 76/1
+7:00 bis 19:00. Nur in ungeraden Kalenderwochen.
+19:00 bis 7:00. Nur in ungeraden Kalenderwochen.
+2173974
+NEF	RK MSP 76/1
+7:00 bis 19:00.
+19:00 bis 7:00.
+2951248
+1.2 RW Ochsenfurt
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.6643678,10.0739572
+Typ	Funkrufname	Dienstzeiten	ID
+RTW	RK OCH 71/1
+7:00 bis 19:00.
+19:00 bis 7:00.
+5716362
+KTW	RK OCH 72/1 #
+8:00 bis 16:00. Mo, Di, Mi, Do, Fr.
+5716363
+NEF	RK OCH 76/1
+19:00 bis 7:00.
+5716364
+RTW	RK WÜ 71/1 #
+7:00 bis 19:00.
+19:00 bis 7:00.
+5716365
+NEF	RK WÜ 76/2
+19:00 bis 7:00.
+5716366
+1.2 RW Uettingen
+Organisation:	Malteser Hilfsdienst
+Koordinaten:	49.7951264,9.7140595
+Typ	Funkrufname	Dienstzeiten	ID
+RTW	JH UETT 71/1 #
+7:00 bis 19:00.
+19:00 bis 7:00.
+3466445
+RTW	JH WÜ 71/4
+7:00 bis 19:00.
+19:00 bis 7:00.
+4658917
+1.2 RW Volkach
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.8547525,10.2346727
+Typ	Funkrufname	Dienstzeiten	ID
+NEF	RK KT 76/2
+6:30 bis 18:30.
+18:30 bis 6:30.
+2175987
+RTW	RK VOL 71/1 #
+6:30 bis 18:30.
+18:30 bis 6:30.
+2173987
+RTW	RK VOL 71/70
+6:30 bis 18:30.
+18:30 bis 6:30.
+2173986
+NEF	RK VOL 76/1
+6:30 bis 18:30.
+18:30 bis 6:30.
+2173938
+1.2 RW Wiesentheid
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.786657,10.3435073
+Typ	Funkrufname	Dienstzeiten	ID
+NEF	RK KT 76/2
+6:30 bis 18:30.
+18:30 bis 6:30.
+2175986
+RTW	RK WHD 71/1 #
+6:30 bis 18:30.
+18:30 bis 6:30.
+2173990
+RTW	RK WHD 71/70
+6:30 bis 18:30.
+18:30 bis 6:30.
+2173989
+NEF	RK WHD 76/1
+6:30 bis 18:30.
+18:30 bis 6:30.
+2173991
+1.2 RW Würzburg BRK
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.787083,9.943181
+Typ	Funkrufname	Dienstzeiten	ID
+NAW	RK WÜ 70/20 (ITW)
+19:00 bis 7:00. Mo, Di, Mi, Do, Fr.
+7:00 bis 7:00. Sa, So.
+2174012
+NAW	RK WÜ 70/20 (ITW)
+7:00 bis 19:00. Mo, Di, Mi, Do, Fr.
+2702338
+RTW	RK WÜ 71/1 #		2174020
+RTW	RK WÜ 71/1 # (ITW)
+7:00 bis 19:00. Mo, Di, Mi, Do, Fr.
+4388052
+RTW	RK WÜ 71/2 #
+14:30 bis 22:00. Nur in ungeraden Kalenderwochen.
+6:30 bis 14:30. Nur in geraden Kalenderwochen.
+15:30 bis 22:30. Mi, Do, Fr. Nur in geraden Kalenderwochen.
+2174017
+RTW	RK WÜ 71/3 #
+15:00 bis 21:00. Nur in ungeraden Kalenderwochen.
+22:30 bis 6:30. Nur in ungeraden Kalenderwochen.
+14:30 bis 22:00. Nur in geraden Kalenderwochen.
+2174015
+RTW	RK WÜ 71/4 #
+6:30 bis 14:30. Nur in ungeraden Kalenderwochen.
+22:30 bis 6:30. Nur in geraden Kalenderwochen.
+3965216
+RTW	RK WÜ 71/5
+9:00 bis 15:00. Mo, Di.
+15:30 bis 22:30. Mo, Di.
+8:00 bis 16:00. Mi, Do, Fr.
+2174016
+RTW	RK WÜ 71/6 #
+11:00 bis 20:00. Nur in geraden Kalenderwochen.
+15:30 bis 22:30. Mi, Do, Fr. Nur in ungeraden Kalenderwochen.
+2974559
+RTW	RK WÜ 71/7 #
+11:00 bis 20:00. Nur in ungeraden Kalenderwochen.
+15:00 bis 21:00. Nur in geraden Kalenderwochen.
+2174018
+KTW	RK WÜ 72/1 #
+6:00 bis 14:00. Mo, Di, Mi, Do, Fr, So.
+2174022
+KTW	RK WÜ 72/2
+7:00 bis 14:30. Mo, Di, Mi, Do, Fr.
+7:00 bis 14:00. Sa.
+2174023
+KTW	RK WÜ 72/3		2174024
+KTW	RK WÜ 72/4 #
+7:00 bis 15:00. Mo, Di, Mi, Do, Fr.
+2174025
+KTW	RK WÜ 72/5 #
+8:00 bis 16:00. Mo, Di, Mi, Do, Fr.
+2174027
+KTW	RK WÜ 72/6 #
+8:00 bis 16:00. Mo, Di, Mi, Do, Fr.
+2174028
+KTW	RK WÜ 72/7
+9:00 bis 16:00. Mo, Di, Mi, Do, Fr, Sa.
+2174021
+KTW	RK WÜ 72/8
+9:00 bis 16:30. Mo, Di, Mi, Do, Fr.
+7153059
+KTW	RK WÜ 72/9 #
+9:00 bis 18:00. Mo, Di, Mi, Do, Fr.
+7153060
+KTW	RK WÜ 72/10 #
+12:00 bis 21:30. Mo, Di, Mi, Do, Fr.
+2179049
+KTW	RK WÜ 72/11
+7:00 bis 14:30. Mo, Di.
+9:30 bis 16:00. Sa.
+9:00 bis 17:00. So.
+3702767
+NEF	RK WÜ 76/1
+7:00 bis 19:00.
+19:00 bis 7:00.
+2174030
+NEF	RK WÜ 76/2
+7:00 bis 19:00.
+19:00 bis 7:00.
+2174032
+1.2 RW Würzburg JUH
+Organisation:	Johanniter-Unfall-Hilfe
+Koordinaten:	49.793142,9.9507845
+Typ	Funkrufname	Dienstzeiten	ID
+Inaktiv	AK WÜ 10/1 (ELRD)
+8:00 bis 8:00. Nur in geraden Kalenderwochen.
+2520339
+RTW	AK WÜ 71/1
+6:00 bis 14:00. Nur in ungeraden Kalenderwochen.
+14:00 bis 22:00. Nur in geraden Kalenderwochen.
+2174004
+RTW	AK WÜ 71/2 #
+14:00 bis 22:00. Nur in ungeraden Kalenderwochen.
+22:00 bis 6:00. Nur in geraden Kalenderwochen.
+8:00 bis 16:00. Mo, Di. Nur in geraden Kalenderwochen.
+9:00 bis 15:00. Mi. Nur in geraden Kalenderwochen.
+2174003
+RTW	AK WÜ 71/3
+22:00 bis 6:00. Nur in ungeraden Kalenderwochen.
+6:00 bis 14:00. Nur in geraden Kalenderwochen.
+8:00 bis 16:00. Mo, Di. Nur in ungeraden Kalenderwochen.
+9:00 bis 15:00. Mi. Nur in ungeraden Kalenderwochen.
+2174005
+KTW	AK WÜ 72/1
+15:30 bis 23:00. Sa.
+7:00 bis 14:30. Mi, Do, Fr.
+2182592
+KTW	AK WÜ 72/2		2174008
+KTW	AK WÜ 72/3 #
+10:00 bis 19:00. Mo, Di, Mi, Do, Fr.
+6:00 bis 14:30. Sa.
+2174007
+KTW	AK WÜ 72/4
+9:00 bis 17:00. Mo, Di, Mi, Do, Fr.
+13:00 bis 22:00. So.
+3702769
+NEF	AK WÜ 76/1 (VEF)
+7:00 bis 19:00.
+2174009
+NEF	JH WÜ 76/1
+18:30 bis 6:30. Nur in ungeraden Kalenderwochen.
+4883008
+NEF	RK WÜ 76/2
+18:30 bis 6:30. Nur in ungeraden Kalenderwochen.
+4883009
+1.2 RW Würzburg MHD
+Organisation:	Malteser Hilfsdienst
+Koordinaten:	49.8009567,9.9085247
+Typ	Funkrufname	Dienstzeiten	ID
+RTW	JH WÜ 71/1
+14:00 bis 22:00. Nur in ungeraden Kalenderwochen.
+6:00 bis 14:00. Nur in geraden Kalenderwochen.
+7154962
+RTW	JH WÜ 71/2 #
+22:00 bis 6:00. Nur in ungeraden Kalenderwochen.
+14:00 bis 22:00. Nur in geraden Kalenderwochen.
+9:00 bis 15:00. Do, Fr. Nur in ungeraden Kalenderwochen.
+2173995
+RTW	JH WÜ 71/3 #
+6:00 bis 14:00. Nur in ungeraden Kalenderwochen.
+22:00 bis 6:00. Nur in geraden Kalenderwochen.
+9:00 bis 15:00. Do, Fr. Nur in geraden Kalenderwochen.
+2173993
+RTW	JH WÜ 71/4
+6:00 bis 14:00.
+14:00 bis 22:00.
+22:00 bis 6:00.
+9:00 bis 15:00. Do, Fr.
+2173994
+KTW	JH WÜ 72/1
+21:30 bis 6:00. Mo, Di, Mi, Do, Fr.
+22:00 bis 6:00. Sa, So.
+2173996
+KTW	JH WÜ 72/2 #
+8:00 bis 16:00. Mo, Di, Mi, Do, Fr.
+2173997
+KTW	JH WÜ 72/3 #
+8:00 bis 16:30. Mo, Di, Mi, Do, Fr.
+2173999
+KTW	JH WÜ 72/4 #
+9:00 bis 17:30. Mo, Di, Mi, Do, Fr.
+2744374
+KTW	JH WÜ 72/5
+14:30 bis 22:00. Mo, Di, Mi, Do, Fr.
+4278243
+KTW	JH WÜ 72/6
+11:00 bis 19:30. Sa.
+6:00 bis 14:30. So.
+3702765
+KTW	JH WÜ 72/7		3702773
+NEF	JH WÜ 76/1
+18:30 bis 6:30. Nur in geraden Kalenderwochen.
+2174000
+NEF	RK WÜ 76/2
+18:30 bis 6:30. Nur in geraden Kalenderwochen.
+2456472
+1.2 RW Würzburg RKT
+Organisation:	Privat
+Koordinaten:	49.8173407,9.8754264
+Typ	Funkrufname	Dienstzeiten	ID
+RTW	RT WÜ 71/1 #
+8:00 bis 15:30. Mo, Di, Mi, Do, Fr.
+10:00 bis 20:00. Sa.
+6117536
+RTW	RT WÜ 71/70
+8:00 bis 15:30. Mo, Di, Mi, Do, Fr.
+10:00 bis 20:00. Sa.
+6117538
+1.2 Stellplatz Kist
+Organisation:	Malteser Hilfsdienst
+Koordinaten:	49.7376023,9.8430309
+Typ	Funkrufname	Dienstzeiten	ID
+RTW	JH KIST 71/1
+7:00 bis 15:30. Mo, Di, Mi, Do, Fr, So.
+15:30 bis 0:00. Mo, Di, Mi, Do, Fr, So.
+8:00 bis 16:00. Sa.
+16:00 bis 0:00. Sa.
+3051864
+RTW	JH WÜ 71/4
+7:00 bis 15:30. Mo, Di, Mi, Do, Fr, So.
+15:30 bis 0:00. Mo, Di, Mi, Do, Fr, So.
+8:00 bis 16:00. Sa.
+16:00 bis 0:00. Sa.
+4658919
+1.2 Stellplatz Partenstein
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	50.0373472,9.5195466
+Typ	Funkrufname	Dienstzeiten	ID
+RTW	RK MSP 71/1
+8:00 bis 20:00.
+2851684
+RTW	RK PASTN 71/1 #
+8:00 bis 20:00.
+2794179
+2.2 Bereitschaft Karlstadt
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.9548509,9.776805
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK MSP 10/4		2173957
+Inaktiv	RK MSP 41/71/70 (UG)		7102636
+2.2 Bereitschaft Kitzingen
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.7393529,10.1473251
+Typ	Funkrufname	Dienstzeiten	ID
+Inaktiv	RK KT 71/70 (UG)		2174056
+FR	RK KT 79/1		2173923
+NEF	RK KT 79/1 (NA Zubringer)		5718512
+2.2 Bereitschaft Lohr
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.9899557,9.5730764
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK MSP 10/5		2173972
+NEF	RK MSP 10/5 (NA Zubringer)		5718513
+2.2 Bereitschaft Marktheidenfeld
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.8516443,9.6124242
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK MSP 10/6		2173925
+2.2 Bereitschaft Ochsenfurt
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.6646316,10.0738767
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK OCH 79/1		2174062
+NEF	RK OCH 79/1 (CH18 Zubringer)
+7:00 bis sunset.
+5716361
+2.2 Bereitschaft Rottendorf
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.789454,10.029599
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK Rottendorf 79/1		2173930
+2.2 Bereitschaft Volkach
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.8547089,10.2345054
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK VOL 79/1		2173988
+2.2 Bereitschaft Wiesentheid
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.7868663,10.3435665
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK WHD 79/1		2173992
+2.2 Bergwacht Frammersbach
+Organisation:	Bergwacht
+Koordinaten:	50.065254,9.470108
+Typ	Funkrufname	Dienstzeiten	ID
+FR	BGW FRAM 10/1		2174066
+3.1 Wasserwacht OG Gerbrunn
+Organisation:	Deutsche Lebens-Rettungs-Gesellschaft
+Koordinaten:	49.776506,9.996614
+Typ	Funkrufname	Dienstzeiten	ID
+FR	PLK Gerbrunn 90/1		2173920
+3.1 Wasserwacht OG Thüngersheim
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.8778872,9.846247
+Typ	Funkrufname	Dienstzeiten	ID
+FR	WW Thüngersheim 79/1		2173933
+FR Bergtheim
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.894427,10.069635
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Bergtheim 11/1		2173877
+FR Burgsinn
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	50.1483323,9.6502958
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL BGS 11/1		6552787
+FR Eibelstadt
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.726726,9.994941
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Eibelstadt 14/1		2173878
+FR Frickenhausen
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.671898,10.094241
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Frickenhausen 10/1		2173880
+FR Geroldshausen
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.685887,9.90256
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Geroldshausen 11/1		2173881
+FR Giebelstadt
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.653009,9.947348
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Giebelstadt 10/1		2173882
+FR Greußenheim
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.813799,9.769313
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Greußenheim 14/1		2173883
+FR Güntersleben
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.867824,9.904872
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Güntersleben 11/1		2173884
+FR Hausen
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.92708,10.029101
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Hausen 11/1		2173885
+FR Helmstadt
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.762278,9.70582
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Helmstadt 50/1		2173886
+FR Hettstadt
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.801378,9.821928
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Hettstadt 11/1		2173887
+FR Holzkirchhausen
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.759839,9.668366
+Typ	Funkrufname	Dienstzeiten	ID
+Inaktiv	FL Holzkirchhausen 14/1		2173888
+FR Kist
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.7457725,9.8462392
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Kist 11/1		2173889
+FR Kleinrinderfeld
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.70094,9.844576
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Kleinrinderfeld 11/1		2173890
+FR Kürnach
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.843545,10.045924
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Kürnach 11/1		2173891
+FR Leinach
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.862292,9.8043
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Leinach 11/1		2173892
+FR Lengfeld
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.811328,9.983476
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Lengfeld 11/1		2173893
+FR Lindelbach
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.732671,10.036087
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Lindelbach 44/1		3034795
+FR Margetshöchheim
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.841108,9.86157
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Margetshöchheim 11/1		2173894
+FR Neubrunn
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.730776,9.671702
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Neubrunn 10/1		2173895
+FR Oberndorf
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.86066,9.510426
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Oberndorf 44/1		2173896
+FR Prosselsheim
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.864549,10.126639
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Prosselsheim 14/1		2173897
+FR Randersacker
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.75733,9.982388
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Randersacker 10/1		2173898
+FR Reichenberg
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.725464,9.91523
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Reichenberg 10/1		2173899
+FR Remlingen
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.804664,9.695998
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Remlingen 11/1		2173900
+FR Retzbach
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.904227,9.819325
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Retzbach 79/1		2173901
+FR Rimpar
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.854144,9.959879
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Rimpar 11/1		2173902
+FR Röttingen
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.50969,9.973912
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Röttingen 11/1		2173903
+FR Sommerhausen
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.701878,10.027939
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Sommerhausen 11/1		3034796
+FR Sonderhofen
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.593995,10.001804
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Sonderhofen 11/1		3034797
+FR Uettingen
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.793054,9.7282
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Uettingen 14/1		2173904
+FR Unterdürrbach
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.808981,9.913461
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Unterdürrbach 10/2		2173905
+FR Unterpleichfeld
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.86983,10.043156
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Unterpleichfeld 10/1		2173906
+FR Veitshöchheim
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.8236495,9.8757112
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Veitshöchheim 10/1		3035124
+FR Waldbrunn
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.755653,9.799247
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Waldbrunn 11/1		2173908
+FR Waldbüttelbrunn
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.7867551,9.8312594
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Waldbüttelbrunn 11/1		2173909
+FR Winterhausen
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.706998,10.012869
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Winterhausen 11/1		2173910
+FR Wüstenzell
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.776103,9.654343
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Wüstenzell 14/1		2173912
+FR Zell
+Organisation:	Freiwillige Feuerwehr
+Koordinaten:	49.814007,9.870207
+Typ	Funkrufname	Dienstzeiten	ID
+FR	FL Zell 11/1		2173913
+HvO Altertheim
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.722995,9.736977
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK WÜ-L 43/73/1		2173915
+HvO Aub
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.551227,10.06757
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK Aub 79/1		2173916
+HvO Dettelbach
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.800871,10.164228
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK Dettelbach 79/1		2173918
+HvO Estenfeld
+Organisation:	Malteser Hilfsdienst
+Koordinaten:	49.829286,10.004315
+Typ	Funkrufname	Dienstzeiten	ID
+FR	JH Estenfeld 79/1		2173919
+HvO Fellen
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	50.153145,9.589348
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK Fellen 79/1		3896121
+HvO Geiselwind
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.7734505,10.4668777
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK GEIWD 79/1		6434184
+HvO Heuchelhof
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.7471959,9.9612522
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK WÜ 79/1		2173921
+HvO Hofstetten
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	50.056987,9.657863
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK Hofstetten 79/1		3896122
+HvO Iphofen
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.702758,10.256402
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK Iphofen 79/1		2173922
+HvO Neustadt
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.9300199,9.5677604
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK NEUST 79/1		6519034
+HvO Obernbreit
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.658919,10.163834
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK OBBRT 79/1		2173926
+HvO Obersinn
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	50.208164,9.614046
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK OBS 79/1		2173927
+HvO Prichsenstadt
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.818327,10.348392
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK Prichsenstadt 79/1		2173928
+HvO Rothenfels
+Organisation:	Malteser Hilfsdienst
+Koordinaten:	49.891766,9.584273
+Typ	Funkrufname	Dienstzeiten	ID
+Inaktiv	JH Rothenfels 79/1		2173917
+HvO Rottenbauer
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.720193,9.969642
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK Rottenbauer 79/1		2173929
+HvO Schwarzach
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.8027482,10.2308461
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK SWACH 79/1		2173931
+HvO Steinfeld
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.9524105,9.6742345
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK STF 79/1		2174106
+HvO Triefenstein
+Organisation:	Bayerisches Rotes Kreuz
+Koordinaten:	49.8097718,9.6022508
+Typ	Funkrufname	Dienstzeiten	ID
+FR	RK TRIEF 79/1		2174068

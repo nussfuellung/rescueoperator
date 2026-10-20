@@ -61,6 +61,20 @@ export interface VehicleDef {
   id: string;
   callsign: string;
   type: VehicleTypeId;
+  /** Dienstzeiten; fehlt die Angabe, ist das Fahrzeug rund um die Uhr besetzt */
+  dienst?: Dienstzeit[];
+}
+
+/** Besetzte Schicht eines Fahrzeugs, z. B. 7:00 bis 19:00, Mo–Fr, nur in geraden Kalenderwochen */
+export interface Dienstzeit {
+  /** Beginn in Minuten nach Mitternacht */
+  von: number;
+  /** Ende in Minuten nach Mitternacht; kleiner oder gleich von = über Mitternacht */
+  bis: number;
+  /** Wochentage, an denen die Schicht beginnt (0 = Montag … 6 = Sonntag); fehlt = täglich */
+  tage?: number[];
+  /** Nur in geraden bzw. ungeraden Kalenderwochen */
+  kw?: 'gerade' | 'ungerade';
 }
 
 export interface Station {
@@ -347,6 +361,8 @@ export interface PublicState {
   speed: number;
   time: number;
   clockStart: number;
+  /** Datum des Schichtbeginns (JJJJ-MM-TT), für Wochentag und Kalenderwoche */
+  startDate?: string;
   players: Player[];
   calls: CallState[];
   incidents: IncidentState[];

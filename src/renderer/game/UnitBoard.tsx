@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { FMS_COLOR, FMS_TEXT, formatDuration, shortCallsign } from '../../../shared/catalog';
 import type { UnitState } from '../../../shared/types';
+import { dienstText } from '../../../shared/lstsim';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
 import { useSpeechTarget } from '../audio/stt';
@@ -87,6 +88,7 @@ function UnitControl({ ctx, u }: { ctx: GameCtx; u: UnitState }) {
   const inc = state.incidents.find((i) => i.id === u.incidentId);
   const type = scn.vehicleTypes.find((t) => t.id === u.type);
   const crew = state.players.find((p) => p.id === u.crewPlayerId);
+  const def = scn.stations.find((st) => st.id === u.stationId)?.vehicles.find((v) => v.id === u.id);
   return (
     <div className="unit-control">
       <div className="uc-head">
@@ -101,6 +103,7 @@ function UnitControl({ ctx, u }: { ctx: GameCtx; u: UnitState }) {
             {u.eta ? ` · ETA ${formatDuration(u.eta - state.time)}` : ''}
             {inc ? ` · ${inc.nr} ${inc.stichwort} ${inc.address}` : ''}
           </div>
+          {def?.dienst && <div className="small muted">Dienst: {dienstText(def.dienst)}</div>}
         </div>
         <button className="small-btn" onClick={() => ctx.setSelectedUnit(null)}>
           ✕
