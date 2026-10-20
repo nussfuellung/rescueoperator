@@ -107,7 +107,7 @@ Notrufgespräche und Funk lassen sich sprechen statt tippen. Die Erkennung läuf
 Die Einsatzmaske ist an ELDIS III angelehnt, aber aufgeräumt:
 - **Ortung**: Bei Handy-Notrufen mit AML springt die Karte beim Annehmen auf die Ortung (Kreis mit Genauigkeit). **Übernehmen** (oder `Alt+A`) setzt den Einsatzort auf die nächste Adresse. Bei Festnetz kommt die Anschlussadresse mit, die meist, aber nicht immer der Notfallort ist.
 - **Einsatzort**: Straße und Hausnummer suchen, Zusatz (Stockwerk, Hinterhaus), Objekt. Darunter Gemeinde und zuständige Feuerwehr und Rettungswache. Liegt ein offener Einsatz in weniger als 300 m, erscheint eine Warnung (Doppelmeldung?).
-- **Einsatz**: Schlagwortsuche („atem“, „ölspur“, „vu eingekl“) setzt das passende Stichwort, dazu Sondersignal und Meldebild.
+- **Einsatz**: Stichworte nach der Alarmierungsbekanntmachung Bayern (ABek): RD 1–5, RD MANV, RD KTP, B 1–6, B … PERSON, B BMA/WALD/ELEKTROANLAGE/BOOT, THL 1–5, THL P …, THL UNWETTER/WASSER/…, ABC 1–3, ABC KRAFTSTOFF/ÖL/EXPLOSION/GMA. Die Schlagwortsuche nimmt Nummer, Stichwort oder Meldebild („b1515“, „b3 person keller“, „lkw außerorts“, „atem“) und setzt das Schlagwort im Format des Leitsystems, z. B. `#B1515 - B3 - #Verkehr#LKW / Bus außerorts`. Schlagworte mit „Anzahl (RTW)“ geben zusätzliche RTW in den Vorschlag. Alarmierung und Fahrzeuganzeige zeigen das Schlagwort. Brand- und ABC-Schlagworte stammen aus einem echten Leitsystem, THL- und RD-Nummern sind selbst vergeben.
 - **Patient** und **Meldender** mit Rückrufnummer (vom Anruf vorbelegt).
 - **Alarmierungsvorschlag** schon vor dem Anlegen. **Anlegen und alarmieren** (`Strg+Enter`) erledigt beides auf einmal, **Nur anlegen** überlässt die Alarmierung dem Disponenten.
 
@@ -116,6 +116,10 @@ Die Einsatzmaske ist an ELDIS III angelehnt, aber aufgeräumt:
 Computergesteuerte Fahrzeuge antworten auf Funksprüche passend: Anruf mit „… kommen“ („Arnstein 71/1 hört“), Standort („Wo seid ihr?“), Eintreffzeit, Status, Lage vor Ort, Nachforderung, Patient und Zielklinik, Einrücken zur Wache, Sondersignal und Notarzt an Bord.
 
 Jede Wache funkt in ihrer Rufgruppe. Oben im Funkbereich lassen sich Gruppen ein- und ausblenden (eine grün hinterlegte Gruppe ist gerade belegt), unten geht ein Gruppenruf an alle in einer Gruppe. Im Einsatz kann der Disponent eine Einsatzgruppe (z. B. WÜ EINS 1) zuweisen: Alle Fahrzeuge des Einsatzes bekommen die Anweisung zum Gruppenwechsel und melden sich dort, nachalarmierte Fahrzeuge schalten direkt um, nach dem Einsatz geht es zurück in die Heimatgruppe. Einzelne Fahrzeuge lassen sich in der Fahrzeugleiste umschalten. FMS-Status laufen unabhängig von der Gruppe. In der Fahrzeugleiste filtern Suche und Rufgruppe die vielen Wachen.
+
+### IVENA und Zielkliniken
+
+Hat ein Rettungsmittel den Patienten versorgt, meldet es einen Patientenzuweisungscode (PZC nach der Liste Bayern V 1.3): Rückmeldeindikation, Alter und Dringlichkeit, z. B. `345833` = Hypertensiver Notfall, 83 Jahre, ambulant. Der Knopf **IVENA** oben zeigt die offenen Anmeldungen mit entschlüsseltem PZC und benötigtem Fachbereich und die Kliniken nach Eignung und Entfernung; ein Klick weist zu. Unter **Behandlungskapazitäten** steht, welche Klinik welchen Fachbereich an- oder abgemeldet hat (z. B. Herzkatheterlabor belegt, CT ausgefallen). Eine Zuweisung an eine abgemeldete Klinik kostet Punkte, solange eine andere Klinik aufnahmebereit ist.
 
 ### Telefon und Funk auf Tablet oder Handy
 

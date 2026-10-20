@@ -19,6 +19,7 @@ import { buildVocab } from '../../../shared/speechfix';
 import { radioName } from '../../../shared/catalog';
 import { MicStatus } from '../audio/SpeechUi';
 import { DeviceModal } from './DeviceModal';
+import { IvenaModal } from './Ivena';
 import { isoWeek } from '../../../shared/lstsim';
 
 export interface GameCtx {
@@ -75,6 +76,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
   const [formCallId, setFormCallId] = useState<string | null>(null);
   const [remote, setRemote] = useState<PanelId[]>([]);
   const [showDevice, setShowDevice] = useState(false);
+  const [showIvena, setShowIvena] = useState(false);
 
   useSounds(state, { calls: !remote.includes('calls'), radio: !remote.includes('radio') });
   useSttAutoload();
@@ -255,6 +257,18 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
         {muted ? '🔇' : '🔊'}
       </button>
       {me?.role !== 'crew' && (
+        <button
+          onClick={() => setShowIvena(true)}
+          title="IVENA: Patientenzuweisung nach PZC und An-/Abmeldestatus der Kliniken"
+          className={state.units.some((u) => u.task === 'awaitHospital' && !u.hospitalId) ? 'attention' : ''}
+        >
+          🏥 IVENA{(() => {
+            const n = state.units.filter((u) => u.task === 'awaitHospital' && !u.hospitalId).length;
+            return n ? ` (${n})` : '';
+          })()}
+        </button>
+      )}
+      {me?.role !== 'crew' && (
         <button onClick={() => setShowDevice(true)} title="Telefon und Funk auf ein Tablet oder Handy im selben Netz auslagern">
           📱 Tablet{remote.length ? ' ✓' : ''}
         </button>
@@ -345,6 +359,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
       )}
       {showScore && <ScoreModal state={state} onClose={() => setShowScore(false)} />}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showIvena && <IvenaModal ctx={ctx} onClose={() => setShowIvena(false)} />}
       {showDevice && <DeviceModal hostInfo={props.hostInfo} remote={remote} setRemote={setRemote} onClose={() => setShowDevice(false)} />}
       {toasts}
     </div>

@@ -96,7 +96,7 @@ describe('Anrufer', () => {
     run(game, 4000);
     const answer = call.transcript.slice(before).find((l) => l.from === 'caller')!.text;
     expect(answer).toMatch(/\d/);
-    expect(answer.toLowerCase()).toMatch(/atm/);
+    expect(answer.toLowerCase()).toMatch(/atm|brustkorb/);
   });
 });
 

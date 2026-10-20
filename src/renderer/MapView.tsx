@@ -560,7 +560,7 @@ export function MapView(props: Props) {
           ctx.arc(x, y, r + 10, 0, Math.PI * 2);
           ctx.fill();
         }
-        ctx.fillStyle = i.stichwort.startsWith('RD') ? '#e85d04' : i.stichwort.startsWith('THL') ? '#0077b6' : '#d00000';
+        ctx.fillStyle = i.stichwort.startsWith('RD') ? '#e85d04' : i.stichwort.startsWith('THL') ? '#0077b6' : i.stichwort.startsWith('ABC') ? '#b08900' : '#d00000';
         ctx.strokeStyle = sel ? '#000' : '#fff';
         ctx.lineWidth = 2;
         ctx.beginPath();

@@ -1609,3 +1609,27 @@ html:has(.popout-body),
     grid-template-columns: repeat(4, 1fr);
   }
 }
+
+.em-schlagwort { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-size: 12px; }
+code.em-schlagwort, .em-schlagwort code { background: var(--panel2); padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+.em-schlagwort button { padding: 0 6px; }
+
+/* IVENA */
+button.attention { border-color: var(--accent); color: var(--accent); }
+.modal.ivena { max-width: 1100px; width: 94vw; max-height: 90vh; overflow: auto; }
+.modal.ivena h3 { margin: 12px 0 6px; font-size: 14px; }
+.ivena-anm { border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin-bottom: 8px; display: grid; gap: 6px; }
+.ivena-pzc code { font-size: 16px; font-weight: 700; letter-spacing: 1px; background: var(--panel2); padding: 1px 6px; border-radius: 4px; }
+.ivena-kliniken { display: flex; flex-wrap: wrap; gap: 6px; }
+.ivena-kliniken button { text-align: left; }
+.ivena-kliniken .ivena-ok { border-color: var(--ok); }
+.ivena-kliniken .ivena-ab { border-color: var(--danger); opacity: 0.8; }
+.ivena-kliniken .ivena-no { opacity: 0.5; }
+.ivena-scroll { overflow-x: auto; }
+.ivena-table { border-collapse: collapse; width: 100%; }
+.ivena-table th, .ivena-table td { border: 1px solid var(--line); padding: 4px 6px; text-align: left; }
+.ivena-grid th { font-size: 11px; font-weight: 600; }
+.ivena-cell { text-align: center !important; font-size: 12px; white-space: nowrap; }
+.ivena-cell.an { background: rgba(63, 185, 80, 0.25); }
+.ivena-cell.ab { background: rgba(209, 36, 47, 0.4); font-weight: 600; }
+.ivena-cell.none { background: repeating-linear-gradient(45deg, transparent 0 4px, rgba(139, 154, 171, 0.15) 4px 8px); }

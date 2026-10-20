@@ -24,23 +24,71 @@ export const DEFAULT_VEHICLE_TYPES: VehicleType[] = [
   { id: 'GWW', label: 'GW-Wasserrettung', org: 'FW', funkNr: 91, fills: ['GWW'], speedFactor: 0.9 },
 ];
 
-// Einsatzstichworte angelehnt an die bayerische Alarmierungsbekanntmachung.
+// Einsatzstichworte nach der bayerischen Alarmierungsbekanntmachung (ABek, Anlage zu Nr. 2.1.4).
+// Die Mindestanforderungen der ABek (Trupp, Staffel, Gruppe, Löschwasser, Rettungssätze) sind auf Fahrzeugtypen umgelegt.
 export const DEFAULT_STICHWORTE: Stichwort[] = [
-  { code: 'RD KTP', label: 'Krankentransport', category: 'RD', aao: { KTW: 1 } },
   { code: 'RD 1', label: 'Notfall ohne Notarzt', category: 'RD', aao: { RTW: 1 } },
-  { code: 'RD 2', label: 'Notfall mit Notarzt', category: 'RD', aao: { RTW: 1, NEF: 1 } },
-  { code: 'RD MANV', label: 'Mehrere Verletzte', category: 'RD', aao: { RTW: 3, NEF: 1 } },
+  { code: 'RD 2', label: 'Notfall mit Notarzt (vitale Bedrohung)', category: 'RD', aao: { RTW: 1, NEF: 1 } },
+  { code: 'RD 3', label: '2 oder 3 Verletzte/Erkrankte', category: 'RD', aao: { RTW: 2, NEF: 1 } },
+  { code: 'RD 4', label: '4 oder 5 Verletzte/Erkrankte', category: 'RD', aao: { RTW: 4, NEF: 1 } },
+  { code: 'RD 5', label: '6 bis 9 Verletzte/Erkrankte', category: 'RD', aao: { RTW: 5, NEF: 3 } },
+  { code: 'RD MANV', label: 'MANV ab 10 Verletzten', category: 'RD', aao: { RTW: 8, NEF: 3, KTW: 2 } },
+  { code: 'RD KTP', label: 'Krankentransport', category: 'RD', aao: { KTW: 1 } },
+  { code: 'RD KTP/RTW', label: 'Krankentransport mit RTW', category: 'RD', aao: { RTW: 1 } },
   { code: 'B 1', label: 'Kleinbrand', category: 'B', aao: { LF: 1 } },
-  { code: 'B 2', label: 'Mittelbrand (Pkw, Hecke, Schuppen)', category: 'B', aao: { HLF: 1, LF: 1 } },
-  { code: 'B 3', label: 'Brand Wohnung / Gebäude', category: 'B', aao: { ELW: 1, HLF: 2, DLK: 1, RTW: 1 } },
-  { code: 'B 4', label: 'Großbrand', category: 'B', aao: { ELW: 1, HLF: 3, DLK: 1, TLF: 1, RTW: 1, NEF: 1 } },
+  { code: 'B 2', label: 'Mittelbrand (Pkw, Schuppen, Freifläche groß)', category: 'B', aao: { HLF: 1, LF: 1 } },
+  { code: 'B 2 PERSON', label: 'Mittelbrand, Person in Gefahr', category: 'B', aao: { HLF: 1, LF: 1, RTW: 1 } },
+  { code: 'B 3', label: 'Brand im Gebäude', category: 'B', aao: { ELW: 1, HLF: 2, DLK: 1 } },
+  { code: 'B 3 PERSON', label: 'Brand im Gebäude, Person in Gefahr', category: 'B', aao: { ELW: 1, HLF: 2, DLK: 1, RTW: 1 } },
+  { code: 'B 4', label: 'Großbrand / hohe Personenzahl', category: 'B', aao: { ELW: 1, HLF: 3, LF: 1, DLK: 1, TLF: 1 } },
+  { code: 'B 5', label: 'Pflegeheim, Kaufhaus, Krankenhaus', category: 'B', aao: { ELW: 1, HLF: 4, LF: 2, DLK: 2, TLF: 1, RTW: 2, NEF: 1 } },
+  { code: 'B 6', label: 'Alarmstufenerhöhung B 6', category: 'B', aao: { ELW: 2, HLF: 5, LF: 3, DLK: 2, TLF: 2, RTW: 2, NEF: 1 } },
   { code: 'B BMA', label: 'Brandmeldeanlage', category: 'B', aao: { ELW: 1, HLF: 1, DLK: 1 } },
+  { code: 'B WALD', label: 'Waldbrand groß', category: 'B', aao: { ELW: 1, HLF: 2, LF: 2, TLF: 2 } },
+  { code: 'B ELEKTROANLAGE', label: 'Elektroanlage / Trafo', category: 'B', aao: { HLF: 2 } },
+  { code: 'B BOOT', label: 'Brand Boot / Yacht', category: 'B', aao: { HLF: 1, GWW: 1 } },
   { code: 'THL 1', label: 'Technische Hilfe klein', category: 'THL', aao: { HLF: 1 } },
-  { code: 'THL 2', label: 'Technische Hilfe mittel', category: 'THL', aao: { HLF: 1, RW: 1 } },
-  { code: 'THL 3', label: 'VU mit eingeklemmter Person', category: 'THL', aao: { ELW: 1, HLF: 2, RW: 1, RTW: 1, NEF: 1 } },
-  { code: 'THL Person', label: 'Person in Notlage / Türöffnung', category: 'THL', aao: { HLF: 1, RTW: 1 } },
+  { code: 'THL 2', label: 'VU mehrere Pkw / Lkw ohne Eingeklemmte', category: 'THL', aao: { HLF: 1, RTW: 1 } },
+  { code: 'THL 3', label: 'Person eingeklemmt (1–2 Pkw)', category: 'THL', aao: { ELW: 1, HLF: 2, RW: 1, RTW: 1, NEF: 1 } },
+  { code: 'THL 4', label: 'Mehrere Pkw oder Lkw, Person eingeklemmt', category: 'THL', aao: { ELW: 1, HLF: 3, RW: 1, RTW: 2, NEF: 1 } },
+  { code: 'THL 5', label: 'Massenkarambolage / Bus mit Eingeklemmten', category: 'THL', aao: { ELW: 2, HLF: 4, RW: 2, RTW: 4, NEF: 2 } },
+  { code: 'THL P EINGESCHLOSSEN', label: 'Wohnung/Fahrzeug öffnen akut', category: 'THL', aao: { HLF: 1, RTW: 1 } },
+  { code: 'THL P AUFZUG', label: 'Aufzug öffnen akut', category: 'THL', aao: { HLF: 1 } },
+  { code: 'THL P RETTUNG H/T', label: 'Rettung aus Höhe/Tiefe', category: 'THL', aao: { ELW: 1, HLF: 1, DLK: 1, RTW: 1 } },
+  { code: 'THL P STROM', label: 'Stromunfall', category: 'THL', aao: { HLF: 1, RTW: 1, NEF: 1 } },
+  { code: 'THL UNWETTER', label: 'Unwetter (Baum, Wasser)', category: 'THL', aao: { LF: 1 } },
+  { code: 'THL WASSER', label: 'Wasserrettung', category: 'THL', aao: { HLF: 1, GWW: 1, RTW: 1 } },
+  { code: 'THL GROßTIERRETTUNG', label: 'Großtier in Notlage', category: 'THL', aao: { HLF: 1, RW: 1 } },
+  { code: 'THL TRAGEHILFE', label: 'Tragehilfe für den RD', category: 'THL', aao: { HLF: 1 } },
+  { code: 'THL RETTUNGSKORB', label: 'Drehleiter mit Krankentragenhalterung', category: 'THL', aao: { DLK: 1 } },
+  { code: 'ABC 1', label: 'Geruch (Gas, Ammoniak, Chlor)', category: 'ABC', aao: { HLF: 1 } },
+  { code: 'ABC KRAFTSTOFF', label: 'Auslaufender Kraftstoff', category: 'ABC', aao: { LF: 1 } },
+  { code: 'ABC 2', label: 'Gefahrstoff klein / Gasaustritt im Freien', category: 'ABC', aao: { ELW: 1, HLF: 1 } },
+  { code: 'ABC 3', label: 'Gefahrstoff groß / Gasaustritt im Gebäude', category: 'ABC', aao: { ELW: 1, HLF: 2, RTW: 1 } },
+  { code: 'ABC B', label: 'Brand Tankstelle, Tanklager, Biogas', category: 'ABC', aao: { ELW: 1, HLF: 3, DLK: 1, TLF: 1, RTW: 1 } },
+  { code: 'ABC EXPLOSION', label: 'Explosion / Verpuffung', category: 'ABC', aao: { ELW: 1, HLF: 2, RW: 1, RTW: 2, NEF: 1 } },
+  { code: 'ABC ÖL LAND', label: 'Ölschaden an Land / Heizöltank', category: 'ABC', aao: { LF: 1 } },
+  { code: 'ABC ÖL WASSER', label: 'Öl auf Gewässer', category: 'ABC', aao: { HLF: 1, GWW: 1 } },
+  { code: 'ABC GEFAHRSTOFFMELDEANLAGE', label: 'Gefahrstoffmeldeanlage', category: 'ABC', aao: { HLF: 1 } },
   { code: 'SONST', label: 'Sonstiger Einsatz', category: 'SONST', aao: {} },
 ];
+
+/** Alte Stichworte früherer Versionen -> ABek */
+export const STICHWORT_ALIAS: Record<string, string> = { 'THL Person': 'THL P EINGESCHLOSSEN' };
+
+/** Fehlende ABek-Stichworte in ältere Leitstellen übernehmen, ohne eigene AAO-Anpassungen zu überschreiben */
+export function ensureStichworte(scn: { stichworte: Stichwort[] }): void {
+  for (const [old, neu] of Object.entries(STICHWORT_ALIAS)) {
+    const sw = scn.stichworte.find((s) => s.code === old);
+    if (sw && !scn.stichworte.some((s) => s.code === neu)) sw.code = neu;
+  }
+  for (const d of DEFAULT_STICHWORTE) if (!scn.stichworte.some((s) => s.code === d.code)) scn.stichworte.push(structuredClone(d));
+}
+
+/** "B 3 PERSON" -> "B3 PERSON", so wie es auf dem Alarmdisplay steht */
+export function compactStichwort(code: string): string {
+  return code.replace(/^B (\d)/, 'B$1');
+}
 
 export const SPECIALTIES = [
   'Innere Medizin',

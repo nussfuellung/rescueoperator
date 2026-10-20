@@ -1,5 +1,6 @@
 // Autoritative Spielsimulation: Notrufe, Einsätze, Fahrzeuge, Funk, Wertung.
-import { FMS_TEXT, HILFSFRIST_MS, shortCallsign } from '../shared/catalog';
+import { FMS_TEXT, HILFSFRIST_MS, ensureStichworte, shortCallsign } from '../shared/catalog';
+import { aaoMitSchlagwort, findSchlagwort, formatSchlagwort, schlagwortByNr } from '../shared/schlagworte';
 import { RoadGraph, dist, nearestTown, reverseGeocode } from '../shared/geo';
 import { mulberry32 } from '../shared/mapgen';
 import { computeProposal, coverage } from '../shared/dispatch';
@@ -21,6 +22,7 @@ import type {
 } from '../shared/types';
 import { ensureTmo } from '../shared/fleet';
 import { inDienst } from '../shared/lstsim';
+import { pzcFachbereich, pzcFuer, pzcSprech } from '../shared/pzc';
 import {
   BMA_REAL_LAGE,
   BMA_TEMPLATE,
@@ -41,6 +43,8 @@ import {
 interface PatientTruth {
   specialty: string;
   desc: string;
+  /** Patientenzuweisungscode, den die Besatzung meldet */
+  pzc: string;
   unitId?: string;
   done: boolean;
 }
@@ -115,6 +119,12 @@ export class Game {
 
   private callTruth = new Map<string, Truth>();
   private incTruth = new Map<string, Truth>();
+  /** IVENA: Abmeldungen je Klinik und Fachbereich, Zuweisungen */
+  private ivena: { abmeldungen: { hospitalId: string; fach: string; bis: number; grund: string }[]; zuweisungen: NonNullable<PublicState['ivena']>['zuweisungen']; nextCheck: number } = {
+    abmeldungen: [],
+    zuweisungen: [],
+    nextCheck: 0,
+  };
   private recentTpl: string[] = [];
   /** Dienstzeiten je Fahrzeug (nur Fahrzeuge mit Schichtplan) */
   private dienst = new Map<string, Dienstzeit[]>();
@@ -136,6 +146,7 @@ export class Game {
     this.rng = mulberry32(opts.seed ?? Date.now() & 0xffffffff);
     this.events = opts.events ?? {};
     ensureTmo(scn);
+    ensureStichworte(scn);
     const d = opts.startDate ?? new Date();
     this.startDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     for (const st of scn.stations) {
@@ -336,7 +347,11 @@ export class Game {
       spokenWhere: loc.spoken,
       objekt: loc.objekt,
       needs,
-      patients: (tpl.patients ?? []).map((p) => ({ ...p, done: false })),
+      patients: (tpl.patients ?? []).map((p, i) => ({
+        ...p,
+        pzc: pzcFuer(p.desc, p.specialty, i === 0 ? alter : /kind|säugling/i.test(p.desc) ? this.rand(1, 6) : this.rand(18, 80), tpl.stichwort === 'RD 2'),
+        done: false,
+      })),
       lage: tpl.lage,
       workMs: this.rand(tpl.workMin[0], tpl.workMin[1]) * 60_000,
       name,
@@ -501,6 +516,11 @@ export class Game {
           this.log(inc, `Stichwort geändert: ${inc.stichwort} → ${action.stichwort}`);
           inc.stichwort = action.stichwort;
           inc.label = sw?.label ?? inc.label;
+          if (action.schlagwort === undefined && inc.schlagwort && findSchlagwort(inc.schlagwort)?.code !== inc.stichwort) inc.schlagwort = undefined;
+        }
+        if (action.schlagwort !== undefined && action.schlagwort !== inc.schlagwort) {
+          inc.schlagwort = findSchlagwort(action.schlagwort) ? action.schlagwort : undefined;
+          if (inc.schlagwort) this.log(inc, `Schlagwort: ${inc.schlagwort}`);
         }
         if (action.note !== undefined) inc.note = action.note;
         if (action.tmo !== undefined && action.tmo !== inc.tmo) {
@@ -694,6 +714,7 @@ export class Game {
       nr: `E-${String(this.seq.inc).padStart(6, '0')}`,
       stichwort: sw.code,
       label: sw.label,
+      schlagwort: findSchlagwort(a.schlagwort)?.code === sw.code ? a.schlagwort : undefined,
       address: a.address.slice(0, 160),
       x: a.x,
       y: a.y,
@@ -712,7 +733,7 @@ export class Game {
       patient: a.patient?.slice(0, 120) || undefined,
       sondersignal: a.sondersignal ?? true,
     };
-    this.log(inc, `Einsatz angelegt von ${player.name}: ${sw.code} ${sw.label}`);
+    this.log(inc, `Einsatz angelegt von ${player.name}: ${inc.schlagwort ?? `${sw.code} ${sw.label}`}`);
     this.incidents.push(inc);
     this.score.incidentsCreated++;
     if (call) call.incidentId = inc.id;
@@ -731,6 +752,9 @@ export class Game {
         } else {
           this.addScore(-10, `${inc.nr}: Stichwort ${sw.code} falsch (richtig wäre ${truth.stichwort})`);
         }
+        // Passendes Schlagwort
+        const trueSlw = schlagwortByNr(truth.tpl.schlagwort, truth.stichwort);
+        if (trueSlw && inc.schlagwort === formatSchlagwort(trueSlw)) this.addScore(5, `${inc.nr}: Schlagwort ${trueSlw.nr} passend`);
         // Wertung Einsatzort
         const d = dist(truth.pos, inc);
         const tolerance = truth.tpl.where === 'ausserorts' || truth.tpl.where === 'autobahn' ? 1200 : 200;
@@ -772,7 +796,7 @@ export class Game {
     if (!inc) return [];
     const sw = this.scn.stichworte.find((s) => s.code === inc.stichwort);
     if (!sw || inc.firstArrival) return [];
-    return computeProposal(this.scn, this.graph, this.units, inc, sw.aao);
+    return computeProposal(this.scn, this.graph, this.units, inc, aaoMitSchlagwort(sw.aao, inc.schlagwort));
   }
 
   private alarm(player: Player, incidentId: string, unitIds: string[]): string | void {
@@ -788,7 +812,7 @@ export class Game {
       if (![1, 2].includes(u.baseStatus)) continue;
       u.incidentId = inc.id;
       u.task = 'alarmed';
-      u.hint = `Alarm: ${inc.stichwort} ${inc.label} – ${inc.address}${inc.note ? ' – ' + inc.note : ''}`;
+      u.hint = `Alarm: ${inc.schlagwort ?? `${inc.stichwort} ${inc.label}`} – ${inc.address}${inc.note ? ' – ' + inc.note : ''}`;
       const career = this.station(u).career || this.typeOf(u)?.org === 'RD';
       const atStation = u.status === 2 || u.baseStatus === 2;
       u.timer = u.crewPlayerId
@@ -796,7 +820,7 @@ export class Game {
         : this.time + (atStation ? (career ? this.rand(40, 90) : this.rand(180, 330)) : this.rand(5, 12)) * 1000;
       inc.unitIds.push(u.id);
       alarmed.push(shortCallsign(u.callsign));
-      this.radioMsg(this.scn.ilsName, u.callsign, `Alarmierung: ${inc.stichwort} ${inc.address}${inc.sondersignal === false ? ' – ohne Sondersignal' : ''}${inc.tmo ? ` – Einsatzgruppe ${this.tmoName(inc.tmo)}` : ''}`, 'system');
+      this.radioMsg(this.scn.ilsName, u.callsign, `Alarmierung: ${inc.schlagwort ?? inc.stichwort} – ${inc.address}${inc.sondersignal === false ? ' – ohne Sondersignal' : ''}${inc.tmo ? ` – Einsatzgruppe ${this.tmoName(inc.tmo)}` : ''}`, 'system');
       if (inc.tmo) u.tmo = inc.tmo;
     }
     if (!alarmed.length) return 'Keine verfügbaren Fahrzeuge ausgewählt';
@@ -903,7 +927,7 @@ export class Game {
     if (has(/\b(patient|zustand|transport|klinik|krankenhaus|zielklinik|wohin)/)) {
       const p = truth?.patients.find((x) => x.unitId === u.id && !x.done);
       if (u.task === 'toHospital' && hosp) return `Wir transportieren ${p ? p.desc : 'den Patienten'} in das ${hosp.name}, kommen.`;
-      if (u.task === 'awaitHospital' && p) return `Patient: ${p.desc}. Wir benötigen eine Klinik mit ${p.specialty}, kommen.`;
+      if (u.task === 'awaitHospital' && p) return `Patient: ${p.desc}. PZC ${pzcSprech(p.pzc)}, erbitten Zielklinik, kommen.`;
       if (u.hasPatient) return 'Patient ist stabil, wir sind transportbereit, kommen.';
       return 'Wir haben keinen Patienten an Bord, kommen.';
     }
@@ -1000,11 +1024,19 @@ export class Game {
     const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
     const truth = inc ? this.incTruth.get(inc.id) : undefined;
     const pat = truth?.patients.find((p) => p.unitId === u.id && !p.done);
+    let trotz = false;
     if (pat && inc) {
-      if (h.specialties.includes(pat.specialty)) this.addScore(10, `${inc.nr}: passende Zielklinik (${pat.specialty})`);
-      else this.addScore(-10, `${inc.nr}: ${h.name} hat keine ${pat.specialty}`);
-      this.log(inc, `${shortCallsign(u.callsign)} Transport nach ${h.name}`);
+      const fach = pzcFachbereich(pat.pzc);
+      const ab = this.abgemeldet(h.id, fach);
+      const alternative = this.scn.hospitals.some((o) => o.id !== h.id && o.specialties.includes(fach) && !this.abgemeldet(o.id, fach));
+      if (!h.specialties.includes(fach)) this.addScore(-10, `${inc.nr}: ${h.name} hat keine ${fach}`);
+      else if (ab && alternative) {
+        trotz = true;
+        this.addScore(-10, `${inc.nr}: ${h.name} hat ${fach} in IVENA abgemeldet (${ab.grund})`);
+      } else this.addScore(10, `${inc.nr}: passende Zielklinik (${fach})`);
+      this.log(inc, `${shortCallsign(u.callsign)} Transport nach ${h.name}${pat.pzc ? `, PZC ${pat.pzc}` : ''}${trotz ? ' (trotz Abmeldung)' : ''}`);
     }
+    this.ivena.zuweisungen.push({ t: this.time, hospitalId: h.id, callsign: u.callsign, pzc: u.pzc, nr: inc?.nr, ...(trotz ? { trotzAbmeldung: true } : {}) });
     if (u.crewPlayerId) {
       u.hint = `Zielklinik: ${h.name}. Status 7 drücken, sobald der Patient aufgenommen ist.`;
       return;
@@ -1255,7 +1287,8 @@ export class Game {
       p.unitId = carrier.id;
       carrier.hasPatient = true;
       carrier.task = 'awaitHospital';
-      const text = `Patient transportbereit: ${p.desc}. Erbitten Zielklinik, benötigt ${p.specialty}.`;
+      carrier.pzc = p.pzc;
+      const text = `Patient transportbereit, PZC ${p.pzc}, erbitten Zielklinik.`;
       if (carrier.crewPlayerId) carrier.hint = `${text} Zielklinik wählen oder bei der Leitstelle erfragen.`;
       else
         this.after(this.rand(5, 40) * 1000, () => {
@@ -1297,6 +1330,7 @@ export class Game {
       if (p.unitId === u.id) p.done = true;
     });
     u.hasPatient = false;
+    u.pzc = undefined;
     this.releaseUnit(u.id, false);
   }
 
@@ -1322,6 +1356,47 @@ export class Game {
   /** Minute seit Mitternacht des Starttages */
   private gameMinute() {
     return Math.floor(this.scn.settings.startClock + this.time / 60000);
+  }
+
+  /** Ist der Fachbereich der Klinik in IVENA abgemeldet? */
+  abgemeldet(hospitalId: string, fach: string) {
+    return this.ivena.abmeldungen.find((a) => a.hospitalId === hospitalId && a.fach === fach);
+  }
+
+  /** Kliniken melden Fachbereiche zeitweise ab (Kapazität, Schockraum, Gerätedefekt) und wieder an */
+  private checkIvena() {
+    if (this.time < this.ivena.nextCheck) return;
+    const first = this.ivena.nextCheck === 0;
+    this.ivena.nextCheck = this.time + 60_000;
+    this.ivena.abmeldungen = this.ivena.abmeldungen.filter((a) => a.bis > this.time);
+    this.ivena.zuweisungen = this.ivena.zuweisungen.filter((z) => this.time - z.t < 3 * 3600_000);
+    const hs = this.scn.hospitals;
+    if (hs.length < 2) return;
+    const GRUND: Record<string, string[]> = {
+      'Innere Medizin': ['keine Betten frei', 'Notaufnahme überlastet'],
+      Chirurgie: ['OP-Kapazität erschöpft', 'keine Betten frei'],
+      Unfallchirurgie: ['Schockraum belegt', 'OP-Kapazität erschöpft'],
+      'Kardiologie (HKL)': ['Herzkatheterlabor belegt', 'HKL technischer Defekt'],
+      'Stroke Unit': ['CT ausgefallen', 'Stroke Unit voll belegt'],
+      Pädiatrie: ['keine Betten frei'],
+      Verbrennungen: ['keine Betten frei'],
+    };
+    for (const h of hs) {
+      for (const fach of h.specialties) {
+        if (this.abgemeldet(h.id, fach)) continue;
+        // Mindestens eine weitere Klinik muss den Fachbereich angemeldet haben
+        const andere = hs.some((o) => o.id !== h.id && o.specialties.includes(fach) && !this.abgemeldet(o.id, fach));
+        if (!andere) continue;
+        const last = this.ivena.zuweisungen.filter((z) => z.hospitalId === h.id && this.time - z.t < 3600_000).length;
+        const full = h.specialties.length >= 6;
+        // ca. 1 Abmeldung pro Klinik und Fachbereich alle 10 bis 30 Spielstunden, bei vielen Zuweisungen häufiger
+        const perMin = (full ? 1 / 1800 : 1 / 600) * (1 + Math.max(0, last - 2)) * (first ? 150 : 1);
+        if (this.rng() < perMin) {
+          const grund = last >= 4 ? 'Kapazität erschöpft' : this.pick(GRUND[fach] ?? ['keine Betten frei']);
+          this.ivena.abmeldungen.push({ hospitalId: h.id, fach, grund, bis: this.time + this.rand(30, 120) * 60_000 });
+        }
+      }
+    }
   }
 
   /** Schichtbeginn und -ende: freie Fahrzeuge auf der Wache gehen in Status 6 bzw. zurück in Status 2 */
@@ -1358,6 +1433,7 @@ export class Game {
     const dt = realDtMs * this.speed;
     this.time += dt;
     this.checkDienst();
+    this.checkIvena();
 
     // geplante Ereignisse
     if (this.scheduled.length) {
@@ -1470,6 +1546,7 @@ export class Game {
       units: this.units.map((u) => ({ ...u, route: u.route ? [u.route[u.route.length - 1]] : undefined })),
       radio: this.radio.slice(-120),
       score: this.score,
+      ivena: { abmeldungen: this.ivena.abmeldungen, zuweisungen: this.ivena.zuweisungen.slice(-40) },
     };
   }
 }

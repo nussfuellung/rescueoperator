@@ -120,7 +120,7 @@ export interface MapObject {
 export interface Stichwort {
   code: string;
   label: string;
-  category: 'RD' | 'B' | 'THL' | 'SONST';
+  category: 'RD' | 'B' | 'THL' | 'ABC' | 'SONST';
   /** Alarm- und Ausrückeordnung: benötigte Fahrzeugtypen */
   aao: Record<VehicleTypeId, number>;
 }
@@ -235,6 +235,8 @@ export interface UnitState {
   /** Spielzeit, zu der die aktuelle Aufgabe abläuft */
   timer?: number;
   hasPatient?: boolean;
+  /** Patientenzuweisungscode des Patienten an Bord (IVENA) */
+  pzc?: string;
   /** Hinweis für die Besatzung (Rolle Fahrzeugbesatzung) */
   hint?: string;
   /** Aktuell geschaltete TMO-Rufgruppe */
@@ -300,6 +302,8 @@ export interface IncidentState {
   nr: string;
   stichwort: string;
   label: string;
+  /** Schlagwort im Format des Leitsystems, z. B. "#B1515 - B3 - #Verkehr#LKW / Bus außerorts" */
+  schlagwort?: string;
   address: string;
   x: number;
   y: number;
@@ -369,4 +373,11 @@ export interface PublicState {
   units: UnitState[];
   radio: RadioMessage[];
   score: ScoreBoard;
+  ivena?: IvenaState;
+}
+
+/** IVENA: Abmeldungen der Kliniken je Fachbereich und erfolgte Zuweisungen */
+export interface IvenaState {
+  abmeldungen: { hospitalId: string; fach: string; bis: number; grund: string }[];
+  zuweisungen: { t: number; hospitalId: string; callsign: string; pzc?: string; nr?: string; trotzAbmeldung?: boolean }[];
 }

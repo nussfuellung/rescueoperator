@@ -14,6 +14,8 @@ export type Action =
       a: 'createIncident';
       callId?: string;
       stichwort: string;
+      /** Schlagwort im Format des Leitsystems, z. B. "#B1515 - B3 - #Verkehr#LKW / Bus außerorts" */
+      schlagwort?: string;
       address: string;
       x: number;
       y: number;
@@ -28,7 +30,7 @@ export type Action =
       /** Fahrzeuge, die direkt mit dem Anlegen alarmiert werden */
       alarmUnitIds?: string[];
     }
-  | { a: 'updateIncident'; incidentId: string; stichwort?: string; note?: string; tmo?: string }
+  | { a: 'updateIncident'; incidentId: string; stichwort?: string; schlagwort?: string; note?: string; tmo?: string }
   | { a: 'setTmo'; unitIds: string[]; group: string }
   | { a: 'groupCall'; group: string; text: string }
   | { a: 'crewTmo'; group: string }

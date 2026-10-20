@@ -1,4 +1,5 @@
 // Fahrzeugstatus-Tableau mit Bedienleiste für das ausgewählte Fahrzeug.
+import { HospitalSelect } from './Ivena';
 import { useState } from 'react';
 import { FMS_COLOR, FMS_TEXT, formatDuration, shortCallsign } from '../../../shared/catalog';
 import type { UnitState } from '../../../shared/types';
@@ -126,17 +127,7 @@ function UnitControl({ ctx, u }: { ctx: GameCtx; u: UnitState }) {
           </button>
         )}
         {u.task === 'awaitHospital' && (
-          <select
-            defaultValue=""
-            onChange={(e) => e.target.value && conn.send({ a: 'assignHospital', unitId: u.id, hospitalId: e.target.value })}
-          >
-            <option value="">Zielklinik zuweisen…</option>
-            {scn.hospitals.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.name} ({h.specialties.join(', ')})
-              </option>
-            ))}
-          </select>
+          <HospitalSelect ctx={ctx} u={u} />
         )}
         {u.incidentId && !u.hasPatient && (
           <button onClick={() => conn.send({ a: 'releaseUnit', unitId: u.id })}>Aus Einsatz nehmen</button>

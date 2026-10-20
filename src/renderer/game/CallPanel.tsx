@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatDuration } from '../../../shared/catalog';
 import { geocode, nearestTown, reverseGeocode, streetDirectory } from '../../../shared/geo';
 import { computeProposal } from '../../../shared/dispatch';
-import { searchSchlagworte } from '../../../shared/schlagworte';
+import { aaoMitSchlagwort, findSchlagwort, formatSchlagwort, schlagwortByNr, searchSchlagworte } from '../../../shared/schlagworte';
 import type { CallState, IncidentState, QuestionId, Vec } from '../../../shared/types';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
@@ -228,6 +228,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
   const [objekt, setObjekt] = useState('');
   const [stichwort, setStichwort] = useState('');
   const [swQuery, setSwQuery] = useState('');
+  const [schlagwort, setSchlagwort] = useState('');
   const [sondersignal, setSondersignal] = useState(true);
   const [patients, setPatients] = useState(0);
   const [patient, setPatient] = useState('');
@@ -273,6 +274,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
     if (call?.bma) {
       applyPos(call.bma, 'BMA-Übertragung', call.bma.address);
       setStichwort('B BMA');
+      setSchlagwort(formatSchlagwort(schlagwortByNr('#B1610')!));
       setObjekt(call.bma.text.replace(/^BMA-Auslösung\s*/, '').replace(/,.*$/, ''));
     } else if (call?.aml) {
       ctx.focus(call.aml, Math.max(0.15, Math.min(1.5, 90 / call.aml.acc)));
@@ -345,9 +347,9 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
   const proposal = useMemo(() => {
     if (!pos || !sw) return [];
     const draft = { id: '_entwurf', x: pos.x, y: pos.y } as IncidentState;
-    return computeProposal(scn, graph, state.units, draft, sw.aao);
+    return computeProposal(scn, graph, state.units, draft, aaoMitSchlagwort(sw.aao, schlagwort));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pos, stichwort, Math.floor(state.time / 10000)]);
+  }, [pos, stichwort, schlagwort, Math.floor(state.time / 10000)]);
   const alarmIds = proposal.map((p) => p.unitId).filter((id) => !unchecked.has(id));
 
   const submit = (withAlarm: boolean) => {
@@ -357,6 +359,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
       a: 'createIncident',
       callId: call?.id,
       stichwort,
+      schlagwort: schlagwort || undefined,
       address: address || street,
       x: pos.x,
       y: pos.y,
@@ -383,7 +386,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
     onDone();
   };
 
-  const groups = ['RD', 'B', 'THL', 'SONST'] as const;
+  const groups = ['RD', 'B', 'THL', 'ABC', 'SONST'] as const;
   const unitsById = new Map(state.units.map((u) => [u.id, u]));
   return (
     <form
@@ -493,24 +496,32 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
               {swHits.map((h) => (
                 <button
                   type="button"
-                  key={h.text}
+                  key={formatSchlagwort(h)}
                   onClick={() => {
                     setStichwort(h.code);
+                    setSchlagwort(formatSchlagwort(h));
                     setSwQuery('');
-                    if (!note) setNote(h.text);
                   }}
                 >
-                  <b>{h.code}</b> {h.text}
+                  <b>{h.nr}</b> <b>{h.code}</b> #{h.kat}#{h.text}
+                  {h.rtw ? <span className="muted"> · +{h.rtw} RTW</span> : null}
                 </button>
               ))}
             </div>
           )}
         </div>
         <div className="row">
-          <select value={stichwort} onChange={(e) => setStichwort(e.target.value)} className="grow">
+          <select
+            value={stichwort}
+            onChange={(e) => {
+              setStichwort(e.target.value);
+              if (findSchlagwort(schlagwort)?.code !== e.target.value) setSchlagwort('');
+            }}
+            className="grow"
+          >
             <option value="">– Einsatzstichwort –</option>
             {groups.map((g) => (
-              <optgroup key={g} label={{ RD: 'Rettungsdienst', B: 'Brand', THL: 'Technische Hilfe', SONST: 'Sonstiges' }[g]}>
+              <optgroup key={g} label={{ RD: 'Rettungsdienst', B: 'Brand', THL: 'Technische Hilfe', ABC: 'ABC / Gefahrstoffe', SONST: 'Sonstiges' }[g]}>
                 {scn.stichworte
                   .filter((s) => s.category === g)
                   .map((s) => (
@@ -526,6 +537,15 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
             Sondersignal
           </label>
         </div>
+        {schlagwort && (
+          <div className="em-schlagwort">
+            <code>{schlagwort}</code>
+            {findSchlagwort(schlagwort)?.rtw ? <span className="small muted"> Anzahl (RTW): {findSchlagwort(schlagwort)!.rtw}</span> : null}
+            <button type="button" className="small" title="Schlagwort entfernen" onClick={() => setSchlagwort('')}>
+              ×
+            </button>
+          </div>
+        )}
         <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Meldebild / Hinweise für die Einsatzkräfte" rows={2} />
       </fieldset>
 

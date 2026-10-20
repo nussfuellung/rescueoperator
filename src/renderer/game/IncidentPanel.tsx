@@ -1,4 +1,5 @@
 // Einsatzliste, Einsatzdetails und Disposition nach AAO.
+import { aaoMitSchlagwort } from '../../../shared/schlagworte';
 import { useEffect, useMemo, useState } from 'react';
 import { FMS_COLOR, FMS_TEXT, formatClock, formatDuration, shortCallsign } from '../../../shared/catalog';
 import { computeProposal } from '../../../shared/dispatch';
@@ -51,7 +52,7 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
 
   // AAO-Vorschlag und Fahrzeiten aller freien Fahrzeuge
   const { proposal, free } = useMemo(() => {
-    const proposal = sw && !inc.firstArrival ? computeProposal(scn, graph, state.units, inc, sw.aao) : [];
+    const proposal = sw && !inc.firstArrival ? computeProposal(scn, graph, state.units, inc, aaoMitSchlagwort(sw.aao, inc.schlagwort)) : [];
     const start = graph.nearestNode(inc);
     const { time } = graph.dijkstra(start, true);
     const free = state.units
@@ -66,7 +67,7 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
       .sort((a, b) => a.seconds - b.seconds);
     return { proposal, free };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inc.id, inc.stichwort, inc.x, inc.y, tick, assignedKey, !!inc.firstArrival]);
+  }, [inc.id, inc.stichwort, inc.schlagwort, inc.x, inc.y, tick, assignedKey, !!inc.firstArrival]);
 
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
@@ -117,6 +118,7 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
           {inc.sondersignal === false && <span className="warn">ohne Sondersignal</span>}
         </div>
       )}
+      {inc.schlagwort && <code className="em-schlagwort">{inc.schlagwort}</code>}
       <div className="row">
         <select
           value={inc.stichwort}

@@ -88,7 +88,7 @@ export function CrewView({ ctx }: { ctx: GameCtx }) {
           <div className="crew-incident">
             <div className="panel-subtitle">Einsatzauftrag {inc.nr}</div>
             <div className="big-text">
-              {inc.stichwort} – {inc.label}
+              {inc.schlagwort ?? `${inc.stichwort} – ${inc.label}`}
             </div>
             <div>{inc.address}</div>
             {inc.note && <div className="note">{inc.note}</div>}

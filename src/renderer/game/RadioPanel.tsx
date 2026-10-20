@@ -1,4 +1,5 @@
 // Funkverkehr: Sprechwunsch-Warteschlange und Funkprotokoll.
+import { HospitalSelect } from './Ivena';
 import { useEffect, useRef, useState } from 'react';
 import { formatClock, formatDuration, radioName } from '../../../shared/catalog';
 import { conn } from '../net';
@@ -95,17 +96,7 @@ export function RadioPanel({ ctx }: { ctx: GameCtx }) {
           {waitingHospital.map((u) => (
             <div key={u.id} className="speak-row hospital">
               <b>{radioName(u.callsign)}</b>
-              <select
-                defaultValue=""
-                onChange={(e) => e.target.value && conn.send({ a: 'assignHospital', unitId: u.id, hospitalId: e.target.value })}
-              >
-                <option value="">Zielklinik zuweisen…</option>
-                {scn.hospitals.map((h) => (
-                  <option key={h.id} value={h.id}>
-                    {h.name} ({h.specialties.join(', ')})
-                  </option>
-                ))}
-              </select>
+              <HospitalSelect ctx={ctx} u={u} />
             </div>
           ))}
         </div>
