@@ -53,7 +53,7 @@ export function MobileScreen({ code, areas }: { code: string; areas: Tab[] }) {
     return (
       <div className="mobile-start">
         <h1>
-          Leitstellen<span>simulator</span>
+          rescue<span>.Operator</span>
         </h1>
         <p>{areas.length > 1 ? 'Telefon und Funk' : areas[0] === 'funk' ? 'Funk' : 'Telefon'} auf diesem Gerät</p>
         <button

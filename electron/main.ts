@@ -1,6 +1,6 @@
 // Electron-Hauptprozess: Fenster, Leitstellen-Bibliothek, Host-Server.
 import { app, BrowserWindow, dialog, ipcMain, net, session, shell, systemPreferences } from 'electron';
-import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync, statSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { join } from 'node:path';
 import { recomputeHouseNumbers } from '../shared/geo';
@@ -8,15 +8,31 @@ import { generateScenario } from '../shared/mapgen';
 import type { Scenario } from '../shared/types';
 import { GameServer, lanAddresses } from '../server/server';
 import { speakSystem, stopSystemSpeech, systemTtsAvailable } from './tts';
+import { updateSplash } from './updater';
 import { downloadModel, handleModelProtocol, installModelFromBytes, modelInfo, registerModelScheme, removeModel } from './stt';
 
 registerModelScheme();
 
-const UA = `Leitstellensimulator/${app.getVersion()} (Desktop-Spiel; https://github.com)`;
+// Bis 0.8 hieß das Spiel Leitstellensimulator: Leitstellen, Einstellungen und Sprachmodell einmalig übernehmen
+{
+  const alt = join(app.getPath('appData'), 'Leitstellensimulator');
+  const neu = app.getPath('userData');
+  if (alt !== neu && existsSync(alt) && !existsSync(neu)) {
+    try {
+      cpSync(alt, neu, { recursive: true });
+    } catch (e) {
+      console.error('Übernahme der alten Daten fehlgeschlagen', e);
+    }
+  }
+}
+
+const UA = `rescue.Operator/${app.getVersion()} (Desktop-Spiel; https://github.com)`;
 const ALLOWED_HOSTS = ['overpass-api.de', 'overpass.kumi.systems', 'overpass.private.coffee', 'nominatim.openstreetmap.org'];
 
 let win: BrowserWindow | null = null;
 let host: GameServer | null = null;
+/** Solange der Splash läuft, gibt es noch kein Hauptfenster: dann nicht beenden */
+let starting = true;
 
 const libDir = () => {
   const dir = join(app.getPath('userData'), 'leitstellen');
@@ -76,7 +92,7 @@ function createWindow() {
     minWidth: 1200,
     minHeight: 750,
     backgroundColor: '#11161d',
-    title: 'Leitstellensimulator',
+    title: 'rescue.Operator',
     autoHideMenuBar: true,
     webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
@@ -189,12 +205,15 @@ app.whenReady().then(async () => {
   // Kartenkacheln von OpenStreetMap verlangen eine Kennung und einen Referer
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://*.openstreetmap.org/*', 'https://*.openstreetmap.de/*'] }, (details, cb) => {
     details.requestHeaders['User-Agent'] = UA;
-    details.requestHeaders['Referer'] = 'https://leitstellensimulator.local/';
+    details.requestHeaders['Referer'] = 'https://rescue-operator.local/';
     cb({ requestHeaders: details.requestHeaders });
   });
+  await updateSplash();
   createWindow();
+  starting = false;
 });
 app.on('window-all-closed', async () => {
+  if (starting) return;
   await host?.stop();
   app.quit();
 });

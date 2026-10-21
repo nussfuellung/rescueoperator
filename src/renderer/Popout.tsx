@@ -56,7 +56,7 @@ export function Popout({ id, title, onClose, children }: { id: PanelId; title: s
       return;
     }
     w.document.head.innerHTML = '<meta charset="utf-8">';
-    w.document.title = `${title} – Leitstellensimulator`;
+    w.document.title = `${title} – rescue.Operator`;
     copyStyles(document, w.document);
     w.document.body.innerHTML = '';
     w.document.body.className = 'popout-body';

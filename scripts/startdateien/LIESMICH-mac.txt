@@ -1,7 +1,7 @@
-Leitstellensimulator für Mac mit {CHIP}
-=========================================
+rescue.Operator für Mac mit {CHIP}
+====================================
 
-1. Die ZIP-Datei im Finder doppelklicken, dann liegt "Leitstellensimulator" daneben.
+1. Die ZIP-Datei im Finder doppelklicken, dann liegt "rescue.Operator" daneben.
 2. Die App in den Ordner "Programme" ziehen.
 3. Beim ersten Start meldet macOS, dass die App nicht überprüft werden kann,
    weil sie nicht von Apple beglaubigt ist:

@@ -1,6 +1,6 @@
-# Leitstellensimulator
+# rescue.Operator
 
-Multiplayer-Leitstellensimulator nach dem Vorbild der bayerischen Integrierten Leitstellen (ILS). Mehrere Spieler besetzen gemeinsam eine Leitstelle im LAN: Notrufe annehmen und abfragen, Einsätze anlegen, Fahrzeuge nach Alarm- und Ausrückeordnung (AAO) alarmieren, Funkverkehr mit FMS-Status führen und Patienten in passende Kliniken bringen. Ein Editor erlaubt eigene Leitstellenbereiche mit simuliertem GIS.
+rescue.Operator ist ein Multiplayer-Leitstellensimulator nach dem Vorbild der bayerischen Integrierten Leitstellen (ILS). Mehrere Spieler besetzen gemeinsam eine Leitstelle im LAN: Notrufe annehmen und abfragen, Einsätze anlegen, Fahrzeuge nach Alarm- und Ausrückeordnung (AAO) alarmieren, Funkverkehr mit FMS-Status führen und Patienten in passende Kliniken bringen. Ein Editor erlaubt eigene Leitstellenbereiche mit simuliertem GIS.
 
 Stand: sechster Playtest-Build (Version 0.6.0). Neu: Rettungsdienst, NEF-Standorte, HvO und Berufsfeuerwehr der ILS Würzburg nach der lstsim.de-Liste mit echten Standorten und Dienstzeiten, Fahrzeuge antworten im Funk passend, 19 neue Einsatzarten mit weniger Wiederholungen, häufiger AML-Ortung und ein Adressvorschlag ohne zweites Enter. Seit 0.5.0: Telefon und Funk auf Tablet oder Handy und Startdateien für Windows, Linux und macOS.
 
@@ -8,9 +8,9 @@ Stand: sechster Playtest-Build (Version 0.6.0). Neu: Rettungsdienst, NEF-Standor
 
 Pro System gibt es eine eigene ZIP in `release/` (erzeugt mit `npm run dist:all`), jeweils mit einer `LIESMICH.txt`:
 
-- **Windows** (`…-windows.zip`): entpacken, `Leitstellensimulator.exe` doppelklicken. Das Programm ist nicht signiert; SmartScreen fragt deshalb einmal nach („Weitere Informationen“ → „Trotzdem ausführen“).
+- **Windows** (`…-windows.zip`): entpacken, `rescue.Operator.exe` doppelklicken. Das Programm ist nicht signiert; SmartScreen fragt deshalb einmal nach („Weitere Informationen“ → „Trotzdem ausführen“).
 - **Linux** (`…-linux.zip`): entpacken, Rechtsklick auf `Start Linux.sh` → Ausführen. Die Piper-Stimmen sind dabei.
-- **macOS** (`…-mac-apple-chip.zip` bzw. `…-mac-intel.zip`): Die ZIP enthält direkt `Leitstellensimulator.app`, lokal (ad hoc) signiert. Nicht von Apple beglaubigt, daher beim ersten Start unter macOS 15 Systemeinstellungen → Datenschutz & Sicherheit → „Trotzdem öffnen“, bei älteren Versionen Rechtsklick → Öffnen.
+- **macOS** (`…-mac-apple-chip.zip` bzw. `…-mac-intel.zip`): Die ZIP enthält direkt `rescue.Operator.app`, lokal (ad hoc) signiert. Nicht von Apple beglaubigt, daher beim ersten Start unter macOS 15 Systemeinstellungen → Datenschutz & Sicherheit → „Trotzdem öffnen“, bei älteren Versionen Rechtsklick → Öffnen.
 
 Danach:
 1. Namen eingeben, **Schicht hosten** → Leitstelle wählen (vorinstalliert: **ILS Würzburg**) → **Server starten**.
@@ -33,7 +33,7 @@ npm run typecheck  # TypeScript-Prüfung
 Pakete bauen:
 
 ```bash
-npm run dist:all    # Windows, Linux und macOS mit Startdateien in release/Leitstellensimulator-<version>.zip
+npm run dist:all    # Windows (Setup.exe und ZIP), Linux (AppImage und ZIP) und macOS (ZIP je Chip) in release/, GitHub-Dateien in release/github/
 npm run dist:win    # nur Windows-ZIP
 npm run dist:linux  # nur Linux-Ordner
 npm run dist:mac    # nur macOS-Apps (Intel und Apple-Chip, unsigniert)
@@ -166,7 +166,7 @@ Reiter rechts:
 - **Einstellungen**: Notrufe und BMA-Auslösungen pro Stunde, Uhrzeit bei Schichtbeginn.
 - **Prüfen**: findet doppelte Funkrufnamen und nicht erreichbare Wachen oder Kliniken.
 
-Hausnummern werden automatisch entlang gleichnamiger Straßenzüge vergeben. `Strg+S` speichert. Leitstellen liegen unter `%APPDATA%\Leitstellensimulator\leitstellen` (Windows) bzw. `~/.config/Leitstellensimulator/leitstellen` (Linux) und lassen sich als JSON exportieren und importieren, um sie weiterzugeben.
+Hausnummern werden automatisch entlang gleichnamiger Straßenzüge vergeben. `Strg+S` speichert. Leitstellen liegen unter `%APPDATA%\rescue.Operator\leitstellen` (Windows) bzw. `~/.config/rescue.Operator/leitstellen` (Linux) und lassen sich als JSON exportieren und importieren, um sie weiterzugeben.
 
 ## Technik
 

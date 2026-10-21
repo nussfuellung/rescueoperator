@@ -68,9 +68,9 @@ function DesktopApp() {
     <div className="menu-bg">
       <div className="menu-card">
         <h1>
-          Leitstellen<span>simulator</span>
+          rescue<span>.Operator</span>
         </h1>
-        <p className="muted">Integrierte Leitstelle für Feuerwehr und Rettungsdienst · Multiplayer im LAN</p>
+        <p className="muted">Leitstellensimulator für Feuerwehr und Rettungsdienst · Multiplayer im LAN</p>
         {screen === 'menu' && (
           <>
             <label>

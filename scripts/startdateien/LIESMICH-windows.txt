@@ -1,8 +1,8 @@
-Leitstellensimulator für Windows
-================================
+rescue.Operator für Windows
+===========================
 
 1. Die ZIP-Datei entpacken (Rechtsklick > "Alle extrahieren").
-2. Im entpackten Ordner "Leitstellensimulator.exe" doppelklicken.
+2. Im entpackten Ordner "rescue.Operator.exe" doppelklicken.
    Tipp: Rechtsklick auf die exe > "Senden an" > "Desktop (Verknüpfung erstellen)".
 
 Beim ersten Start kann Windows SmartScreen warnen, weil das Programm nicht

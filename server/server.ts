@@ -94,7 +94,7 @@ export class GameServer {
     const path = decodeURIComponent((req.url ?? '/').split('?')[0]);
     if (!dir || req.method !== 'GET') {
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
-      res.end(`Leitstellensimulator-Server: ${this.game.scn.ilsName}\n`);
+      res.end(`rescue.Operator-Server: ${this.game.scn.ilsName}\n`);
       return;
     }
     const rel = normalize(path === '/' ? '/index.html' : path).replace(/^([/\\])+/, '');

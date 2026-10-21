@@ -1,5 +1,5 @@
-Leitstellensimulator für Linux
-==============================
+rescue.Operator für Linux
+=========================
 
 1. Die ZIP-Datei entpacken.
 2. Im entpackten Ordner Rechtsklick auf "Start Linux.sh" > Ausführen,

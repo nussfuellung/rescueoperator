@@ -49,7 +49,7 @@ export function removeModel() {
 }
 
 export async function downloadModel(sender: WebContents) {
-  const res = await net.fetch(MODEL_URL, { headers: { 'user-agent': 'Leitstellensimulator' } });
+  const res = await net.fetch(MODEL_URL, { headers: { 'user-agent': 'rescue.Operator' } });
   if (!res.ok || !res.body) throw new Error(`Download fehlgeschlagen (HTTP ${res.status})`);
   const total = Number(res.headers.get('content-length') ?? 0);
   const reader = res.body.getReader();

@@ -1,8 +1,8 @@
 {
-  "name": "leitstellensimulator",
-  "productName": "Leitstellensimulator",
-  "version": "0.8.0",
-  "description": "Multiplayer-Leitstellensimulator nach Vorbild der bayerischen Integrierten Leitstellen",
+  "name": "rescue-operator",
+  "productName": "rescue.Operator",
+  "version": "0.9.0",
+  "description": "rescue.Operator – Multiplayer-Leitstellensimulator nach Vorbild der bayerischen Integrierten Leitstellen",
   "main": "dist/electron/main.js",
   "private": true,
   "scripts": {
@@ -17,11 +17,11 @@
     "dist:win": "npm run build && electron-builder --win zip --x64",
     "dist:linux": "npm run build && electron-builder --linux dir --x64",
     "dist:mac": "npm run build && electron-builder --mac dir --x64 --arm64",
-    "dist:all": "npm run build && node scripts/piper-holen.mjs && electron-builder --win dir --x64 && electron-builder --linux dir --x64 && electron-builder --mac dir --x64 --arm64 && node scripts/pack-release.mjs"
+    "dist:all": "npm run build && node scripts/piper-holen.mjs && electron-builder --win nsis dir --x64 --publish never && electron-builder --linux AppImage dir --x64 --publish never && electron-builder --mac dir --x64 --arm64 --publish never && node scripts/pack-release.mjs"
   },
   "build": {
-    "appId": "de.leitstellensimulator.app",
-    "productName": "Leitstellensimulator",
+    "appId": "de.rescueoperator.app",
+    "productName": "rescue.Operator",
     "files": [
       "dist/**/*",
       "package.json"
@@ -35,16 +35,40 @@
         {
           "from": "vendor/piper/win-x64",
           "to": "piper/win-x64"
+        },
+        {
+          "from": "vendor/stimmen",
+          "to": "stimmen"
+        }
+      ],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
     "linux": {
       "category": "Education",
-      "executableName": "leitstellensimulator",
+      "executableName": "rescue-operator",
       "extraResources": [
         {
           "from": "vendor/piper/linux-x64",
           "to": "piper/linux-x64"
+        },
+        {
+          "from": "vendor/stimmen",
+          "to": "stimmen"
+        }
+      ],
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -54,10 +78,30 @@
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Die Spracheingabe für Notrufe und Funk braucht das Mikrofon."
       }
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "nussfuellung",
+      "repo": "rescueoperator",
+      "releaseType": "release"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "rescue.Operator",
+      "artifactName": "rescue.Operator-Setup-${version}.exe",
+      "deleteAppDataOnUninstall": false
+    },
+    "appImage": {
+      "artifactName": "rescue.Operator-${version}.AppImage"
     }
   },
   "dependencies": {
     "@types/qrcode": "^1.5.5",
+    "electron-updater": "^6.8.9",
     "fflate": "^0.8.2",
     "qrcode": "^1.5.4",
     "vosk-browser": "^0.0.8",
