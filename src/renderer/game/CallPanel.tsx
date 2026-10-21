@@ -1,7 +1,8 @@
 // Notrufabfrage: Anrufliste, Gesprächsführung und Einsatzformular.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatDuration } from '../../../shared/catalog';
-import { geocode, nearestTown, reverseGeocode, streetDirectory } from '../../../shared/geo';
+import { geocode, nearestObject, nearestTown, reverseGeocode, searchObjects, streetDirectory } from '../../../shared/geo';
+import type { AddressHit, ObjectHit } from '../../../shared/geo';
 import { computeProposal } from '../../../shared/dispatch';
 import { aaoMitSchlagwort, findSchlagwort, formatSchlagwort, schlagwortByNr, searchSchlagworte } from '../../../shared/schlagworte';
 import { SchlagwortSelect } from './SchlagwortSelect';
@@ -298,6 +299,11 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
   const [posSource, setPosSource] = useState('');
   const [zusatz, setZusatz] = useState('');
   const [objekt, setObjekt] = useState('');
+  // Trefferliste der Objektsuche nur beim Tippen ins Objektfeld zeigen
+  const [objOpen, setObjOpen] = useState(false);
+  const [objSel, setObjSel] = useState(0);
+  // Objekt wurde automatisch aus dem Einsatzort vorgeschlagen und darf ersetzt werden
+  const objAuto = useRef(true);
   const [stichwort, setStichwort] = useState('');
   const [swQuery, setSwQuery] = useState('');
   const [schlagwort, setSchlagwort] = useState('');
@@ -311,6 +317,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
   const [unchecked, setUnchecked] = useState<Set<string>>(new Set());
   const codes = useMemo(() => new Set(scn.stichworte.map((s) => s.code)), [scn]);
   const swHits = useMemo(() => searchSchlagworte(swQuery, codes), [swQuery, codes]);
+  const objHits = useMemo(() => (objOpen ? searchObjects(scn, objekt) : []), [scn, objekt, objOpen]);
   // Bei echten Karten gibt es tausende Straßen: nur passende Vorschläge anbieten
   const streetOptions = useMemo(() => {
     const q = street.toLowerCase().trim();
@@ -321,22 +328,43 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
 
   // Straße/Nr. aus Ortung oder Kartenklick lösen keine erneute Adresssuche aus
   const skipAutoSearch = useRef(false);
+  const fillAddress = (hit: AddressHit) => {
+    const s = hit.road.type === 'ortsstrasse' || hit.houseNumber ? `${hit.street}, ${hit.town}` : hit.street;
+    const n = hit.houseNumber ?? (hit.number ? String(hit.number) : '');
+    // Nur sperren, wenn sich die Felder wirklich ändern, sonst bliebe die Sperre für die nächste Eingabe stehen
+    if (s === street && n === number) return;
+    skipAutoSearch.current = true;
+    setStreet(s);
+    setNumber(n);
+  };
   const applyPos = (p: Vec, source: string, label?: string) => {
     const hit = reverseGeocode(scn, p);
     const point = hit && hit.distance < 300 ? hit.point : p;
     setPos(point);
     setPosSource(source);
     setAddress(label ?? hit?.text ?? `${Math.round(p.x)}/${Math.round(p.y)}`);
-    if (hit) {
-      skipAutoSearch.current = true;
-      setStreet(hit.road.type === 'ortsstrasse' ? `${hit.street}, ${hit.town}` : hit.street);
-      setNumber(hit.houseNumber ?? (hit.number ? String(hit.number) : ''));
-    }
-    // Objekt in der Nähe vorschlagen
-    const obj = scn.objects.find((o) => Math.hypot(o.x - point.x, o.y - point.y) < 80);
-    if (obj) setObjekt(obj.name);
+    if (hit) fillAddress(hit);
+    // Objekt in der Nähe vorschlagen (am angeklickten bzw. georteten Punkt, nicht an der Hausnummer);
+    // ein von Hand eingetragenes Objekt bleibt stehen
+    if (objAuto.current) setObjekt(nearestObject(scn, p)?.name ?? '');
     ctx.setMarker(point);
     ctx.focus(point, 0.6);
+  };
+
+  // Objekt aus der Suche übernehmen: Einsatzort ist das Objekt selbst, Adresse dazu aus der Umgebung
+  const pickObject = (h: ObjectHit) => {
+    const p = { x: h.obj.x, y: h.obj.y };
+    const hit = reverseGeocode(scn, p);
+    objAuto.current = false;
+    setObjekt(h.obj.name);
+    setObjOpen(false);
+    setErr('');
+    setPos(p);
+    setPosSource('Objektsuche');
+    setAddress(`${h.obj.name}, ${hit && hit.distance < 300 ? hit.text : h.town}`);
+    if (hit && hit.distance < 300) fillAddress(hit);
+    ctx.setMarker(p);
+    ctx.focus(p, 0.6);
   };
 
   const takeAml = () => call?.aml && applyPos(call.aml, `AML ±${call.aml.acc} m`);
@@ -348,6 +376,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
       setStichwort('B BMA');
       setSchlagwort(formatSchlagwort(schlagwortByNr('#B1710')!));
       setObjekt(call.bma.text.replace(/^BMA-Auslösung\s*/, '').replace(/,.*$/, ''));
+      objAuto.current = false;
     } else if (call?.kvb) {
       applyPos(call.kvb, 'KVB-Übergabe', call.kvb.address);
       setNote(call.kvb.text.replace(/^Übergabe KVB 116117:\s*/, ''));
@@ -391,6 +420,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
     setPos(hit.point);
     setPosSource('Adresssuche');
     setAddress(hit.text);
+    if (objAuto.current) setObjekt(nearestObject(scn, hit.point)?.name ?? '');
     ctx.setMarker(hit.point);
     ctx.focus(hit.point, 0.6);
   };
@@ -537,8 +567,53 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
           ))}
         </datalist>
         <div className="row">
+          <div className="em-obj-search grow">
+            <input
+              value={objekt}
+              onChange={(e) => {
+                setObjekt(e.target.value);
+                objAuto.current = !e.target.value.trim();
+                setObjOpen(true);
+                setObjSel(0);
+              }}
+              onBlur={() => setTimeout(() => setObjOpen(false), 150)}
+              onKeyDown={(e) => {
+                if (!objHits.length || e.ctrlKey || e.metaKey) return;
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setObjSel((i) => (i + (e.key === 'ArrowDown' ? 1 : objHits.length - 1)) % objHits.length);
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
+                  pickObject(objHits[Math.min(objSel, objHits.length - 1)]);
+                } else if (e.key === 'Escape') {
+                  setObjOpen(false);
+                }
+              }}
+              placeholder="Objekt suchen, z. B. Seniorenheim, Grundschule…"
+            />
+            {objHits.length > 0 && (
+              <div className="em-sw-hits em-obj-hits">
+                {objHits.map((h, i) => (
+                  <button
+                    type="button"
+                    key={h.obj.id}
+                    className={i === objSel ? 'sel' : ''}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pickObject(h)}
+                  >
+                    {h.obj.name}
+                    <span className="muted">
+                      {' '}
+                      · {h.kind} · {[h.street, h.town].filter(Boolean).join(', ')}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="row">
           <input value={zusatz} onChange={(e) => setZusatz(e.target.value)} placeholder="Zusatz: Stockwerk, Hinterhaus, Klingel…" className="grow" />
-          <input value={objekt} onChange={(e) => setObjekt(e.target.value)} placeholder="Objekt" className="grow" />
         </div>
         <div className={`em-pos small ${pos ? 'ok' : 'muted'}`}>
           {pos ? (

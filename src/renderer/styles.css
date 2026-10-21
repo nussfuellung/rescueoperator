@@ -1474,6 +1474,26 @@ html:has(.popout-body),
   min-width: 78px;
   color: var(--accent);
 }
+.em-obj-search {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.em-obj-search input {
+  width: 100%;
+}
+.em-obj-hits {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 240px;
+  overflow: auto;
+}
+.em-obj-hits button.sel {
+  background: var(--panel2);
+}
 .em-proposal {
   display: flex;
   flex-direction: column;
