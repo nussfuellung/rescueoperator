@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_STICHWORTE, ensureStichworte } from '../shared/catalog';
-import { SCHLAGWORTE, formatSchlagwort, schlagwortByNr, searchSchlagworte } from '../shared/schlagworte';
+import { SCHLAGWORTE, formatSchlagwort, schlagwortByNr, schlagworteNachKategorie, searchSchlagworte } from '../shared/schlagworte';
 import { BMA_TEMPLATE, TEMPLATES } from '../server/callgen';
 import { generateScenario } from '../shared/mapgen';
 import { Game } from '../server/game';
@@ -12,6 +12,18 @@ describe('ABek-Schlagworte', () => {
     expect(searchSchlagworte('b1515').length).toBe(2);
     expect(searchSchlagworte('lkw ausserorts').map((s) => s.nr)).toContain('#B1515');
     expect(searchSchlagworte('b3 person keller')[0].nr).toBe('#B1117');
+    expect(searchSchlagworte('herzinfarkt').map((s) => s.nr)).toContain('#R3010');
+    expect(searchSchlagworte('ölspur')[0].nr).toBe('#T2719');
+  });
+
+  it('teilt RD 1 und RD 2 nach den ABek-Kategorien auf', () => {
+    expect(schlagworteNachKategorie('RD 1').map(([k]) => k)).toEqual(
+      expect.arrayContaining(['Bewusstsein', 'Atmung', 'Herz/Kreislauf', 'Schmerzen', 'Neuro/Psych', 'Trauma', 'Kind', 'Sonstige', 'Ärger']),
+    );
+    expect(formatSchlagwort(schlagwortByNr('#R3010')!)).toBe('#R3010 - RD 2 - #Herz/Kreislauf#vitale Bedrohung');
+    expect(schlagwortByNr('#R7030')!.code).toBe('RD 2-KIND');
+    // Nummer = Kennbuchstabe + Haupt- und Untergruppe
+    for (const s of SCHLAGWORTE) expect(s.nr, s.text).toMatch(/^#[ABRT]\d{4}$/);
   });
 
   it('passt zu Stichworten und Einsatzvorlagen', () => {
@@ -25,6 +37,9 @@ describe('ABek-Schlagworte', () => {
     const scn = { stichworte: [{ code: 'THL Person', label: 'x', category: 'THL' as const, aao: {} }] };
     ensureStichworte(scn);
     expect(scn.stichworte[0].code).toBe('THL P EINGESCHLOSSEN');
+    const alt = { stichworte: [{ code: 'RD MANV', label: 'x', category: 'RD' as const, aao: { RTW: 9 } }] };
+    ensureStichworte(alt);
+    expect(alt.stichworte[0]).toMatchObject({ code: 'RD MANV 10 – 15', aao: { RTW: 9 } });
     expect(scn.stichworte.length).toBe(DEFAULT_STICHWORTE.length);
   });
 

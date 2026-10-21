@@ -60,7 +60,7 @@ export function MapView(props: Props) {
   const view = useRef({ cx: 0, cy: 0, scale: 0.05, init: false });
   // Zwischengespeicherte Grundkarte (Straßen ändern sich selten, Fahrzeuge ständig)
   const layer = useRef<HTMLCanvasElement | null>(null);
-  const layerState = useRef<{ other: string; view: string; tiles: number; cx: number; cy: number; scale: number } | null>(null);
+  const layerState = useRef<{ other: string; view: string; tiles: number; cx: number; cy: number; scale: number; t: number } | null>(null);
   const lastView = useRef({ key: '', t: 0 });
   const segVersion = useRef(0);
   const layerTiles = useRef(false);
@@ -482,14 +482,16 @@ export function MapView(props: Props) {
         layerState.current = null;
       }
       const ls = layerState.current;
-      const stale = !ls || ls.other !== otherKey || ls.view !== viewKey || ls.tiles !== tileVersion;
+      // Neu geladene Kacheln höchstens alle 120 ms einarbeiten, damit viele gleichzeitig eintreffende Kacheln nicht jeden Frame neu zeichnen
+      const tilesNew = !!ls && ls.tiles !== tileVersion && now - ls.t >= 120;
+      const stale = !ls || ls.other !== otherKey || ls.view !== viewKey || tilesNew;
       const fast = !!ls && ls.other === otherKey && moving && !p.editor;
       if (stale && !fast) {
         const lctx = layer.current.getContext('2d')!;
         lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         layerTiles.current = drawBase(lctx);
         if (!p.editor) drawStatic(lctx);
-        layerState.current = { other: otherKey, view: viewKey, tiles: tileVersion, cx: v.cx, cy: v.cy, scale: v.scale };
+        layerState.current = { other: otherKey, view: viewKey, tiles: tileVersion, cx: v.cx, cy: v.cy, scale: v.scale, t: now };
       }
       const tiles = layerTiles.current;
       const L = layerState.current!;
@@ -768,31 +770,61 @@ function niceNumber(x: number): number {
 }
 
 // ---------- Kartenkacheln ----------
-const tileCache = new Map<string, { img: HTMLImageElement; ok: boolean; used: number }>();
+type Tile = { img: HTMLImageElement; ok: boolean; fails: number; retryAt: number; used: number };
+const tileCache = new Map<string, Tile>();
 let tileUse = 0;
+/** Wird bei jeder fertig geladenen Kachel erhöht, damit die zwischengespeicherte Kartenebene neu gezeichnet wird */
 let tileVersion = 0;
 const EARTH = 2 * Math.PI * 6378137;
+
+function loadTile(url: string, t: Tile) {
+  const img = new Image();
+  img.onload = () => {
+    if (t.img !== img) return;
+    t.ok = true;
+    t.fails = 0;
+    tileVersion++;
+  };
+  img.onerror = () => {
+    if (t.img !== img) return;
+    // Später erneut versuchen (2 s, 4 s, 8 s … höchstens 1 min), statt die Kachel für immer leer zu lassen
+    t.fails++;
+    t.retryAt = performance.now() + Math.min(60000, 1000 * 2 ** t.fails);
+  };
+  t.img = img;
+  img.src = url;
+}
 
 function getTile(url: string) {
   let t = tileCache.get(url);
   if (!t) {
-    const img = new Image();
-    const entry = { img, ok: false, used: 0 };
-    img.onload = () => (entry.ok = true);
-    img.src = url;
-    t = entry;
+    t = { img: null as unknown as HTMLImageElement, ok: false, fails: 0, retryAt: 0, used: 0 };
+    loadTile(url, t);
     tileCache.set(url, t);
-    if (tileCache.size > 600) {
+    if (tileCache.size > 800) {
       // Am längsten unbenutzte Kacheln verwerfen
-      const old = [...tileCache.entries()].sort((a, b) => a[1].used - b[1].used).slice(0, 150);
+      const old = [...tileCache.entries()].sort((a, b) => a[1].used - b[1].used).slice(0, 200);
       for (const [k] of old) tileCache.delete(k);
     }
+  } else if (!t.ok && t.retryAt && performance.now() >= t.retryAt) {
+    t.retryAt = 0;
+    loadTile(url, t);
   }
   t.used = ++tileUse;
   return t;
 }
 
+/** Bereits geladene Kachel aus dem Zwischenspeicher, ohne einen Download anzustoßen */
+function peekTile(url: string) {
+  const t = tileCache.get(url);
+  if (!t?.ok) return null;
+  t.used = ++tileUse;
+  return t.img;
+}
+
 function tileUrl(tpl: string, z: number, x: number, y: number) {
+  const n = 2 ** z;
+  x = ((x % n) + n) % n;
   const sub = 'abc'[(x + y) % 3];
   return tpl.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y)).replace('{s}', sub);
 }
@@ -822,21 +854,57 @@ function drawTiles(
   const ys = Math.floor(ty(tl.my));
   const ye = Math.floor(ty(br.my));
   if ((xe - xs + 1) * (ye - ys + 1) > 120) return false;
-  const tileM = EARTH / n;
+
+  // Bildschirmrechteck einer Kachel (z, x, y)
+  const rect = (zz: number, x: number, y: number) => {
+    const tileM = EARTH / 2 ** zz;
+    const mx = x * tileM - EARTH / 2;
+    const my = EARTH / 2 - y * tileM;
+    const [sx, sy] = toScreen(mercatorToLocal(geo, mx, my));
+    const [ex, ey] = toScreen(mercatorToLocal(geo, mx + tileM, my - tileM));
+    return [sx, sy, ex - sx + 0.5, ey - sy + 0.5] as const;
+  };
+
   let drawn = 0;
+  let pending = false;
   for (let x = xs; x <= xe; x++) {
     for (let y = ys; y <= ye; y++) {
       if (y < 0 || y >= n) continue;
-      const t = getTile(tileUrl(tpl, z, ((x % n) + n) % n, y));
-      if (!t.ok) continue;
-      const mx = x * tileM - EARTH / 2;
-      const my = EARTH / 2 - y * tileM;
-      const [sx, sy] = toScreen(mercatorToLocal(geo, mx, my));
-      const [ex, ey] = toScreen(mercatorToLocal(geo, mx + tileM, my - tileM));
-      ctx.drawImage(t.img, sx, sy, ex - sx + 0.5, ey - sy + 0.5);
-      drawn++;
+      const t = getTile(tileUrl(tpl, z, x, y));
+      const [dx, dy, dw, dh] = rect(z, x, y);
+      if (t.ok) {
+        ctx.drawImage(t.img, dx, dy, dw, dh);
+        drawn++;
+        continue;
+      }
+      if (!t.fails) pending = true;
+      // Solange die Kachel noch lädt: vergrößerten Ausschnitt einer gröberen Zoomstufe zeigen …
+      let filled = false;
+      for (let d = 1; d <= 6 && z - d >= 1 && !filled; d++) {
+        const f = 2 ** d;
+        const px = Math.floor(x / f);
+        const py = Math.floor(y / f);
+        const img = peekTile(tileUrl(tpl, z - d, px, py));
+        if (!img) continue;
+        const s = 256 / f;
+        ctx.drawImage(img, (x - px * f) * s, (y - py * f) * s, s, s, dx, dy, dw, dh);
+        filled = true;
+      }
+      // … oder die feineren Kacheln, die beim Herauszoomen schon da sind
+      if (!filled && z < 19) {
+        for (let i = 0; i < 4; i++) {
+          const cx = x * 2 + (i & 1);
+          const cy = y * 2 + (i >> 1);
+          const img = peekTile(tileUrl(tpl, z + 1, cx, cy));
+          if (!img) continue;
+          const [cx0, cy0, cw, ch] = rect(z + 1, cx, cy);
+          ctx.drawImage(img, cx0, cy0, cw, ch);
+          filled = true;
+        }
+      }
+      if (filled) drawn++;
     }
   }
-  // Ohne Internet bleibt die eigene Kartendarstellung
-  return drawn > 0;
+  // Ohne Internet bleibt die eigene Kartendarstellung; während des ersten Ladens nicht auf sie umspringen
+  return drawn > 0 || pending;
 }

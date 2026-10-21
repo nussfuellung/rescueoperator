@@ -1,6 +1,6 @@
 // Autoritative Spielsimulation: Notrufe, Einsätze, Fahrzeuge, Funk, Wertung.
 import { AIR_SPEED, AIR_TURNOUT, FMS_TEXT, HILFSFRIST_MS, ensureStichworte, shortCallsign } from '../shared/catalog';
-import { aaoMitSchlagwort, findSchlagwort, formatSchlagwort, schlagwortByNr } from '../shared/schlagworte';
+import { aaoMitSchlagwort, findSchlagwort, schlagwortByNr } from '../shared/schlagworte';
 import { RoadGraph, dist, nearestTown, reverseGeocode } from '../shared/geo';
 import { mulberry32 } from '../shared/mapgen';
 import { computeProposal, coverage } from '../shared/dispatch';
@@ -24,7 +24,6 @@ import { ensureTmo } from '../shared/fleet';
 import { inDienst } from '../shared/lstsim';
 import { pzcFachbereich, pzcFuer, pzcSprech } from '../shared/pzc';
 import {
-  BMA_REAL_LAGE,
   BMA_TEMPLATE,
   FIRST_NAMES,
   KVB_UEBERGABE,
@@ -40,6 +39,7 @@ import {
   type CallerFacts,
   type IncidentTemplate,
 } from './callgen';
+import { rollVerlauf, type Verlauf } from './verlauf';
 
 interface PatientTruth {
   specialty: string;
@@ -77,8 +77,18 @@ interface Truth {
   wrongPlaceUntil?: number;
   callStart?: number;
   retries?: number;
-  /** Lage hat sich vor Ort entwickelt (Nachforderung bereits ausgewürfelt) */
-  eskaliert?: boolean;
+  /** Ausgewürfelter Einsatzverlauf (Erkundung, Feststellung, Lageentwicklung) */
+  verlauf?: Verlauf;
+  /** Erkundung abgeschlossen, Lage steht fest */
+  erkundet?: boolean;
+  /** Lageänderung während der Abarbeitung ist eingetreten */
+  entwickelt?: boolean;
+  /** Ausgelöste Meldergruppe (BMA) */
+  melder?: number;
+  /** Laut Verlauf mehr Kräfte nötig als ursprünglich gemeldet */
+  nachgefordert?: boolean;
+  /** Platzhalter ohne Notruf (Fehlanruf, Einsatz ohne Anruf) */
+  generic?: boolean;
 }
 
 const MISSED_AFTER_MS = 90_000;
@@ -440,8 +450,8 @@ export class Game {
     if (!objs.length) return null;
     const obj = this.pick(objs);
     const hit = reverseGeocode(this.scn, obj);
-    const real = this.rng() < 0.2;
     const sw = this.scn.stichworte.find((s) => s.code === 'B BMA');
+    const melder = Math.floor(this.rand(1, 40));
     const truth: Truth = {
       tpl: BMA_TEMPLATE,
       stichwort: 'B BMA',
@@ -451,12 +461,13 @@ export class Game {
       objekt: obj.name,
       needs: { ...(sw?.aao ?? { HLF: 1 }) },
       patients: [],
-      lage: real ? BMA_REAL_LAGE : BMA_TEMPLATE.lage,
+      lage: BMA_TEMPLATE.lage,
       workMs: this.rand(10, 15) * 60_000,
       name: '',
       alter: 0,
       fake: false,
       callStart: this.time,
+      melder,
     };
     const call: CallState = {
       id: `c${++this.seq.call}`,
@@ -467,7 +478,7 @@ export class Game {
       transcript: [],
       asked: [],
       bma: {
-        text: `BMA-Auslösung ${obj.name}, Meldergruppe ${Math.floor(this.rand(1, 40))}`,
+        text: `BMA-Auslösung ${obj.name}, Meldergruppe ${melder}`,
         x: obj.x,
         y: obj.y,
         address: `${obj.name}, ${hit?.text ?? ''}`,
@@ -837,7 +848,9 @@ export class Game {
         }
         // Passendes Schlagwort
         const trueSlw = schlagwortByNr(truth.tpl.schlagwort, truth.stichwort);
-        if (trueSlw && inc.schlagwort === formatSchlagwort(trueSlw)) this.addScore(5, `${inc.nr}: Schlagwort ${trueSlw.nr} passend`);
+        const slw = findSchlagwort(inc.schlagwort);
+        if (trueSlw && slw?.nr === trueSlw.nr && slw.code === trueSlw.code) this.addScore(5, `${inc.nr}: Schlagwort ${trueSlw.nr} passend`);
+        else if (trueSlw && slw && slw.kat === trueSlw.kat && slw.code === truth.stichwort) this.addScore(2, `${inc.nr}: Kategorie ${slw.kat} passend (besser ${trueSlw.nr})`);
         // Wertung Einsatzort
         const d = dist(truth.pos, inc);
         const tolerance = truth.tpl.where === 'ausserorts' || truth.tpl.where === 'autobahn' ? 1200 : 200;
@@ -871,6 +884,7 @@ export class Game {
       alter: 0,
       fake: false,
       callStart: inc.createdAt,
+      generic: true,
     };
   }
 
@@ -1062,6 +1076,7 @@ export class Game {
       return `Wir sind ${where}, derzeit ohne Einsatz, kommen.`;
     }
     if (has(/\b(lage|rückmeldung|was ist (los|los vor ort)|situation|meldung von der einsatzstelle)/)) {
+      if (truth && u.task === 'onScene' && !truth.erkundet) return 'Erkundung läuft noch, Lagemeldung folgt, kommen.';
       if (truth && (u.task === 'onScene' || u.task === 'awaitHospital')) {
         const p = truth.patients.find((x) => x.unitId === u.id && !x.done);
         return `${truth.lage}${p ? ` Wir versorgen: ${p.desc}.` : ''} Kommen.`;
@@ -1071,6 +1086,7 @@ export class Game {
     }
     if (has(/\b(nachforder|weitere (kräfte|fahrzeuge|einheiten)|brauch(t|en) (ihr|sie)|unterstützung|reicht das)/)) {
       if (!truth || !(u.task === 'onScene' || u.task === 'awaitHospital')) return 'Können wir erst vor Ort beurteilen, kommen.';
+      if (!truth.erkundet) return 'Erkundung läuft noch, können wir noch nicht beurteilen, kommen.';
       const missing = Object.entries(truth.needs).filter(([type, n]) => inc!.unitIds.filter((id) => this.unit(id)?.type === type).length < n);
       return missing.length ? `Ja, wir benötigen noch ${missing.map(([type, n]) => `${n} ${type}`).join(' und ')}, kommen.` : 'Nein, die Kräfte reichen aus, kommen.';
     }
@@ -1386,54 +1402,173 @@ export class Game {
     this.revealAndReport(inc, truth, u);
   }
 
+  /** Erste Kräfte vor Ort: Erkundung beginnt, die Lagemeldung folgt erst nach der Erkundung */
   private revealAndReport(inc: IncidentState, truth: Truth, u: UnitState) {
-    this.escalate(truth);
-    if (!inc.lage) {
-      inc.lage = truth.lage;
-      this.log(inc, `Lage: ${truth.lage}`);
-    }
     if (truth.reported) return;
+    // Brand, THL, BMA: Erkundung und Lagemeldung übernimmt die Feuerwehr, wenn sie schon unterwegs ist
+    if (!truth.stichwort.startsWith('RD') && this.typeOf(u)?.org === 'RD') {
+      const fwComing = inc.unitIds.some((id) => {
+        const x = this.unit(id);
+        return x && this.typeOf(x)?.org === 'FW' && ['alarmed', 'toScene'].includes(x.task);
+      });
+      if (fwComing) return;
+    }
     truth.reported = true;
+    const v = this.verlaufFor(truth);
+    if (!v) {
+      this.feststellung(inc, truth, u);
+      return;
+    }
+    if (u.crewPlayerId) u.hint = 'Erkundung läuft, die Lage vor Ort wird festgestellt …';
+    else if (v.erstmeldung) {
+      const text = v.erstmeldung;
+      this.after(this.rand(15, 30) * 1000, () => {
+        if (u.incidentId === inc.id && u.task === 'onScene' && !truth.erkundet) this.requestSpeak(u, 'info', text);
+      });
+    }
+    if (v.zwischenmeldung) {
+      const text = v.zwischenmeldung;
+      this.after(v.erkundungMs * 0.55, () => {
+        if (truth.erkundet || inc.status === 'abgeschlossen') return;
+        this.log(inc, text);
+        const w = this.onSceneAi(inc) ?? (u.incidentId === inc.id ? u : undefined);
+        if (w && !w.crewPlayerId) this.requestSpeak(w, 'info', text);
+      });
+    }
+    this.after(v.erkundungMs, () => {
+      if (inc.status === 'abgeschlossen') return;
+      const w = u.incidentId === inc.id && u.task === 'onScene' ? u : inc.unitIds.map((id) => this.unit(id)!).find((x) => x && x.task === 'onScene');
+      if (w) this.feststellung(inc, truth, w);
+      else truth.reported = false;
+    });
+  }
+
+  /** Verlauf einmalig auswürfeln und auf die Wahrheit anwenden */
+  private verlaufFor(truth: Truth): Verlauf | undefined {
+    if (truth.fake || truth.generic || truth.tpl.kvb) return undefined;
+    if (truth.verlauf) return truth.verlauf;
+    const has = (k: string) => this.units.some((x) => this.typeOf(x)?.fills.includes(k));
+    const v = rollVerlauf(
+      {
+        tplId: truth.tpl.id,
+        stichwort: truth.stichwort,
+        where: truth.tpl.where,
+        lage: truth.lage,
+        needs: truth.needs,
+        patients: truth.patients.length,
+        objekt: truth.objekt,
+        melder: truth.melder,
+      },
+      this.rng,
+      has,
+    );
+    const hadNef = !!truth.needs.NEF;
+    truth.nachgefordert = Object.entries(v.needs).some(([k, n]) => n > (truth.needs[k] ?? 0));
+    truth.verlauf = v;
+    truth.lage = v.lage;
+    truth.needs = v.needs;
+    truth.workMs *= v.workFactor;
+    if (v.keinTransport) truth.patients = [];
+    for (const p of v.patients ?? []) this.addPatient(truth, p);
+    // Notarzt nachgefordert: Patientenzuweisungscode mit Arztbegleitung
+    if (v.needs.NEF && !hadNef)
+      for (const p of truth.patients) p.pzc = p.pzc.slice(0, 5) + '1';
+    return v;
+  }
+
+  private addPatient(truth: Truth, p: { specialty: string; desc: string }) {
+    truth.patients.push({ ...p, pzc: pzcFuer(p.desc, p.specialty, this.rand(18, 80), false), done: false });
+  }
+
+  private onSceneAi(inc: IncidentState) {
+    return inc.unitIds.map((id) => this.unit(id)!).find((x) => x && x.task === 'onScene' && !x.crewPlayerId);
+  }
+
+  /** Erkundung abgeschlossen: Lage steht fest, Lagemeldung und ggf. Nachforderung bzw. Abbestellung */
+  private feststellung(inc: IncidentState, truth: Truth, u: UnitState) {
+    truth.erkundet = true;
+    inc.lage = truth.lage;
+    this.log(inc, `Lage: ${truth.lage}`);
+    if (truth.verlauf?.erhoehung) this.log(inc, `Feuerwehr erhöht auf ${truth.verlauf.erhoehung}`);
     if (u.crewPlayerId) {
       u.hint = `Lage vor Ort: ${truth.lage} Bitte Lagemeldung an die Leitstelle geben (Status 5).`;
       truth.lastRequest = this.time;
       return;
     }
-    this.after(this.rand(25, 60) * 1000, () => {
+    const delay = truth.verlauf ? this.rand(5, 15) * 1000 : this.rand(25, 60) * 1000;
+    this.after(delay, () => {
       if (u.incidentId !== inc.id) return;
       const missing = this.missingNeeds(inc, truth, false);
       const pol = truth.tpl.polizei && !inc.polizei;
+      const ueber = this.surplus(inc, truth);
+      const enRoute = ueber.filter((x) => x.task === 'alarmed' || x.task === 'toScene');
+      const sagtSchon = /nicht erforderlich|abbestellt/.test(truth.lage);
       const req =
-        (missing.length ? ` Wir fordern nach: ${missing.join(', ')}.` : pol ? '' : ' Weitere Kräfte nicht erforderlich.') +
-        (pol ? ' Bitte Polizei verständigen.' : '');
+        (missing.length
+          ? ` Wir fordern nach: ${missing.join(', ')}.`
+          : enRoute.length
+            ? sagtSchon
+              ? ''
+              : ` ${enRoute.map((x) => shortCallsign(x.callsign)).join(', ')} kann abbestellt werden.`
+            : pol || sagtSchon || truth.nachgefordert
+              ? ''
+              : ' Weitere Kräfte nicht erforderlich.') + (pol ? ' Bitte Polizei verständigen.' : '');
       this.requestSpeak(u, missing.length || pol ? 'nachforderung' : 'lage', `Lagemeldung: ${truth.lage}${req}`);
       truth.lastRequest = this.time;
+      // Nicht mehr benötigte Kräfte an der Einsatzstelle melden sich frei
+      for (const x of ueber) {
+        if (x.task !== 'onScene' || x.crewPlayerId || x === u) continue;
+        (truth.released ??= new Set()).add(x.id);
+        this.after(this.rand(60, 180) * 1000, () => {
+          if (x.incidentId === inc.id && x.task === 'onScene') this.releaseUnit(x.id, false);
+        });
+      }
       if (pol)
         this.after(this.rand(5, 8) * 60_000, () => {
           if (inc.polizei || inc.status === 'abgeschlossen') return;
-          const v = inc.unitIds.map((id) => this.unit(id)!).find((x) => x && x.task === 'onScene' && !x.crewPlayerId);
+          const v = this.onSceneAi(inc);
           if (v) this.requestSpeak(v, 'nachforderung', 'Die Polizei ist noch nicht vor Ort. Bitte Polizei verständigen.');
         });
     });
   }
 
-  /** Lageentwicklung vor Ort: Patient verschlechtert sich, Tragehilfe, zweiter Rettungsweg */
-  private escalate(truth: Truth) {
-    if (truth.eskaliert || truth.fake || truth.tpl === BMA_TEMPLATE || truth.tpl.kvb) return;
-    truth.eskaliert = true;
-    const has = (k: string) => this.units.some((x) => this.typeOf(x)?.fills.includes(k));
-    const r = this.rng();
-    if (truth.stichwort === 'RD 1' && truth.patients.length && r < 0.12 && has('NEF') && !truth.needs.NEF) {
-      truth.needs.NEF = 1;
-      truth.lage += ' Patient trübt zunehmend ein, Notarzt erforderlich.';
-      for (const p of truth.patients) p.pzc = p.pzc.slice(0, 5) + '1';
-    } else if (truth.patients.length && truth.tpl.where === 'wohnung' && r > 0.93 && has('HLF')) {
-      truth.needs.HLF = (truth.needs.HLF ?? 0) + 1;
-      truth.lage += ' Patient ca. 150 kg, 3. OG ohne Aufzug, Tragehilfe durch die Feuerwehr erforderlich.';
-    } else if (truth.stichwort.startsWith('B 3') && r > 0.88 && has('DLK') && !truth.needs.DLK) {
-      truth.needs.DLK = 1;
-      truth.lage += ' Personen am Fenster, zweiter Rettungsweg über Drehleiter erforderlich.';
+  /** Alarmierte Fahrzeuge, die laut tatsächlicher Lage nicht gebraucht werden */
+  private surplus(inc: IncidentState, truth: Truth): UnitState[] {
+    const units = inc.unitIds.map((id) => this.unit(id)!).filter((x) => x && !x.hasPatient && ['alarmed', 'toScene', 'onScene'].includes(x.task));
+    // Fahrzeuge vor Ort zuerst behalten, dann die nächsten
+    units.sort((a, b) => (a.task === 'onScene' ? 0 : 1) - (b.task === 'onScene' ? 0 : 1));
+    const left = { ...truth.needs };
+    const out: UnitState[] = [];
+    for (const x of units) {
+      const fills = this.typeOf(x)?.fills ?? [];
+      const k = fills.find((f) => (left[f] ?? 0) > 0);
+      if (k) left[k]--;
+      else if (!this.typeOf(x)?.transport || !truth.patients.some((p) => !p.unitId && !p.done)) out.push(x);
     }
+    return out;
+  }
+
+  /** Lageänderung während der Abarbeitung */
+  private entwicklung(inc: IncidentState, truth: Truth) {
+    const e = truth.verlauf?.entwicklung;
+    if (!e || truth.entwickelt) return;
+    truth.entwickelt = true;
+    const has = (k: string) => this.units.some((x) => this.typeOf(x)?.fills.includes(k));
+    for (const [k, n] of Object.entries(e.needs ?? {})) if (has(k)) truth.needs[k] = (truth.needs[k] ?? 0) + n;
+    for (const p of e.patients ?? []) this.addPatient(truth, p);
+    if (e.keinTransport) truth.patients = truth.patients.filter((p) => p.unitId || p.done);
+    if (e.workFactor && truth.progress !== undefined) truth.workMs = truth.progress + (truth.workMs - truth.progress) * e.workFactor;
+    if (e.needs?.NEF) for (const p of truth.patients) if (!p.done) p.pzc = p.pzc.slice(0, 5) + '1';
+    truth.lage += ` ${e.text}`;
+    inc.lage = truth.lage;
+    this.log(inc, `Lageänderung: ${e.text}`);
+    truth.lastRequest = this.time;
+    const u = this.onSceneAi(inc);
+    const crew = inc.unitIds.map((id) => this.unit(id)!).find((x) => x && x.task === 'onScene' && x.crewPlayerId);
+    if (u) {
+      const missing = this.missingNeeds(inc, truth, false);
+      this.requestSpeak(u, missing.length ? 'nachforderung' : 'info', `Lageänderung: ${e.text}${missing.length ? ` Wir fordern nach: ${missing.join(', ')}.` : ''}`);
+    } else if (crew) crew.hint = `Lageänderung: ${e.text} Bitte an die Leitstelle melden (Status 5).`;
   }
 
   /** Fehlende Kräfte; onSceneOnly = nur bereits eingetroffene Fahrzeuge zählen */
@@ -1468,7 +1603,7 @@ export class Game {
       return;
     }
     if (truth.wrongPlaceUntil && this.time < truth.wrongPlaceUntil) return;
-    if (!truth.reported) return;
+    if (!truth.reported || !truth.erkundet) return;
     const onScene = inc.unitIds.map((id) => this.unit(id)!).filter((u) => u && ['onScene', 'awaitHospital'].includes(u.task));
     if (!onScene.length) return;
     // Arbeitsfortschritt: unvollständige Kräfte arbeiten langsamer
@@ -1492,6 +1627,8 @@ export class Game {
     }
     truth.complete = !missingCount;
     truth.progress += dt * rate;
+    const e = truth.verlauf?.entwicklung;
+    if (e && !truth.entwickelt && truth.progress >= e.at * truth.workMs) this.entwicklung(inc, truth);
     if (truth.progress < truth.workMs) return;
     truth.workDone = true;
     this.log(inc, 'Maßnahmen abgeschlossen');

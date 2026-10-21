@@ -1,8 +1,8 @@
-// Einstellungen: Sprachausgabe, Spracheingabe und Kartenhintergrund.
+// Einstellungen: Darstellung, Sprachausgabe, Spracheingabe und Kartenhintergrund.
 import { useEffect, useState } from 'react';
 import { zipToModelTarGz } from '../../shared/modelpack';
 import { isDesktop, type ModelInfo } from './api';
-import { DEFAULT_TILE_URL, updateSettings, useSettings, type TtsEngine } from './settings';
+import { DEFAULT_TILE_URL, updateSettings, useSettings, type Theme, type TtsEngine } from './settings';
 import { lastTtsResult, say, ttsInfo } from './audio/tts';
 import { speechInput, useSpeechInput, useSpeechTarget } from './audio/stt';
 import { MicButton } from './audio/SpeechUi';
@@ -82,6 +82,16 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     <div className="modal-bg" onClick={onClose}>
       <div className="modal wide settings" onClick={(e) => e.stopPropagation()}>
         <h2>Einstellungen</h2>
+
+        <h3>Darstellung</h3>
+        <label>
+          Farbschema
+          <select value={s.theme} onChange={(e) => updateSettings({ theme: e.target.value as Theme })}>
+            <option value="dark">Dunkel</option>
+            <option value="light">Hell</option>
+            <option value="system">Wie das Betriebssystem</option>
+          </select>
+        </label>
 
         <h3>Sprachausgabe</h3>
         <label className="inline">
