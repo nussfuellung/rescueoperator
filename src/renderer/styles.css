@@ -416,7 +416,7 @@ table.lib td.right button {
 }
 .incident-row {
   display: grid;
-  grid-template-columns: 76px 64px 1fr auto;
+  grid-template-columns: 76px 92px 1fr auto;
   gap: 6px;
   align-items: center;
   padding: 4px 8px;
@@ -431,6 +431,17 @@ table.lib td.right button {
 }
 .incident-row.abgeschlossen {
   opacity: 0.5;
+}
+.incident-row .inc-sw {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+.incident-row .inc-sw .small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .incident-row .addr {
   overflow: hidden;
@@ -1613,6 +1624,8 @@ html:has(.popout-body),
 .em-schlagwort { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-size: 12px; }
 code.em-schlagwort, .em-schlagwort code { background: var(--panel2); padding: 2px 6px; border-radius: 4px; font-weight: 600; }
 .em-schlagwort button { padding: 0 6px; }
+.em-sw-select { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; }
+.em-sw-select select { width: 100%; }
 
 /* IVENA */
 button.attention { border-color: var(--accent); color: var(--accent); }

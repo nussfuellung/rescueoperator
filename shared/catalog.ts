@@ -33,7 +33,9 @@ export const DEFAULT_STICHWORTE: Stichwort[] = [
   { code: 'RD 3', label: '2 oder 3 Verletzte/Erkrankte', category: 'RD', aao: { RTW: 2, NEF: 1 } },
   { code: 'RD 4', label: '4 oder 5 Verletzte/Erkrankte', category: 'RD', aao: { RTW: 4, NEF: 1 } },
   { code: 'RD 5', label: '6 bis 9 Verletzte/Erkrankte', category: 'RD', aao: { RTW: 5, NEF: 3 } },
-  { code: 'RD MANV', label: 'MANV ab 10 Verletzten', category: 'RD', aao: { RTW: 8, NEF: 3, KTW: 2 } },
+  { code: 'RD 2-KIND', label: 'Notfall Kind bis 12 Jahre mit Notarzt', category: 'RD', aao: { RTW: 1, NEF: 1 } },
+  { code: 'RD MANV 10 – 15', label: 'MANV 10 bis 15 Verletzte/Erkrankte', category: 'RD', aao: { RTW: 8, NEF: 3, KTW: 2 } },
+  { code: 'RD MANV 16 – 25', label: 'MANV 16 bis 25 Verletzte/Erkrankte', category: 'RD', aao: { RTW: 12, NEF: 5, KTW: 4 } },
   { code: 'RD KTP', label: 'Krankentransport', category: 'RD', aao: { KTW: 1 } },
   { code: 'RD KTP/RTW', label: 'Krankentransport mit RTW', category: 'RD', aao: { RTW: 1 } },
   { code: 'B 1', label: 'Kleinbrand', category: 'B', aao: { LF: 1 } },
@@ -48,6 +50,7 @@ export const DEFAULT_STICHWORTE: Stichwort[] = [
   { code: 'B WALD', label: 'Waldbrand groß', category: 'B', aao: { ELW: 1, HLF: 2, LF: 2, TLF: 2 } },
   { code: 'B ELEKTROANLAGE', label: 'Elektroanlage / Trafo', category: 'B', aao: { HLF: 2 } },
   { code: 'B BOOT', label: 'Brand Boot / Yacht', category: 'B', aao: { HLF: 1, GWW: 1 } },
+  { code: 'B ZUG', label: 'Brand Zug / Straßenbahn', category: 'B', aao: { ELW: 1, HLF: 3, LF: 1, TLF: 1, RTW: 1 } },
   { code: 'THL 1', label: 'Technische Hilfe klein', category: 'THL', aao: { HLF: 1 } },
   { code: 'THL 2', label: 'VU mehrere Pkw / Lkw ohne Eingeklemmte', category: 'THL', aao: { HLF: 1, RTW: 1 } },
   { code: 'THL 3', label: 'Person eingeklemmt (1–2 Pkw)', category: 'THL', aao: { ELW: 1, HLF: 2, RW: 1, RTW: 1, NEF: 1 } },
@@ -55,13 +58,24 @@ export const DEFAULT_STICHWORTE: Stichwort[] = [
   { code: 'THL 5', label: 'Massenkarambolage / Bus mit Eingeklemmten', category: 'THL', aao: { ELW: 2, HLF: 4, RW: 2, RTW: 4, NEF: 2 } },
   { code: 'THL P EINGESCHLOSSEN', label: 'Wohnung/Fahrzeug öffnen akut', category: 'THL', aao: { HLF: 1, RTW: 1 } },
   { code: 'THL P AUFZUG', label: 'Aufzug öffnen akut', category: 'THL', aao: { HLF: 1 } },
-  { code: 'THL P RETTUNG H/T', label: 'Rettung aus Höhe/Tiefe', category: 'THL', aao: { ELW: 1, HLF: 1, DLK: 1, RTW: 1 } },
+  { code: 'THL P RETTUNG H / T', label: 'Rettung aus Höhe/Tiefe', category: 'THL', aao: { ELW: 1, HLF: 1, DLK: 1, RTW: 1 } },
   { code: 'THL P STROM', label: 'Stromunfall', category: 'THL', aao: { HLF: 1, RTW: 1, NEF: 1 } },
   { code: 'THL UNWETTER', label: 'Unwetter (Baum, Wasser)', category: 'THL', aao: { LF: 1 } },
   { code: 'THL WASSER', label: 'Wasserrettung', category: 'THL', aao: { HLF: 1, GWW: 1, RTW: 1 } },
   { code: 'THL GROßTIERRETTUNG', label: 'Großtier in Notlage', category: 'THL', aao: { HLF: 1, RW: 1 } },
   { code: 'THL TRAGEHILFE', label: 'Tragehilfe für den RD', category: 'THL', aao: { HLF: 1 } },
   { code: 'THL RETTUNGSKORB', label: 'Drehleiter mit Krankentragenhalterung', category: 'THL', aao: { DLK: 1 } },
+  { code: 'THL P ZUG', label: 'Person unter Zug / S-Bahn', category: 'THL', aao: { ELW: 1, HLF: 2, RW: 1, RTW: 1, NEF: 1 } },
+  { code: 'THL P STRAßENBAHN', label: 'Person unter Straßenbahn', category: 'THL', aao: { ELW: 1, HLF: 2, RW: 1, RTW: 1, NEF: 1 } },
+  { code: 'THL P VERSCHÜTTET', label: 'Person verschüttet / in Silo', category: 'THL', aao: { ELW: 1, HLF: 1, RW: 1, RTW: 1, NEF: 1 } },
+  { code: 'THL VU ZUG', label: 'Zugunglück', category: 'THL', aao: { ELW: 1, HLF: 3, RW: 1, TLF: 1, RTW: 2, NEF: 1 } },
+  { code: 'THL SCHIENE', label: 'Hilfeleistung Straßenbahn / S-Bahn', category: 'THL', aao: { ELW: 1, HLF: 1 } },
+  { code: 'THL GEBÄUDEEINSTURZ', label: 'Gebäude eingestürzt', category: 'THL', aao: { ELW: 1, HLF: 3, RW: 1, RTW: 2, NEF: 1 } },
+  { code: 'THL BOMBENFUND', label: 'Bombenfund', category: 'THL', aao: { ELW: 1, HLF: 1 } },
+  { code: 'THL BELEUCHTUNG', label: 'Einsatzstelle ausleuchten', category: 'THL', aao: { LF: 1 } },
+  { code: 'THL ERKUNDUNG', label: 'Erkundung', category: 'THL', aao: { LF: 1 } },
+  { code: 'THL HUBSCHRAUBERLANDUNG', label: 'Hubschrauberlandung sichern', category: 'THL', aao: { LF: 1 } },
+  { code: 'THL FIRST RESPONDER', label: 'First Responder / Helfer vor Ort', category: 'THL', aao: { HVO: 1 } },
   { code: 'ABC 1', label: 'Geruch (Gas, Ammoniak, Chlor)', category: 'ABC', aao: { HLF: 1 } },
   { code: 'ABC KRAFTSTOFF', label: 'Auslaufender Kraftstoff', category: 'ABC', aao: { LF: 1 } },
   { code: 'ABC 2', label: 'Gefahrstoff klein / Gasaustritt im Freien', category: 'ABC', aao: { ELW: 1, HLF: 1 } },
@@ -75,7 +89,11 @@ export const DEFAULT_STICHWORTE: Stichwort[] = [
 ];
 
 /** Alte Stichworte früherer Versionen -> ABek */
-export const STICHWORT_ALIAS: Record<string, string> = { 'THL Person': 'THL P EINGESCHLOSSEN' };
+export const STICHWORT_ALIAS: Record<string, string> = {
+  'THL Person': 'THL P EINGESCHLOSSEN',
+  'RD MANV': 'RD MANV 10 – 15',
+  'THL P RETTUNG H/T': 'THL P RETTUNG H / T',
+};
 
 /** Fehlende ABek-Stichworte in ältere Leitstellen übernehmen, ohne eigene AAO-Anpassungen zu überschreiben */
 export function ensureStichworte(scn: { stichworte: Stichwort[] }): void {

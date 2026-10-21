@@ -1,6 +1,6 @@
 // Autoritative Spielsimulation: Notrufe, Einsätze, Fahrzeuge, Funk, Wertung.
 import { AIR_SPEED, AIR_TURNOUT, FMS_TEXT, HILFSFRIST_MS, ensureStichworte, shortCallsign } from '../shared/catalog';
-import { aaoMitSchlagwort, findSchlagwort, formatSchlagwort, schlagwortByNr } from '../shared/schlagworte';
+import { aaoMitSchlagwort, findSchlagwort, schlagwortByNr } from '../shared/schlagworte';
 import { RoadGraph, dist, nearestTown, reverseGeocode } from '../shared/geo';
 import { mulberry32 } from '../shared/mapgen';
 import { computeProposal, coverage } from '../shared/dispatch';
@@ -833,7 +833,9 @@ export class Game {
         }
         // Passendes Schlagwort
         const trueSlw = schlagwortByNr(truth.tpl.schlagwort, truth.stichwort);
-        if (trueSlw && inc.schlagwort === formatSchlagwort(trueSlw)) this.addScore(5, `${inc.nr}: Schlagwort ${trueSlw.nr} passend`);
+        const slw = findSchlagwort(inc.schlagwort);
+        if (trueSlw && slw?.nr === trueSlw.nr && slw.code === trueSlw.code) this.addScore(5, `${inc.nr}: Schlagwort ${trueSlw.nr} passend`);
+        else if (trueSlw && slw && slw.kat === trueSlw.kat && slw.code === truth.stichwort) this.addScore(2, `${inc.nr}: Kategorie ${slw.kat} passend (besser ${trueSlw.nr})`);
         // Wertung Einsatzort
         const d = dist(truth.pos, inc);
         const tolerance = truth.tpl.where === 'ausserorts' || truth.tpl.where === 'autobahn' ? 1200 : 200;
