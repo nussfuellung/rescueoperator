@@ -1,8 +1,8 @@
 // Fahrzeugstatus-Tableau mit Bedienleiste für das ausgewählte Fahrzeug.
 import { HospitalSelect } from './Ivena';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FMS_COLOR, FMS_TEXT, formatDuration, shortCallsign } from '../../../shared/catalog';
-import type { UnitState } from '../../../shared/types';
+import type { Station, UnitState } from '../../../shared/types';
 import { dienstText } from '../../../shared/lstsim';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
@@ -19,13 +19,31 @@ const TASK_TEXT: Record<UnitState['task'], string> = {
   atHospital: 'am Krankenhaus',
   returning: 'Rückfahrt zur Wache',
   free: 'frei',
+  toCover: 'Fahrt zur Gebietsabsicherung',
+  covering: 'Gebietsabsicherung',
 };
+
+/** Zur Gebietsabsicherung verlegbar: frei, ohne Einsatz und ohne Patient */
+const canCover = (u: UnitState) => !u.incidentId && !u.hasPatient && (u.baseStatus === 1 || u.baseStatus === 2);
+/** H – Fahren Sie Wache an: nur außerhalb der Wache und ohne Patient */
+const canSendHome = (u: UnitState) => !u.hasPatient && u.task !== 'returning' && (u.task !== 'station' || !!u.incidentId);
+
+function locate(ctx: GameCtx, u: UnitState) {
+  if (ctx.locate) ctx.locate(u);
+  else {
+    ctx.setSelectedUnit(u.id);
+    ctx.focus(u, 0.5);
+  }
+}
 
 export function UnitBoard({ ctx }: { ctx: GameCtx }) {
   const { scn, state } = ctx;
   const sel = state.units.find((u) => u.id === ctx.selectedUnit);
   const [q, setQ] = useState('');
   const [group, setGroup] = useState('');
+  const [menu, setMenu] = useState<{ unitId: string; x: number; y: number } | null>(null);
+  const [coverUnit, setCoverUnit] = useState<string | null>(null);
+  const covering = state.units.filter((u) => u.cover && (u.task === 'covering' || u.task === 'toCover' || u.task === 'alarmed'));
   const ql = q.toLowerCase().trim();
   const shown = scn.stations.filter(
     (st) =>
@@ -34,7 +52,33 @@ export function UnitBoard({ ctx }: { ctx: GameCtx }) {
   );
   return (
     <div className="panel unitboard">
-      {sel ? <UnitControl ctx={ctx} u={sel} /> : <div className="muted small pad">Fahrzeug anklicken für Funk und Details.</div>}
+      {sel ? (
+        <UnitControl ctx={ctx} u={sel} onCover={() => setCoverUnit(sel.id)} />
+      ) : (
+        <div className="muted small pad">Fahrzeug anklicken für Funk und Details, Rechtsklick für Orten, Gebietsabsicherung und H.</div>
+      )}
+      {covering.length > 0 && (
+        <div className="cover-list small">
+          <b>Gebietsabsicherung:</b>
+          {covering.map((u) => (
+            <button
+              key={u.id}
+              className="cover-chip"
+              title={`${u.callsign} – ${TASK_TEXT[u.task]} ${u.cover!.name}`}
+              onClick={() => locate(ctx, u)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setMenu({ unitId: u.id, x: e.clientX, y: e.clientY });
+              }}
+            >
+              <span className="fms" style={{ background: FMS_COLOR[u.status] }}>
+                {u.status}
+              </span>
+              {shortCallsign(u.callsign)} → {u.cover!.name}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="row unit-filter">
         <input className="grow" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Wache oder Fahrzeug suchen…" />
         <select value={group} onChange={(e) => setGroup(e.target.value)} title="Nach Rufgruppe filtern">
@@ -60,9 +104,14 @@ export function UnitBoard({ ctx }: { ctx: GameCtx }) {
                 .map((u) => (
                   <button
                     key={u.id}
-                    className={`tile ${u.status === 5 ? 'speak' : ''} ${u.id === ctx.selectedUnit ? 'selected' : ''} ${u.crewPlayerId ? 'manned' : ''}`}
+                    className={`tile ${u.status === 5 ? 'speak' : ''} ${u.id === ctx.selectedUnit ? 'selected' : ''} ${u.crewPlayerId ? 'manned' : ''} ${u.cover ? 'covering' : ''}`}
                     style={{ background: FMS_COLOR[u.status] }}
-                    title={`${u.callsign} – ${FMS_TEXT[u.status]}${u.crewPlayerId ? ' (Spieler)' : ''}`}
+                    title={`${u.callsign} – ${FMS_TEXT[u.status]}${u.cover ? ` – Gebietsabsicherung ${u.cover.name}` : ''}${u.crewPlayerId ? ' (Spieler)' : ''}`}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      ctx.setSelectedUnit(u.id);
+                      setMenu({ unitId: u.id, x: e.clientX, y: e.clientY });
+                    }}
                     onClick={() => {
                       ctx.setSelectedUnit(u.id);
                       if (u.incidentId) ctx.setSelectedIncident(u.incidentId);
@@ -77,11 +126,171 @@ export function UnitBoard({ ctx }: { ctx: GameCtx }) {
           </div>
         ))}
       </div>
+      {menu && (
+        <UnitMenu
+          ctx={ctx}
+          u={state.units.find((x) => x.id === menu.unitId)}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          onCover={(id) => setCoverUnit(id)}
+        />
+      )}
+      {coverUnit && <CoverDialog ctx={ctx} unitId={coverUnit} onClose={() => setCoverUnit(null)} />}
     </div>
   );
 }
 
-function UnitControl({ ctx, u }: { ctx: GameCtx; u: UnitState }) {
+/** Rechtsklick-Menü auf einem Fahrzeug der Statusliste */
+function UnitMenu(props: { ctx: GameCtx; u?: UnitState; x: number; y: number; onClose: () => void; onCover: (id: string) => void }) {
+  const { ctx, u, onClose } = props;
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key !== 'Escape') return;
+      onClose();
+    };
+    // Das Menü kann in einem ausgelagerten Fenster stehen, deshalb dessen Fenster beobachten
+    const win = ref.current?.ownerDocument.defaultView ?? window;
+    const t = setTimeout(() => {
+      win.addEventListener('mousedown', close);
+      win.addEventListener('keydown', close);
+      win.addEventListener('blur', close);
+    }, 0);
+    return () => {
+      clearTimeout(t);
+      win.removeEventListener('mousedown', close);
+      win.removeEventListener('keydown', close);
+      win.removeEventListener('blur', close);
+    };
+  }, [onClose]);
+  if (!u) return null;
+  const run = (fn: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    fn();
+    onClose();
+  };
+  return (
+    <div
+      className="unit-menu"
+      style={{ left: props.x, top: props.y }}
+      ref={(el) => {
+        ref.current = el;
+        // Nicht über den Fensterrand hinausragen
+        if (!el) return;
+        const w = el.ownerDocument.defaultView ?? window;
+        const r = el.getBoundingClientRect();
+        if (r.right > w.innerWidth) el.style.left = `${Math.max(0, w.innerWidth - r.width - 4)}px`;
+        if (r.bottom > w.innerHeight) el.style.top = `${Math.max(0, w.innerHeight - r.height - 4)}px`;
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <div className="unit-menu-head">
+        <span className="fms" style={{ background: FMS_COLOR[u.status] }}>
+          {u.status}
+        </span>
+        {u.callsign}
+      </div>
+      <button onClick={run(() => locate(ctx, u))}>Fahrzeug orten</button>
+      {u.speak && !u.speak.answered && <button onClick={run(() => conn.send({ a: 'speakPermit', unitId: u.id }))}>J – Sprechaufforderung</button>}
+      <button disabled={!canCover(u)} title={canCover(u) ? '' : 'Nur freie Fahrzeuge ohne Einsatz'} onClick={run(() => props.onCover(u.id))}>
+        {u.cover ? 'Absicherungsstandort ändern…' : 'Gebietsabsicherung…'}
+      </button>
+      <button
+        disabled={!canSendHome(u)}
+        title={canSendHome(u) ? 'FMS-Auftrag H an das Fahrzeug senden' : u.hasPatient ? 'Patient an Bord' : 'Fahrzeug ist auf der Wache oder bereits auf dem Rückweg'}
+        onClick={run(() => conn.send({ a: 'sendHome', unitId: u.id }))}
+      >
+        H – Fahren Sie Wache an
+      </button>
+    </div>
+  );
+}
+
+/** Gebietsabsicherung: Standort wählen (andere Wache oder Punkt auf der Karte) */
+function CoverDialog({ ctx, unitId, onClose }: { ctx: GameCtx; unitId: string; onClose: () => void }) {
+  const { scn, state } = ctx;
+  const u = state.units.find((x) => x.id === unitId);
+  const [q, setQ] = useState('');
+  const [all, setAll] = useState(false);
+  const [picking, setPicking] = useState(false);
+  // Kartenklick setzt einen freien Bereitstellungsort; die Einsatzmaske bekommt ihren Klick danach zurück
+  useEffect(() => {
+    if (!picking) return;
+    const prev = ctx.mapPickRef.current;
+    const mine = (p: { x: number; y: number }) => {
+      conn.send({ a: 'cover', unitIds: [unitId], x: Math.round(p.x), y: Math.round(p.y) });
+      onClose();
+    };
+    ctx.mapPickRef.current = mine;
+    return () => {
+      if (ctx.mapPickRef.current === mine) ctx.mapPickRef.current = prev;
+    };
+  }, [picking]);
+  if (!u) return null;
+  const ql = q.toLowerCase().trim();
+  const typeLabel = scn.vehicleTypes.find((t) => t.id === u.type)?.label ?? u.type;
+  // Passende Wachen haben selbst Fahrzeuge dieses Typs; verwaist, wenn davon keines einsatzbereit auf der Wache steht
+  const sameType = (st: Station) => st.vehicles.some((v) => v.type === u.type);
+  const verwaist = (st: Station) => sameType(st) && !state.units.some((o) => o.stationId === st.id && o.type === u.type && o.task === 'station' && o.status === 2);
+  const covered = (st: Station) => state.units.filter((o) => o.cover?.stationId === st.id).map((o) => shortCallsign(o.callsign));
+  const list = scn.stations
+    .filter((st) => st.id !== u.stationId && (all || sameType(st)) && (!ql || st.name.toLowerCase().includes(ql)))
+    .map((st) => ({ st, km: Math.hypot(st.x - u.x, st.y - u.y) / 1000, leer: verwaist(st), cov: covered(st) }))
+    .sort((a, b) => Number(b.leer) - Number(a.leer) || a.km - b.km)
+    .slice(0, 60);
+  if (picking)
+    return (
+      <div className="cover-picking">
+        Gebietsabsicherung {shortCallsign(u.callsign)}: Standort auf der Karte anklicken
+        <button className="small-btn" onClick={onClose}>
+          Abbrechen
+        </button>
+      </div>
+    );
+  return (
+    <div className="modal-bg" onMouseDown={onClose}>
+      <div className="modal cover-dialog" onMouseDown={(e) => e.stopPropagation()}>
+        <h2>Gebietsabsicherung – {u.callsign}</h2>
+        <p className="small muted">
+          Das Fahrzeug rückt mit Status 3 aus, fährt mit Status 1 ohne Sondersignal zum Standort und bleibt dort auf Status 1, bis es mit H zur Wache
+          zurückgeschickt oder zu einem Einsatz alarmiert wird. Angezeigt werden Wachen mit eigenem {typeLabel} (sonst „alle Wachen“), verwaiste stehen oben.
+        </p>
+        <div className="row">
+          <input className="grow" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Wache suchen…" />
+          <label className="small">
+            <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> alle Wachen
+          </label>
+          {!ctx.mobile && <button onClick={() => setPicking(true)}>Punkt auf Karte…</button>}
+        </div>
+        <div className="cover-stations">
+          {list.map(({ st, km, leer, cov }) => (
+            <button
+              key={st.id}
+              className="cover-station"
+              onClick={() => {
+                conn.send({ a: 'cover', unitIds: [u.id], stationId: st.id });
+                onClose();
+              }}
+            >
+              <span className="grow">{st.name}</span>
+              {leer && <span className="tag warn">verwaist</span>}
+              {cov.length > 0 && <span className="tag">abgesichert: {cov.join(', ')}</span>}
+              <span className="muted">{km.toFixed(1)} km</span>
+            </button>
+          ))}
+          {!list.length && <div className="muted small pad">Keine passende Wache gefunden.</div>}
+        </div>
+        <div className="row" style={{ justifyContent: 'flex-end' }}>
+          <button onClick={onClose}>Abbrechen</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UnitControl({ ctx, u, onCover }: { ctx: GameCtx; u: UnitState; onCover: () => void }) {
   const { scn, state } = ctx;
   const [text, setText] = useState('');
   // Spricht der Disponent bei ausgewähltem Fahrzeug, geht das als Funkspruch an dieses Fahrzeug
@@ -103,6 +312,7 @@ function UnitControl({ ctx, u }: { ctx: GameCtx; u: UnitState }) {
             {FMS_TEXT[u.status]} · {TASK_TEXT[u.task]}
             {u.eta ? ` · ETA ${formatDuration(u.eta - state.time)}` : ''}
             {inc ? ` · ${inc.nr} ${inc.stichwort} ${inc.address}` : ''}
+            {u.cover && !inc ? ` · ${u.cover.name}` : ''}
           </div>
           {def?.dienst && <div className="small muted">Dienst: {dienstText(def.dienst)}</div>}
         </div>
@@ -131,6 +341,19 @@ function UnitControl({ ctx, u }: { ctx: GameCtx; u: UnitState }) {
         )}
         {u.incidentId && !u.hasPatient && (
           <button onClick={() => conn.send({ a: 'releaseUnit', unitId: u.id })}>Aus Einsatz nehmen</button>
+        )}
+        <button className="small-btn" title="Fahrzeug auf der Karte zeigen" onClick={() => locate(ctx, u)}>
+          Orten
+        </button>
+        {canCover(u) && (
+          <button className="small-btn" title="Fahrzeug zur Gebietsabsicherung verlegen" onClick={onCover}>
+            Absichern
+          </button>
+        )}
+        {canSendHome(u) && !u.incidentId && (
+          <button className="small-btn" title="FMS-Auftrag H – Fahren Sie Wache an" onClick={() => conn.send({ a: 'sendHome', unitId: u.id })}>
+            H
+          </button>
         )}
         <form
           className="row grow"
