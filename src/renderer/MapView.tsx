@@ -751,25 +751,63 @@ function niceNumber(x: number): number {
 }
 
 // ---------- Kartenkacheln ----------
-const tileCache = new Map<string, { img: HTMLImageElement; ok: boolean; used: number }>();
+type TileEntry = { img: HTMLImageElement; state: 'loading' | 'ok' | 'error'; used: number; tries: number; retryAt: number };
+const tileCache = new Map<string, TileEntry>();
 let tileUse = 0;
+/** Steigt, sobald Kacheln fertig geladen (oder gescheitert) sind, damit die zwischengespeicherte Kartenebene neu gezeichnet wird */
 let tileVersion = 0;
+let tileBump: ReturnType<typeof setTimeout> | null = null;
+/** Fehlversuche in Folge; bleibt er hoch, sind wir offline und zeigen die eigene Kartendarstellung */
+let tileFailStreak = 0;
 const EARTH = 2 * Math.PI * 6378137;
 
-function getTile(url: string) {
+function tileSettled() {
+  // Mehrere fertige Kacheln zu einem Neuzeichnen zusammenfassen
+  if (tileBump) return;
+  tileBump = setTimeout(() => {
+    tileBump = null;
+    tileVersion++;
+  }, 60);
+}
+
+function loadTile(entry: TileEntry, url: string) {
+  const img = new Image();
+  entry.img = img;
+  entry.state = 'loading';
+  img.onload = () => {
+    if (entry.img !== img) return;
+    entry.state = 'ok';
+    tileFailStreak = 0;
+    tileSettled();
+  };
+  img.onerror = () => {
+    if (entry.img !== img) return;
+    entry.state = 'error';
+    entry.tries++;
+    entry.retryAt = performance.now() + Math.min(30000, 1000 * 2 ** entry.tries);
+    tileFailStreak++;
+    tileSettled();
+  };
+  img.src = url;
+}
+
+/** Kachel aus dem Zwischenspeicher; mit load=false wird nichts nachgeladen (für Ersatzkacheln anderer Zoomstufen) */
+function getTile(url: string, load = true): TileEntry | undefined {
   let t = tileCache.get(url);
   if (!t) {
-    const img = new Image();
-    const entry = { img, ok: false, used: 0 };
-    img.onload = () => (entry.ok = true);
-    img.src = url;
-    t = entry;
+    if (!load) return undefined;
+    t = { img: new Image(), state: 'loading', used: 0, tries: 0, retryAt: 0 };
     tileCache.set(url, t);
-    if (tileCache.size > 600) {
+    loadTile(t, url);
+    if (tileCache.size > 800) {
       // Am längsten unbenutzte Kacheln verwerfen
-      const old = [...tileCache.entries()].sort((a, b) => a[1].used - b[1].used).slice(0, 150);
+      t.used = ++tileUse;
+      const old = [...tileCache.entries()].sort((a, b) => a[1].used - b[1].used).slice(0, 200);
       for (const [k] of old) tileCache.delete(k);
     }
+  } else if (load && t.state === 'error' && performance.now() >= t.retryAt) {
+    // Gescheiterte Kacheln (Zeitüberschreitung, kurz kein Netz) später erneut versuchen
+    loadTile(t, url);
   }
   t.used = ++tileUse;
   return t;
@@ -780,7 +818,7 @@ function tileUrl(tpl: string, z: number, x: number, y: number) {
   return tpl.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y)).replace('{s}', sub);
 }
 
-/** Zeichnet OSM-Kacheln passend zur lokalen Projektion; false, wenn das Szenario keinen Erdbezug hat */
+/** Zeichnet OSM-Kacheln passend zur lokalen Projektion; false, wenn das Szenario keinen Erdbezug hat oder keine Kacheln erreichbar sind */
 function drawTiles(
   ctx: CanvasRenderingContext2D,
   scn: Scenario,
@@ -805,21 +843,56 @@ function drawTiles(
   const ys = Math.floor(ty(tl.my));
   const ye = Math.floor(ty(br.my));
   if ((xe - xs + 1) * (ye - ys + 1) > 120) return false;
-  const tileM = EARTH / n;
+
+  // Bildschirmrechteck der Kachel (tz, x, y)
+  const rect = (tz: number, x: number, y: number): [number, number, number, number] => {
+    const m = EARTH / 2 ** tz;
+    const mx = x * m - EARTH / 2;
+    const my = EARTH / 2 - y * m;
+    const [sx, sy] = toScreen(mercatorToLocal(geo, mx, my));
+    const [ex, ey] = toScreen(mercatorToLocal(geo, mx + m, my - m));
+    return [sx, sy, ex - sx + 0.5, ey - sy + 0.5];
+  };
+
   let drawn = 0;
+  let pending = 0;
   for (let x = xs; x <= xe; x++) {
     for (let y = ys; y <= ye; y++) {
       if (y < 0 || y >= n) continue;
-      const t = getTile(tileUrl(tpl, z, ((x % n) + n) % n, y));
-      if (!t.ok) continue;
-      const mx = x * tileM - EARTH / 2;
-      const my = EARTH / 2 - y * tileM;
-      const [sx, sy] = toScreen(mercatorToLocal(geo, mx, my));
-      const [ex, ey] = toScreen(mercatorToLocal(geo, mx + tileM, my - tileM));
-      ctx.drawImage(t.img, sx, sy, ex - sx + 0.5, ey - sy + 0.5);
-      drawn++;
+      const xn = ((x % n) + n) % n;
+      const t = getTile(tileUrl(tpl, z, xn, y))!;
+      const [sx, sy, sw, sh] = rect(z, x, y);
+      if (t.state === 'ok') {
+        ctx.drawImage(t.img, sx, sy, sw, sh);
+        drawn++;
+        continue;
+      }
+      if (t.state === 'loading') pending++;
+      // Bis die Kachel da ist: Ausschnitt einer schon geladenen gröberen Kachel hochskaliert zeigen (beim Hineinzoomen) ...
+      let filled = false;
+      for (let d = 1; d <= 6 && z - d >= 1; d++) {
+        const p = getTile(tileUrl(tpl, z - d, xn >> d, y >> d), false);
+        if (p?.state !== 'ok') continue;
+        const part = 256 / 2 ** d;
+        const mask = 2 ** d - 1;
+        ctx.drawImage(p.img, (xn & mask) * part, (y & mask) * part, part, part, sx, sy, sw, sh);
+        filled = true;
+        break;
+      }
+      // ... oder die feineren Kacheln der nächsten Stufe (beim Herauszoomen)
+      if (z < 19) {
+        for (let c = 0; c < 4; c++) {
+          const cx = 2 * xn + (c & 1);
+          const cy = 2 * y + (c >> 1);
+          const ch = getTile(tileUrl(tpl, z + 1, cx, cy), false);
+          if (ch?.state !== 'ok') continue;
+          ctx.drawImage(ch.img, ...rect(z + 1, 2 * x + (c & 1), cy));
+          filled = true;
+        }
+      }
+      if (filled) drawn++;
     }
   }
-  // Ohne Internet bleibt die eigene Kartendarstellung
-  return drawn > 0;
+  // Ohne Internet bleibt die eigene Kartendarstellung; solange Kacheln unterwegs sind, nicht zwischen den Darstellungen springen
+  return drawn > 0 || (pending > 0 && tileFailStreak < 8);
 }
