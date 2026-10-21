@@ -62,9 +62,12 @@ describe('Dienstzeiten im Spiel', () => {
     expect(ktw.status).toBe(6);
     game.started = game.running = true;
     for (let i = 0; i < 6 * 60; i++) game.tick(60_000); // 6 Spielstunden
-    expect(ktw.status).toBe(2);
+    // Anmeldung zum Dienst per Sprechwunsch mit Dienstende
+    expect(ktw.status).toBe(5);
+    expect(ktw.baseStatus).toBe(2);
+    expect(ktw.speak?.text).toMatch(/Dienst an.*Dienstende 16:00 Uhr/);
     // Wechselnde NEF-Standorte: ein Rufname ist höchstens einmal im Dienst
-    const nef = game.units.filter((u) => u.callsign === 'Rotkreuz Würzburg 76/2' && u.status !== 6);
+    const nef = game.units.filter((u) => u.callsign === 'Rotkreuz Würzburg 76/2' && u.baseStatus !== 6);
     expect(nef.length).toBeLessThanOrEqual(1);
   });
 });
