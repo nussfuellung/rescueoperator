@@ -1060,6 +1060,7 @@ export class Game {
     const u = this.unit(unitId);
     if (!u) return 'Fahrzeug nicht gefunden';
     if (u.hasPatient) return 'Fahrzeug hat einen Patienten an Bord';
+    if (!u.crewPlayerId && ['onScene', 'awaitHospital', 'atHospital'].includes(u.task)) this.freimeldung(u);
     const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
     if (inc) {
       inc.unitIds = inc.unitIds.filter((id) => id !== u.id);
@@ -1083,6 +1084,28 @@ export class Game {
     }
     this.returnToStation(u);
     if (inc) this.checkClose(inc);
+  }
+
+  /** Computer-Besatzung meldet sich beim Wechsel auf Status 1 per Sprechfunk frei */
+  private freimeldung(u: UnitState) {
+    const hosp = u.task === 'atHospital' ? this.scn.hospitals.find((h) => h.id === u.hospitalId) : undefined;
+    const ort = hosp ? `am ${hosp.name}` : 'an der Einsatzstelle';
+    const text = this.pick([`${u.callsign}, frei ${ort}, rücken ein, kommen.`, `${u.callsign} ist ${ort} wieder frei, Status 1, kommen.`]);
+    this.radioMsg(u.callsign, this.scn.ilsName, text, 'voice');
+    this.events.speech?.(`${this.scn.ilsName} von ${text}`);
+  }
+
+  /** Ende der laufenden Schicht als Uhrzeit, z. B. "19:00" */
+  private dienstende(u: UnitState, minute: number): string | undefined {
+    const plan = this.dienst.get(u.id);
+    if (!plan) return undefined;
+    for (let m = minute + 1; m <= minute + 1440; m++) {
+      if (!inDienst(plan, this.startDate, m)) {
+        const t = m % 1440;
+        return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+      }
+    }
+    return undefined;
   }
 
   /** Antwort einer computergesteuerten Besatzung auf einen Funkspruch der Leitstelle */
@@ -1832,6 +1855,8 @@ export class Game {
   private checkDienst() {
     const minute = this.gameMinute();
     if (minute === this.lastDienstMinute || !this.dienst.size) return;
+    // Beim Spielstart wird nur der Ausgangszustand gesetzt, ohne Funkmeldungen
+    const melden = this.lastDienstMinute >= 0;
     this.lastDienstMinute = minute;
     // Gleicher Rufname an mehreren Standorten (wechselnde NEF-Standorte): nur einer zur Zeit im Dienst
     const active = new Map<string, UnitState>();
@@ -1845,13 +1870,18 @@ export class Game {
       const other = active.get(u.callsign);
       if (on && other && other !== u) on = false;
       if (on && !other) active.set(u.callsign, u);
+      // Im Einsatz kann sich niemand abmelden: das passiert erst nach der Rückkehr auf die Wache
       if (u.task !== 'station' || u.incidentId || u.crewPlayerId) continue;
-      if (!on && u.status === 2) {
+      const st = u.status === 5 ? u.baseStatus : u.status;
+      if (!on && st === 2) {
         u.status = 6;
         u.baseStatus = 6;
-      } else if (on && u.status === 6) {
+        if (melden) this.requestSpeak(u, 'info', 'Melden uns zum Dienstende ab, Fahrzeug außer Dienst.');
+      } else if (on && st === 6) {
         u.status = 2;
         u.baseStatus = 2;
+        const ende = this.dienstende(u, minute);
+        if (melden) this.requestSpeak(u, 'info', `Melden uns zum Dienst an, Fahrzeug einsatzbereit auf der Wache${ende ? `, Dienstende ${ende} Uhr` : ''}.`);
       }
     }
   }
