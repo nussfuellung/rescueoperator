@@ -11,7 +11,7 @@ describe('Simulation', () => {
     const scn = generateScenario({ seed: 4711, towns: 8 });
     scn.settings.callsPerHour = 0;
     scn.settings.bmaPerHour = 0;
-    const game = new Game(scn, { seed: 1 });
+    const game = new Game(scn, { seed: 2 });
     const ct = game.addPlayer('Calltaker', 'calltaker');
     const dp = game.addPlayer('Disponent', 'dispatcher');
     game.handle(ct.id, { a: 'start' });
@@ -67,11 +67,15 @@ describe('Simulation', () => {
     game.handle(p.id, { a: 'createIncident', callId: call.id, stichwort: 'B 1', address: 'x', x: truth.pos.x, y: truth.pos.y, note: '', patients: 0 });
     const inc = game.incidents[0];
     game.handle(p.id, { a: 'alarm', incidentId: inc.id, unitIds: game.proposal(inc.id).map((x) => x.unitId) });
+    // Erst kommt die Rückmeldung bei Eintreffen, nach der Erkundung die Lagemeldung mit Nachforderung
     let speech = '';
-    for (let i = 0; i < 6000 && !speech; i++) {
+    for (let i = 0; i < 6000 && !speech.includes('Lagemeldung'); i++) {
       game.tick(500);
       const u = game.units.find((x) => x.speak && !x.speak.answered);
-      if (u) speech = u.speak!.text;
+      if (u) {
+        speech = u.speak!.text;
+        if (!speech.includes('Lagemeldung')) game.handle(p.id, { a: 'speakPermit', unitId: u.id });
+      }
     }
     expect(speech).toContain('Wir fordern nach');
   });
