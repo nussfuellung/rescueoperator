@@ -274,8 +274,8 @@ export type QuestionId =
 export interface CallState {
   id: string;
   phone: string;
-  /** 112, BMA oder Übergabe der KVB (116117) */
-  kind: '112' | 'bma' | 'kvb';
+  /** 112, BMA, Übergabe der KVB (116117) oder Patientenanmeldung eines Rettungsmittels per Telefon */
+  kind: '112' | 'bma' | 'kvb' | 'rtw';
   state: 'ringing' | 'active' | 'ended';
   takerId?: string;
   ringStart: number;
@@ -298,6 +298,8 @@ export interface CallState {
   kvb?: { text: string; x: number; y: number; address: string };
   /** An die KVB weiterverbunden */
   toKvb?: boolean;
+  /** Besatzung meldet ihren Patienten telefonisch mit PZC an und erbittet eine Zielklinik */
+  rtw?: { unitId: string; callsign: string; pzc: string; text: string };
 }
 
 export interface IncidentLog {

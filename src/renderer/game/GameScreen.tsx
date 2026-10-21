@@ -45,6 +45,8 @@ export interface GameCtx {
   /** Web-App auf Tablet oder Handy: keine Karte und keine Einsatzmaske */
   mobile?: boolean;
   setFormCallId: (id: string | null) => void;
+  /** IVENA-Fenster öffnen (nicht auf Tablet/Handy) */
+  openIvena?: () => void;
 }
 
 const POPPED_KEY = 'lst.popped';
@@ -124,6 +126,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
     setFormManual,
     formCallId,
     setFormCallId,
+    openIvena: () => setShowIvena(true),
   };
 
   const onMapClick = (p: Vec, hit: Hit | null) => {
