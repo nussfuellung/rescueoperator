@@ -57,6 +57,9 @@ describe('ABek-Schlagworte', () => {
     game.handle(p.id, { a: 'createIncident', stichwort: 'B 3 PERSON', schlagwort: slw, ...base });
     const [a, b] = game.incidents;
     expect(b.schlagwort).toBe(slw);
+    // Schlagwort eines anderen Stichworts wird nicht übernommen
+    game.handle(p.id, { a: 'updateIncident', incidentId: a.id, schlagwort: slw });
+    expect(a.schlagwort).toBeUndefined();
     const rtw = (id: string) => game.proposal(id).filter((x) => game.units.find((u) => u.id === x.unitId)!.type === 'RTW').length;
     expect(rtw(a.id)).toBe(0);
     expect(rtw(b.id)).toBe(2);

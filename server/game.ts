@@ -690,7 +690,7 @@ export class Game {
           if (action.schlagwort === undefined && inc.schlagwort && findSchlagwort(inc.schlagwort)?.code !== inc.stichwort) inc.schlagwort = undefined;
         }
         if (action.schlagwort !== undefined && action.schlagwort !== inc.schlagwort) {
-          inc.schlagwort = findSchlagwort(action.schlagwort) ? action.schlagwort : undefined;
+          inc.schlagwort = findSchlagwort(action.schlagwort)?.code === inc.stichwort ? action.schlagwort : undefined;
           if (inc.schlagwort) this.log(inc, `Schlagwort: ${inc.schlagwort}`);
         }
         if (action.note !== undefined) inc.note = action.note;
