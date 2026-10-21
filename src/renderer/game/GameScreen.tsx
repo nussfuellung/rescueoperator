@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ROLE_LABEL, formatClock, formatDuration } from '../../../shared/catalog';
 import { RoadGraph } from '../../../shared/geo';
-import type { PublicState, Role, Scenario, Vec } from '../../../shared/types';
+import type { PublicState, Role, Scenario, UnitState, Vec } from '../../../shared/types';
 import { conn, useNet } from '../net';
 import { MapView, type Hit } from '../MapView';
 import { alarmTone, beep, isMuted, ring, setMuted } from '../sound';
@@ -35,6 +35,8 @@ export interface GameCtx {
   setSelectedUnit: (id: string | null) => void;
   /** Karte auf einen Punkt setzen, optional mit Maßstab (Pixel je Meter) */
   focus: (p: Vec, scale?: number) => void;
+  /** Fahrzeug orten: auswählen, Karte hinzoomen und kurz markieren */
+  locate?: (u: UnitState) => void;
   marker: Vec | null;
   setMarker: (p: Vec | null) => void;
   /** Kartenklick an das Einsatzformular weiterleiten */
@@ -47,6 +49,8 @@ export interface GameCtx {
   /** Web-App auf Tablet oder Handy: keine Karte und keine Einsatzmaske */
   mobile?: boolean;
   setFormCallId: (id: string | null) => void;
+  /** IVENA-Fenster öffnen (nicht auf Tablet/Handy) */
+  openIvena?: () => void;
 }
 
 const POPPED_KEY = 'lst.popped';
@@ -69,6 +73,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
   const [focusPt, setFocusPt] = useState<{ x: number; y: number; seq: number; scale?: number } | null>(null);
   const [marker, setMarker] = useState<Vec | null>(null);
+  const [ping, setPing] = useState<{ unitId: string; until: number } | null>(null);
   const [showScore, setShowScore] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showWindows, setShowWindows] = useState(false);
@@ -119,6 +124,11 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
     selectedUnit,
     setSelectedUnit,
     focus: (p, scale) => setFocusPt({ x: p.x, y: p.y, seq: Date.now() + Math.random(), scale }),
+    locate: (u) => {
+      setSelectedUnit(u.id);
+      setFocusPt({ x: u.x, y: u.y, seq: Date.now() + Math.random(), scale: 0.5 });
+      setPing({ unitId: u.id, until: Date.now() + 6000 });
+    },
     marker,
     setMarker,
     mapPickRef,
@@ -126,6 +136,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
     setFormManual,
     formCallId,
     setFormCallId,
+    openIvena: () => setShowIvena(true),
   };
 
   const onMapClick = (p: Vec, hit: Hit | null) => {
@@ -160,6 +171,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
             selectedIncidentId: selectedIncident ?? undefined,
             selectedUnitId: selectedUnit ?? undefined,
             marker,
+            ping,
           }}
           hitKinds={['unit', 'incident']}
           onClick={onMapClick}

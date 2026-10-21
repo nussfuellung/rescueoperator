@@ -208,7 +208,11 @@ export type UnitTask =
   | 'toHospital'
   | 'atHospital'
   | 'returning'
-  | 'free';
+  | 'free'
+  /** Fahrt zum Standort einer Gebietsabsicherung (Status 3 beim Ausrücken, dann Status 1) */
+  | 'toCover'
+  /** Steht zur Gebietsabsicherung am Standort, Status 1 */
+  | 'covering';
 
 export interface SpeakRequest {
   kind: 'lage' | 'nachforderung' | 'zielklinik' | 'info' | 'crew';
@@ -246,6 +250,8 @@ export interface UnitState {
   hint?: string;
   /** Aktuell geschaltete TMO-Rufgruppe */
   tmo?: string;
+  /** Gebietsabsicherung: Standort, an dem das Fahrzeug bereitsteht */
+  cover?: { name: string; x: number; y: number; stationId?: string };
 }
 
 export interface CallLine {
@@ -275,8 +281,8 @@ export type QuestionId =
 export interface CallState {
   id: string;
   phone: string;
-  /** 112, BMA oder Übergabe der KVB (116117) */
-  kind: '112' | 'bma' | 'kvb';
+  /** 112, BMA, Übergabe der KVB (116117) oder Patientenanmeldung eines Rettungsmittels per Telefon */
+  kind: '112' | 'bma' | 'kvb' | 'rtw';
   state: 'ringing' | 'active' | 'ended';
   takerId?: string;
   ringStart: number;
@@ -299,6 +305,8 @@ export interface CallState {
   kvb?: { text: string; x: number; y: number; address: string };
   /** An die KVB weiterverbunden */
   toKvb?: boolean;
+  /** Besatzung meldet ihren Patienten telefonisch mit PZC an und erbittet eine Zielklinik */
+  rtw?: { unitId: string; callsign: string; pzc: string; text: string };
 }
 
 export interface IncidentLog {

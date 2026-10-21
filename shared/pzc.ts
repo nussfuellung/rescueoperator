@@ -59,6 +59,12 @@ export function pzcFachbereich(code: string): string {
   if (['421', '423', '425'].includes(c)) return 'Stroke Unit';
   if (c === '281' || c === '282' || c === '283') return 'Verbrennungen';
   if (c.startsWith('51')) return 'Pädiatrie';
+  if (/^5[234]/.test(c)) return 'Geburtshilfe';
+  if (c.startsWith('55')) return 'Gynäkologie';
+  if (c === '263' || c.startsWith('71')) return 'Urologie';
+  if (c === '225' || c.startsWith('72')) return 'Augenheilkunde';
+  if (c.startsWith('73')) return 'HNO';
+  if (['431', '432', '433', '434'].includes(c)) return 'Psychiatrie';
   if (c === '133' || /^2[1-3]/.test(c) || ['251', '252', '255', '261', '262', '271', '273', '274', '277'].includes(c)) return 'Unfallchirurgie';
   if (/^2/.test(c) || ['243', '353'].includes(c)) return 'Chirurgie';
   return 'Innere Medizin';
@@ -110,7 +116,19 @@ const REGELN: [RegExp, string, 1 | 2 | 3][] = [
   [/anaphylax|allerg/i, '321', 1],
   [/asthma|copd/i, '312', 2],
   [/hypoglyk/i, '393', 2],
-  [/psych|suizid|tabletten/i, '432', 2],
+  [/pressdrang|einsetzende geburt/i, '536', 1],
+  [/geburt|wehen|blasensprung/i, '536', 2],
+  [/vaginal|gynäkolog/i, '551', 2],
+  [/schwanger/i, '546', 2],
+  [/nierenkolik|harnleiter/i, '711', 2],
+  [/hoden/i, '712', 1],
+  [/harnverhalt/i, '713', 2],
+  [/harnwegsinfekt|blasenentzündung/i, '718', 3],
+  [/katheter/i, '717', 3],
+  [/nasenbluten|epistaxis/i, '731', 2],
+  [/augenverletz|augenschmerz|\bauge\b/i, '721', 2],
+  [/tabletten|medikamente/i, '365', 2],
+  [/psych|suizid/i, '432', 2],
   [/alkohol/i, '361', 3],
   [/exsikk/i, '326', 2],
   [/synkope|kollaps/i, '322', 2],
@@ -127,6 +145,12 @@ const FALLBACK: Record<string, string> = {
   'Stroke Unit': '421',
   Pädiatrie: '519',
   Verbrennungen: '281',
+  Urologie: '719',
+  Gynäkologie: '559',
+  Geburtshilfe: '546',
+  HNO: '739',
+  Augenheilkunde: '729',
+  Psychiatrie: '432',
 };
 
 export function pzcFuer(desc: string, specialty: string, alter: number, dringend?: boolean): string {
