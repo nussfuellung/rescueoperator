@@ -22,7 +22,9 @@ async function download(url, file) {
 
 function extract(file, dir) {
   mkdirSync(dir, { recursive: true });
-  if (file.endsWith('.zip')) execFileSync('unzip', ['-q', '-o', file, '-d', dir]);
+  // Windows bringt kein unzip mit, sein tar (bsdtar) entpackt aber auch ZIP-Dateien
+  if (process.platform === 'win32') execFileSync('tar', ['-xf', file, '-C', dir]);
+  else if (file.endsWith('.zip')) execFileSync('unzip', ['-q', '-o', file, '-d', dir]);
   else execFileSync('tar', ['xzf', file, '-C', dir]);
   rmSync(file);
 }

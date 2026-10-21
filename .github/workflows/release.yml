@@ -1,0 +1,70 @@
+# Baut rescue.Operator für Windows, Linux und macOS und legt ein GitHub-Release an.
+# Auslöser: ein Tag wie v0.9.1 (Version in package.json vorher anheben) oder von Hand unter "Actions".
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            build: npx electron-builder --win nsis --x64 --publish never
+            files: |
+              release/*.exe
+              release/*.exe.blockmap
+              release/latest.yml
+          - os: ubuntu-latest
+            build: npx electron-builder --linux AppImage --x64 --publish never
+            files: |
+              release/*.AppImage
+              release/latest-linux.yml
+          - os: macos-latest
+            build: npx electron-builder --mac dir --x64 --arm64 --publish never && node scripts/mac-release.mjs
+            files: |
+              release/github/*.zip
+              release/github/latest-mac.yml
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node scripts/piper-holen.mjs
+      - run: ${{ matrix.build }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paket-${{ matrix.os }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: pakete
+          merge-multiple: true
+      - name: Release anlegen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          ls -la pakete
+          gh release create "v$VERSION" pakete/* --title "rescue.Operator $VERSION" --generate-notes --target "$GITHUB_SHA" \
+            || gh release upload "v$VERSION" pakete/* --clobber
