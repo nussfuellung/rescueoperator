@@ -1,5 +1,5 @@
 // Simuliertes GIS: Straßengraph, Routing, Hausnummern, Geokodierung.
-import type { Address, Road, RoadNode, RoadType, Scenario, Town, Vec } from './types';
+import type { Address, MapObject, Road, RoadNode, RoadType, Scenario, Town, Vec } from './types';
 
 export const ROAD_SPEED_KMH: Record<RoadType, number> = {
   autobahn: 120,
@@ -563,4 +563,79 @@ export function polylineLength(pts: Vec[]): number {
   let l = 0;
   for (let i = 1; i < pts.length; i++) l += dist(pts[i - 1], pts[i]);
   return l;
+}
+
+const foldText = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const OBJECT_KIND_LABEL: Record<MapObject['kind'], string> = {
+  schule: 'Schule',
+  seniorenheim: 'Seniorenheim',
+  gewerbe: 'Gewerbe',
+  kirche: 'Kirche',
+  sonstiges: 'Objekt',
+};
+
+export interface ObjectHit {
+  obj: MapObject;
+  kind: string;
+  town: string;
+  /** Straße und Hausnummer, falls eine echte Adresse in der Nähe liegt */
+  street: string;
+}
+
+/** Objekte mit Ort und Straße, einmal pro Objektliste */
+const objectIndex = new WeakMap<MapObject[], { hit: ObjectHit; name: string; hay: string }[]>();
+
+function indexOf(scn: Scenario) {
+  let idx = objectIndex.get(scn.objects);
+  if (!idx) {
+    idx = scn.objects.map((obj) => {
+      const addr = nearestAddress(scn, obj, 120);
+      const town = addr?.town ?? (townAt(scn.towns, obj) ?? nearestTown(scn.towns, obj))?.name ?? '';
+      const street = addr ? `${addr.street} ${addr.number}` : '';
+      const kind = OBJECT_KIND_LABEL[obj.kind];
+      return { hit: { obj, kind, town, street }, name: foldText(obj.name), hay: foldText(`${obj.name} ${kind} ${town} ${street}`) };
+    });
+    objectIndex.set(scn.objects, idx);
+  }
+  return idx;
+}
+
+/**
+ * Objektsuche für die Einsatzmaske: alle Suchwörter müssen in Name, Art, Ort
+ * oder Straße vorkommen ("grundschule giebelstadt", "juliusspital").
+ * Treffer am Namensanfang zuerst.
+ */
+export function searchObjects(scn: Scenario, q: string, limit = 8): ObjectHit[] {
+  const words = foldText(q).split(' ').filter(Boolean);
+  if (!words.length) return [];
+  const query = words.join(' ');
+  return indexOf(scn)
+    .filter((e) => words.every((w) => e.hay.includes(w)))
+    .map((e) => ({ e, score: e.name === query ? 0 : e.name.startsWith(query) ? 1 : e.name.includes(query) ? 2 : 3 }))
+    .sort((a, b) => a.score - b.score || a.e.name.localeCompare(b.e.name) || a.e.hit.town.localeCompare(b.e.hit.town, 'de'))
+    .slice(0, limit)
+    .map(({ e }) => e.hit);
+}
+
+/** Nächstes Objekt im Umkreis eines Kartenpunkts */
+export function nearestObject(scn: Scenario, p: Vec, maxDist = 120): MapObject | null {
+  let best: MapObject | null = null;
+  let bestD = maxDist;
+  for (const o of scn.objects) {
+    const d = dist(o, p);
+    if (d <= bestD) {
+      best = o;
+      bestD = d;
+    }
+  }
+  return best;
 }
