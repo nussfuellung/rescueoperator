@@ -1,0 +1,15 @@
+Leitstellensimulator für Mac mit {CHIP}
+=========================================
+
+1. Die ZIP-Datei im Finder doppelklicken, dann liegt "Leitstellensimulator" daneben.
+2. Die App in den Ordner "Programme" ziehen.
+3. Beim ersten Start meldet macOS, dass die App nicht überprüft werden kann,
+   weil sie nicht von Apple beglaubigt ist:
+   - macOS 15 (Sequoia) und neuer: Meldung mit "Fertig" schließen, dann
+     Systemeinstellungen > Datenschutz & Sicherheit > ganz unten "Trotzdem öffnen".
+   - ältere macOS-Versionen: Rechtsklick auf die App > "Öffnen" > "Öffnen".
+   Danach startet sie ganz normal per Doppelklick.
+
+Welcher Chip? Apfel-Menü > "Über diesen Mac": "Chip Apple M…" = Apple-Chip,
+"Prozessor Intel…" = Intel.
+Auf dem Mac spricht die Systemstimme, die Piper-Stimmen gibt es nur unter Windows und Linux.

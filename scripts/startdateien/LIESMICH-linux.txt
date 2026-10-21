@@ -1,0 +1,11 @@
+Leitstellensimulator für Linux
+==============================
+
+1. Die ZIP-Datei entpacken.
+2. Im entpackten Ordner Rechtsklick auf "Start Linux.sh" > Ausführen,
+   oder im Terminal:  ./"Start Linux.sh"
+   Das Skript startet das Programm und weicht bei gehärteten Kerneln
+   automatisch auf den Start ohne Sandbox aus.
+
+Die Sprachausgabe (Piper) ist dabei und braucht nichts weiter.
+Die übrigen Dateien im Ordner gehören zum Programm.

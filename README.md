@@ -6,11 +6,11 @@ Stand: sechster Playtest-Build (Version 0.6.0). Neu: Rettungsdienst, NEF-Standor
 
 ## Schnellstart
 
-`release/Leitstellensimulator-0.5.0.zip` direkt auf dem Spielrechner entpacken. Im Ordner liegen drei Startdateien und eine `LIESMICH.txt`:
+Pro System gibt es eine eigene ZIP in `release/` (erzeugt mit `npm run dist:all`), jeweils mit einer `LIESMICH.txt`:
 
-- **Windows:** `Start Windows.bat` doppelklicken. Das Paket ist nicht signiert; SmartScreen fragt deshalb einmal nach („Weitere Informationen“ → „Trotzdem ausführen“).
-- **Linux (CachyOS, Arch, Ubuntu, Fedora):** Rechtsklick auf `Start Linux.sh` → Ausführen, oder `bash "Start Linux.sh"` im Terminal. Für die Systemstimme `speech-dispatcher` oder `espeak-ng` installieren.
-- **macOS (Apple-Chip und Intel):** beim ersten Mal Rechtsklick auf `Start Mac.command` → Öffnen. Das Skript entfernt die Download-Sperre, signiert die App lokal und startet die passende Version.
+- **Windows** (`…-windows.zip`): entpacken, `Leitstellensimulator.exe` doppelklicken. Das Programm ist nicht signiert; SmartScreen fragt deshalb einmal nach („Weitere Informationen“ → „Trotzdem ausführen“).
+- **Linux** (`…-linux.zip`): entpacken, Rechtsklick auf `Start Linux.sh` → Ausführen. Die Piper-Stimmen sind dabei.
+- **macOS** (`…-mac-apple-chip.zip` bzw. `…-mac-intel.zip`): Die ZIP enthält direkt `Leitstellensimulator.app`, lokal (ad hoc) signiert. Nicht von Apple beglaubigt, daher beim ersten Start unter macOS 15 Systemeinstellungen → Datenschutz & Sicherheit → „Trotzdem öffnen“, bei älteren Versionen Rechtsklick → Öffnen.
 
 Danach:
 1. Namen eingeben, **Schicht hosten** → Leitstelle wählen (vorinstalliert: **ILS Würzburg**) → **Server starten**.

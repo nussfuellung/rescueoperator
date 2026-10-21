@@ -45,5 +45,15 @@ for (const v of voices) {
   await download(`${VOICES}/voice-de-${v}.tar.gz`, f);
   extract(f, target);
 }
+// rcodesign signiert die Mac-Apps unter Linux und Windows lokal (ad hoc), nur auf Linux-Build-Rechnern nötig
+const RCODESIGN = 'https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.29.0/apple-codesign-0.29.0-x86_64-unknown-linux-musl.tar.gz';
+if (process.platform === 'linux' && !existsSync(join('vendor', 'rcodesign', 'rcodesign'))) {
+  console.log('rcodesign …');
+  const f = join(tmp, 'rcodesign.tar.gz');
+  await download(RCODESIGN, f);
+  extract(f, join(tmp, 'rcodesign'));
+  mkdirSync(join('vendor', 'rcodesign'), { recursive: true });
+  execFileSync('sh', ['-c', `cp "$(find ${join(tmp, 'rcodesign')} -name rcodesign -type f)" vendor/rcodesign/rcodesign && chmod +x vendor/rcodesign/rcodesign`]);
+}
 rmSync(tmp, { recursive: true, force: true });
-console.log('Piper und Stimmen bereit.');
+console.log('Piper, Stimmen und rcodesign bereit.');
