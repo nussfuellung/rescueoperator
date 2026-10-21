@@ -4,6 +4,7 @@ import { formatDuration } from '../../../shared/catalog';
 import { geocode, nearestTown, reverseGeocode, streetDirectory } from '../../../shared/geo';
 import { computeProposal } from '../../../shared/dispatch';
 import { aaoMitSchlagwort, findSchlagwort, formatSchlagwort, schlagwortByNr, searchSchlagworte } from '../../../shared/schlagworte';
+import { SchlagwortSelect } from './SchlagwortSelect';
 import type { CallState, IncidentState, QuestionId, Vec } from '../../../shared/types';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
@@ -103,7 +104,7 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
                     a: 'createIncident',
                     callId: c.id,
                     stichwort: 'B BMA',
-                    schlagwort: formatSchlagwort(schlagwortByNr('#B1610')!),
+                    schlagwort: formatSchlagwort(schlagwortByNr('#B1710')!),
                     address: c.bma!.address,
                     x: c.bma!.x,
                     y: c.bma!.y,
@@ -310,7 +311,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
     if (call?.bma) {
       applyPos(call.bma, 'BMA-Übertragung', call.bma.address);
       setStichwort('B BMA');
-      setSchlagwort(formatSchlagwort(schlagwortByNr('#B1610')!));
+      setSchlagwort(formatSchlagwort(schlagwortByNr('#B1710')!));
       setObjekt(call.bma.text.replace(/^BMA-Auslösung\s*/, '').replace(/,.*$/, ''));
     } else if (call?.kvb) {
       applyPos(call.kvb, 'KVB-Übergabe', call.kvb.address);
@@ -578,6 +579,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
             Sondersignal
           </label>
         </div>
+        {stichwort && <SchlagwortSelect stichwort={stichwort} value={schlagwort} onChange={setSchlagwort} />}
         {schlagwort && (
           <div className="em-schlagwort">
             <code>{schlagwort}</code>

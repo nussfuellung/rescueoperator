@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { generateScenario } from '../shared/mapgen';
 import { dateForSeason, seasonOf } from '../shared/jahreszeit';
 import { Game } from '../server/game';
-import { ALLE_VORLAGEN, GSL_TEMPLATES, SAISON_TEMPLATES, UNWETTER_TEMPLATES } from '../server/lagen';
+import { TEMPLATES } from '../server/callgen';
+import { ALLE_VORLAGEN, GSL_TEMPLATES, SAISON_FAKTOR, SAISON_TEMPLATES, UNWETTER_TEMPLATES } from '../server/lagen';
 import { SCHLAGWORTE } from '../shared/schlagworte';
 import { DEFAULT_STICHWORTE } from '../shared/catalog';
 
@@ -115,8 +116,10 @@ describe('Jahreszeit, Großschadenslagen und Unwetter', () => {
     for (const t of [...SAISON_TEMPLATES, ...UNWETTER_TEMPLATES, ...GSL_TEMPLATES]) {
       expect(codes.has(t.stichwort), t.id).toBe(true);
       for (const a of t.auchRichtig ?? []) expect(codes.has(a), `${t.id} ${a}`).toBe(true);
+      expect(SCHLAGWORTE.some((s) => s.nr === t.schlagwort && s.code === t.stichwort), `${t.id} ${t.schlagwort}`).toBe(true);
     }
     expect(new Set(ALLE_VORLAGEN.map((t) => t.id)).size).toBe(ALLE_VORLAGEN.length);
-    expect(SCHLAGWORTE.length).toBeGreaterThan(0);
+    const ids = new Set(TEMPLATES.map((t) => t.id));
+    for (const id of Object.keys(SAISON_FAKTOR)) expect(ids.has(id), id).toBe(true);
   });
 });

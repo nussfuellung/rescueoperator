@@ -2,6 +2,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { attachPttKeys } from './audio/stt';
+import { attachTheme } from './theme';
 
 export type PanelId = 'calls' | 'form' | 'map' | 'incidents' | 'radio' | 'units';
 
@@ -58,6 +59,7 @@ export function Popout({ id, title, onClose, children }: { id: PanelId; title: s
     w.document.head.innerHTML = '<meta charset="utf-8">';
     w.document.title = `${title} – rescue.Operator`;
     copyStyles(document, w.document);
+    const detachTheme = attachTheme(w.document);
     w.document.body.innerHTML = '';
     w.document.body.className = 'popout-body';
     const root = w.document.createElement('div');
@@ -103,6 +105,7 @@ export function Popout({ id, title, onClose, children }: { id: PanelId; title: s
     return () => {
       clearInterval(poll);
       detachPtt();
+      detachTheme();
       window.removeEventListener('beforeunload', mainUnload);
       closedByUs = true;
       save();
