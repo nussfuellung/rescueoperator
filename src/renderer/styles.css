@@ -1474,6 +1474,26 @@ html:has(.popout-body),
   min-width: 78px;
   color: var(--accent);
 }
+.em-obj-search {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.em-obj-search input {
+  width: 100%;
+}
+.em-obj-hits {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 240px;
+  overflow: auto;
+}
+.em-obj-hits button.sel {
+  background: var(--panel2);
+}
 .em-proposal {
   display: flex;
   flex-direction: column;
@@ -1742,23 +1762,3 @@ button.attention { border-color: var(--accent); color: var(--accent); }
 .ivena-cell.none { background: repeating-linear-gradient(45deg, transparent 0 4px, rgba(139, 154, 171, 0.15) 4px 8px); }
 .call-row.ringing.kvb { border-color: #2a9d8f; }
 .polizei-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: #1d3557; color: #fff; }
-.em-obj-search {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-}
-.em-obj-search input {
-  width: 100%;
-}
-.em-obj-hits {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 20;
-  max-height: 240px;
-  overflow: auto;
-}
-.em-obj-hits button.sel {
-  background: var(--panel2);
-}
