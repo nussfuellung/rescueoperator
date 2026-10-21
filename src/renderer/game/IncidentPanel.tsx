@@ -1,5 +1,6 @@
 // Einsatzliste, Einsatzdetails und Disposition nach AAO.
-import { aaoMitSchlagwort } from '../../../shared/schlagworte';
+import { aaoMitSchlagwort, findSchlagwort } from '../../../shared/schlagworte';
+import { SchlagwortSelect } from './SchlagwortSelect';
 import { useEffect, useMemo, useState } from 'react';
 import { AIR_SPEED, AIR_TURNOUT, FMS_COLOR, FMS_TEXT, formatClock, formatDuration, shortCallsign } from '../../../shared/catalog';
 import { computeProposal } from '../../../shared/dispatch';
@@ -30,7 +31,10 @@ export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
             }}
           >
             <span className={`badge ${i.status}`}>{i.status}</span>
-            <b>{i.stichwort}</b>
+            <span className="inc-sw">
+              <b>{i.stichwort}</b>
+              {findSchlagwort(i.schlagwort) && <span className="muted small">{findSchlagwort(i.schlagwort)!.kat}</span>}
+            </span>
             <span className="addr">{i.address}</span>
             <span className="muted small">
               {i.unitIds.length} Fz · {formatDuration(state.time - i.createdAt)}
@@ -159,6 +163,13 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
           ))}
         </select>
       </div>
+      {inc.status !== 'abgeschlossen' && (
+        <SchlagwortSelect
+          stichwort={inc.stichwort}
+          value={inc.schlagwort ?? ''}
+          onChange={(v) => conn.send({ a: 'updateIncident', incidentId: inc.id, schlagwort: v })}
+        />
+      )}
       {inc.note && <div className="note">{inc.note}</div>}
       {inc.lage && <div className="lage">Lage vor Ort: {inc.lage}</div>}
 
