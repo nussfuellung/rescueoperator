@@ -1,5 +1,5 @@
 // Autoritative Spielsimulation: Notrufe, Einsätze, Fahrzeuge, Funk, Wertung.
-import { AIR_SPEED, AIR_TURNOUT, FMS_TEXT, HILFSFRIST_MS, ensureStichworte, shortCallsign } from '../shared/catalog';
+import { AIR_SPEED, AIR_TURNOUT, FMS_TEXT, HILFSFRIST_MS, ensureStichworte, radioName, shortCallsign } from '../shared/catalog';
 import { aaoMitSchlagwort, findSchlagwort, schlagwortByNr } from '../shared/schlagworte';
 import { RoadGraph, dist, nearestTown, reverseGeocode } from '../shared/geo';
 import { mulberry32 } from '../shared/mapgen';
@@ -9,6 +9,7 @@ import type {
   CallState,
   Dienstzeit,
   FmsStatus,
+  Hospital,
   IncidentState,
   Player,
   PublicState,
@@ -94,6 +95,10 @@ interface Truth {
 const MISSED_AFTER_MS = 90_000;
 /** Anteil der Übergaben von der KVB (116117) an allen Notrufen */
 const KVB_SHARE = 0.06;
+/** Anteil der Patientenanmeldungen, die eine Besatzung per Telefon statt über Funk macht */
+const RTW_PHONE_SHARE = 0.3;
+/** Nach so langer Zeit ohne Annahme meldet sich die Besatzung doch über Funk */
+const RTW_PHONE_GIVEUP_MS = 75_000;
 const SPEAK_PENALTY_MS = 180_000;
 
 export interface GameEvents {
@@ -517,6 +522,41 @@ export class Game {
     return call;
   }
 
+  /** Rettungsmittel ruft in der Leitstelle an, um seinen Patienten mit PZC anzumelden */
+  private ringRtw(u: UnitState, p: { pzc: string; desc: string }): CallState {
+    const call: CallState = {
+      id: `c${++this.seq.call}`,
+      phone: `${radioName(u.callsign)} (Diensthandy)`,
+      kind: 'rtw',
+      state: 'ringing',
+      ringStart: this.time,
+      transcript: [],
+      asked: [],
+      rtw: {
+        unitId: u.id,
+        callsign: u.callsign,
+        pzc: p.pzc,
+        text: `Hier ${radioName(u.callsign)}, ich möchte einen Patienten anmelden. PZC ${pzcSprech(p.pzc)}. ${p.desc}. Welche Klinik können wir anfahren?`,
+      },
+    };
+    this.calls.push(call);
+    return call;
+  }
+
+  /** Telefonische Anmeldung beenden, sobald eine Zielklinik feststeht */
+  private closeRtwCall(u: UnitState, h: Hospital) {
+    const call = this.calls.find((c) => c.kind === 'rtw' && c.rtw?.unitId === u.id && c.state !== 'ended');
+    if (!call) return false;
+    const active = call.state === 'active';
+    if (active) {
+      call.transcript.push({ from: 'calltaker', text: `Fahren Sie bitte ${h.name} an, die Klinik ist in IVENA informiert.`, t: this.time });
+      call.transcript.push({ from: 'caller', text: `Verstanden, wir fahren ${h.name} an. Danke, tschüss.`, t: this.time });
+    } else call.transcript.push({ from: 'system', text: `Zielklinik ${h.name} wurde inzwischen zugewiesen, Anrufer hat aufgelegt.`, t: this.time });
+    call.state = 'ended';
+    call.endedAt = this.time;
+    return active;
+  }
+
   private transferKvb(player: Player, callId: string): string | void {
     const call = this.calls.find((c) => c.id === callId);
     if (!call || call.state !== 'active' || call.kind !== '112') return 'Kein aktives Notrufgespräch';
@@ -708,6 +748,14 @@ export class Game {
       this.addScore(5, 'BMA-Auslösung angenommen');
       return;
     }
+    if (call.kind === 'rtw') {
+      call.transcript.push({ from: 'calltaker', text: `Integrierte Leitstelle ${this.scn.ilsName.replace(/^(ILS|Leitstelle)\s*/, '')}, grüß Gott.`, t: this.time });
+      call.transcript.push({ from: 'caller', text: call.rtw!.text, t: this.time });
+      const u = this.unit(call.rtw!.unitId);
+      const inc = u?.incidentId ? this.incident(u.incidentId) : undefined;
+      if (inc) this.log(inc, `Telefon ${shortCallsign(call.rtw!.callsign)}: Patientenanmeldung, PZC ${call.rtw!.pzc}`);
+      return;
+    }
     if (call.kind === 'kvb') {
       call.transcript.push({ from: 'system', text: `${call.kvb!.text} – ${call.kvb!.address}`, t: this.time });
       this.addScore(5, 'Übergabe der KVB angenommen');
@@ -777,6 +825,15 @@ export class Game {
     call.state = 'ended';
     call.endedAt = this.time;
     call.typing = false;
+    if (call.kind === 'rtw') {
+      // Ohne Zielklinik aufgelegt: Die Besatzung fragt dann über Funk nach
+      const u = this.unit(call.rtw!.unitId);
+      if (u && u.task === 'awaitHospital' && !u.hospitalId)
+        this.after(30_000, () => {
+          if (u.task === 'awaitHospital' && !u.hospitalId) this.requestSpeak(u, 'zielklinik', `Patient transportbereit, PZC ${u.pzc}, erbitten Zielklinik.`);
+        });
+      return;
+    }
     const truth = this.callTruth.get(call.id)!;
     if (!call.incidentId) {
       if (truth.fake) this.addScore(10, 'Fehlanruf korrekt ohne Einsatz beendet');
@@ -795,6 +852,7 @@ export class Game {
       call = this.calls.find((c) => c.id === a.callId);
       if (!call) return 'Anruf nicht gefunden';
       if (call.incidentId) return 'Zu diesem Anruf gibt es bereits einen Einsatz';
+      if (call.kind === 'rtw') return 'Patientenanmeldung: Zielklinik über IVENA zuweisen';
       truth = this.callTruth.get(call.id);
     }
     const inc: IncidentState = {
@@ -1116,8 +1174,9 @@ export class Game {
     if (u.task !== 'awaitHospital') return `${u.callsign} wartet nicht auf eine Zielklinik`;
     if (u.speak && !u.speak.answered) this.speakPermit(u.id);
     u.hospitalId = h.id;
-    if (!byCrew) this.radioMsg(this.scn.ilsName, u.callsign, `Fahren Sie ${h.name} an.`, 'voice');
-    else this.radioMsg(u.callsign, this.scn.ilsName, `Wir fahren ${h.name} an.`, 'voice');
+    const amTelefon = this.closeRtwCall(u, h);
+    if (byCrew) this.radioMsg(u.callsign, this.scn.ilsName, `Wir fahren ${h.name} an.`, 'voice');
+    else if (!amTelefon) this.radioMsg(this.scn.ilsName, u.callsign, `Fahren Sie ${h.name} an.`, 'voice');
     const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
     const truth = inc ? this.incTruth.get(inc.id) : undefined;
     const pat = truth?.patients.find((p) => p.unitId === u.id && !p.done);
@@ -1547,10 +1606,15 @@ export class Game {
       carrier.pzc = p.pzc;
       const text = `Patient transportbereit, PZC ${p.pzc}, erbitten Zielklinik.`;
       if (carrier.crewPlayerId) carrier.hint = `${text} Zielklinik wählen oder bei der Leitstelle erfragen.`;
-      else
+      else {
+        // Ab und zu meldet die Besatzung den Patienten per Telefon statt über Funk an
+        const phone = this.rng() < RTW_PHONE_SHARE;
         this.after(this.rand(5, 40) * 1000, () => {
-          if (carrier.task === 'awaitHospital' && !carrier.hospitalId) this.requestSpeak(carrier, 'zielklinik', text);
+          if (carrier.task !== 'awaitHospital' || carrier.hospitalId) return;
+          if (phone) this.ringRtw(carrier, p);
+          else this.requestSpeak(carrier, 'zielklinik', text);
         });
+      }
     }
     const waiting = truth.patients.filter((p) => !p.unitId && !p.done).length;
     const remaining = onScene().filter((u) => !u.hasPatient);
@@ -1638,6 +1702,12 @@ export class Game {
       'Stroke Unit': ['CT ausgefallen', 'Stroke Unit voll belegt'],
       Pädiatrie: ['keine Betten frei'],
       Verbrennungen: ['keine Betten frei'],
+      Urologie: ['OP-Kapazität erschöpft', 'keine Betten frei'],
+      Gynäkologie: ['keine Betten frei'],
+      Geburtshilfe: ['Kreißsaal voll belegt', 'keine Betten frei'],
+      HNO: ['OP-Kapazität erschöpft', 'kein HNO-Dienst im Haus'],
+      Augenheilkunde: ['kein augenärztlicher Dienst im Haus'],
+      Psychiatrie: ['keine geschützten Betten frei', 'Station voll belegt'],
     };
     for (const h of hs) {
       for (const fach of h.specialties) {
@@ -1646,7 +1716,7 @@ export class Game {
         const andere = hs.some((o) => o.id !== h.id && o.specialties.includes(fach) && !this.abgemeldet(o.id, fach));
         if (!andere) continue;
         const last = this.ivena.zuweisungen.filter((z) => z.hospitalId === h.id && this.time - z.t < 3600_000).length;
-        const full = h.specialties.length >= 6;
+        const full = h.specialties.length >= 10;
         // ca. 1 Abmeldung pro Klinik und Fachbereich alle 10 bis 30 Spielstunden, bei vielen Zuweisungen häufiger
         const perMin = (full ? 1 / 1800 : 1 / 600) * (1 + Math.max(0, last - 2)) * (first ? 150 : 1);
         if (this.rng() < perMin) {
@@ -1716,6 +1786,15 @@ export class Game {
 
     // unbeantwortete Anrufe
     for (const c of this.calls) {
+      if (c.state === 'ringing' && c.kind === 'rtw' && this.time - c.ringStart > RTW_PHONE_GIVEUP_MS) {
+        c.state = 'ended';
+        c.missed = true;
+        c.endedAt = this.time;
+        c.transcript.push({ from: 'system', text: 'Nicht angenommen, die Besatzung meldet sich über Funk.', t: this.time });
+        const u = this.unit(c.rtw!.unitId);
+        if (u && u.task === 'awaitHospital' && !u.hospitalId) this.requestSpeak(u, 'zielklinik', `Patient transportbereit, PZC ${u.pzc}, erbitten Zielklinik.`);
+        continue;
+      }
       if (c.state === 'ringing' && c.kind === '112' && this.time - c.ringStart > MISSED_AFTER_MS) {
         c.state = 'ended';
         c.missed = true;

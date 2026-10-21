@@ -1,6 +1,7 @@
 // Einsatzvorlagen und Anruferdialoge für simulierte Notrufe.
 import type { MapObject, QuestionId, VehicleTypeId } from '../shared/types';
 import { ABEK_VORLAGEN } from './vorlagen-abek';
+import { FACH_VORLAGEN } from './vorlagen-fach';
 
 export type LocationKind = 'wohnung' | 'strasse' | 'ausserorts' | 'objekt' | 'autobahn' | 'keine';
 
@@ -1076,6 +1077,7 @@ export const TEMPLATES: IncidentTemplate[] = [
     workMin: [1, 1],
   },
   ...ABEK_VORLAGEN,
+  ...FACH_VORLAGEN,
 ];
 
 /** Meldebilder, mit denen die KVB (116117) einen Einsatz an die ILS übergibt */

@@ -117,6 +117,12 @@ export const SPECIALTIES = [
   'Stroke Unit',
   'Pädiatrie',
   'Verbrennungen',
+  'Urologie',
+  'Gynäkologie',
+  'Geburtshilfe',
+  'HNO',
+  'Augenheilkunde',
+  'Psychiatrie',
 ];
 
 export const FMS_TEXT: Record<FmsStatus, string> = {

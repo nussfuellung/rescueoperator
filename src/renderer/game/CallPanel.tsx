@@ -5,6 +5,8 @@ import { geocode, nearestTown, reverseGeocode, streetDirectory } from '../../../
 import { computeProposal } from '../../../shared/dispatch';
 import { aaoMitSchlagwort, findSchlagwort, formatSchlagwort, schlagwortByNr, searchSchlagworte } from '../../../shared/schlagworte';
 import { SchlagwortSelect } from './SchlagwortSelect';
+import { HospitalSelect } from './Ivena';
+import { decodePzc, pzcText } from '../../../shared/pzc';
 import type { CallState, IncidentState, QuestionId, Vec } from '../../../shared/types';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
@@ -35,7 +37,8 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
   const calls = state.calls;
   const ringing = calls.filter((c) => c.state === 'ringing').sort((a, b) => a.ringStart - b.ringStart);
   const mine = calls.find((c) => c.state === 'active' && c.takerId === ctx.me && c.kind === '112');
-  const myBma = calls.filter((c) => c.state === 'active' && c.takerId === ctx.me && c.kind !== '112' && !c.incidentId);
+  const myBma = calls.filter((c) => c.state === 'active' && c.takerId === ctx.me && (c.kind === 'bma' || c.kind === 'kvb') && !c.incidentId);
+  const myRtw = calls.filter((c) => c.state === 'active' && c.takerId === ctx.me && c.kind === 'rtw');
   const others = calls.filter((c) => c.state === 'active' && c.takerId !== ctx.me);
   const setBmaCall = ctx.setFormCallId;
 
@@ -48,7 +51,7 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
       if (e.key === 'F2' && firstRinging) {
         e.preventDefault();
         conn.send({ a: 'answerCall', callId: firstRinging.id });
-        if (firstRinging.kind !== '112') setBmaCall(firstRinging.id);
+        if (firstRinging.kind === 'bma' || firstRinging.kind === 'kvb') setBmaCall(firstRinging.id);
         if (firstRinging.kvb) ctx.focus(firstRinging.kvb, 0.6);
         if (firstRinging.aml) ctx.focus(firstRinging.aml, Math.max(0.15, Math.min(1.5, 90 / firstRinging.aml.acc)));
         if (firstRinging.bma) ctx.focus(firstRinging.bma, 0.6);
@@ -68,7 +71,8 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
         {ringing.map((c) => (
           <div key={c.id} className={`call-row ringing ${c.kind}`}>
             <div>
-              <b>{c.kind === 'bma' ? 'BMA' : c.kind === 'kvb' ? 'KVB' : '112'}</b> {c.kind === 'bma' ? c.bma?.text : c.kind === 'kvb' ? c.kvb?.text : c.phone}
+              <b>{c.kind === 'bma' ? 'BMA' : c.kind === 'kvb' ? 'KVB' : c.kind === 'rtw' ? 'RTW' : '112'}</b>{' '}
+              {c.kind === 'bma' ? c.bma?.text : c.kind === 'kvb' ? c.kvb?.text : c.kind === 'rtw' ? `${c.phone} · Patientenanmeldung` : c.phone}
               <div className="muted small">
                 klingelt seit {formatDuration(state.time - c.ringStart)}
                 {c.aml ? ' · AML-Ortung vorhanden' : ''}
@@ -79,7 +83,7 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
               className="primary"
               onClick={() => {
                 conn.send({ a: 'answerCall', callId: c.id });
-                if (c.kind !== '112') setBmaCall(c.id);
+                if (c.kind === 'bma' || c.kind === 'kvb') setBmaCall(c.id);
                 if (c.kvb) ctx.focus(c.kvb, 0.6);
                 if (c.aml) ctx.focus(c.aml, Math.max(0.15, Math.min(1.5, 90 / c.aml.acc)));
                 if (c.bma) ctx.focus(c.bma, 0.6);
@@ -122,6 +126,37 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
             )}
           </div>
         ))}
+        {myRtw.map((c) => {
+          const u = ctx.state.units.find((x) => x.id === c.rtw!.unitId);
+          const d = decodePzc(c.rtw!.pzc);
+          return (
+            <div key={c.id} className="call-row rtw">
+              <div className="grow">
+                <b>{c.phone}</b>
+                <div className="transcript small">
+                  {c.transcript
+                    .filter((l) => l.from !== 'system')
+                    .map((l, i) => (
+                      <div key={i} className={`line ${l.from}`}>
+                        {l.text}
+                      </div>
+                    ))}
+                </div>
+                <div className="small">
+                  PZC <code>{c.rtw!.pzc}</code> {pzcText(c.rtw!.pzc)}
+                  {d && <span className="muted"> · benötigt {d.fach}</span>}
+                </div>
+                <div className="row">
+                  {u && u.task === 'awaitHospital' && !u.hospitalId && <HospitalSelect ctx={ctx} u={u} />}
+                  {ctx.openIvena && <button onClick={ctx.openIvena}>IVENA öffnen</button>}
+                  <button className="danger" onClick={() => conn.send({ a: 'endCall', callId: c.id })}>
+                    Auflegen
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
         {others.map((c) => (
           <div key={c.id} className="call-row other">
             <div className="small">
@@ -144,7 +179,7 @@ export function IncidentFormPanel({ ctx }: { ctx: GameCtx }) {
   const formCall =
     (mine && !mine.incidentId ? mine : undefined) ??
     calls.find((c) => c.id === ctx.formCallId && !c.incidentId) ??
-    calls.find((c) => c.kind !== '112' && c.state === 'active' && c.takerId === ctx.me && !c.incidentId);
+    calls.find((c) => (c.kind === 'bma' || c.kind === 'kvb') && c.state === 'active' && c.takerId === ctx.me && !c.incidentId);
   const showForm = !!formCall || ctx.formManual;
   return (
     <div className="panel einsatzmaske">
