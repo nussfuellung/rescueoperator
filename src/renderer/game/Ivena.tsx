@@ -45,7 +45,7 @@ export function HospitalSelect({ ctx, u }: { ctx: GameCtx; u: UnitState }) {
 export function IvenaModal({ ctx, onClose }: { ctx: GameCtx; onClose: () => void }) {
   const { scn, state } = ctx;
   const [tab, setTab] = useState<'zuweisung' | 'uebersicht'>('zuweisung');
-  const clock = (t: number) => formatClock(scn.settings.startClock, t).slice(0, 5);
+  const clock = (t: number) => formatClock(state.clockStart, t).slice(0, 5);
   const offen = state.units.filter((u) => u.task === 'awaitHospital' && !u.hospitalId);
   const fachs = [...new Set(scn.hospitals.flatMap((h) => h.specialties))];
   const zuw = [...(state.ivena?.zuweisungen ?? [])].reverse();

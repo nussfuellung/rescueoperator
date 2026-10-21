@@ -1635,3 +1635,15 @@ button.attention { border-color: var(--accent); color: var(--accent); }
 .ivena-cell.none { background: repeating-linear-gradient(45deg, transparent 0 4px, rgba(139, 154, 171, 0.15) 4px 8px); }
 .call-row.ringing.kvb { border-color: #2a9d8f; }
 .polizei-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: #1d3557; color: #fff; }
+
+/* Schichtbesprechung: Uhrzeit, Jahreszeit, besondere Lagen */
+.setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin: 10px 0; }
+.setup-grid label { display: flex; flex-direction: column; gap: 4px; }
+
+/* DWD-Wetterwarnungen */
+.dwd-btn { font-weight: 600; }
+.modal.dwd { max-height: 88vh; }
+.dwd-msg { border-left: 5px solid var(--line); background: var(--panel2); padding: 8px 12px; margin-bottom: 10px; border-radius: 4px; }
+.dwd-msg.old { opacity: 0.7; }
+.dwd-msg pre { white-space: pre-wrap; font-family: Consolas, monospace; font-size: 12px; margin: 6px 0 0; }
+.dwd-head { font-size: 12px; color: var(--muted); }

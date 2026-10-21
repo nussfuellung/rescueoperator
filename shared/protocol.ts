@@ -1,3 +1,4 @@
+import type { Haeufigkeit, Season } from './jahreszeit';
 import type { PublicState, QuestionId, Role, Scenario } from './types';
 
 export const DEFAULT_PORT = 4711;
@@ -5,6 +6,8 @@ export const DEFAULT_PORT = 4711;
 export type Action =
   | { a: 'setRole'; role: Role; unitId?: string }
   | { a: 'start' }
+  /** Vor Schichtbeginn: Uhrzeit (Minuten nach Mitternacht), Jahreszeit, Großschadenslagen und Unwetter */
+  | { a: 'setup'; clock?: number; season?: Season; gsl?: Haeufigkeit; unwetter?: Haeufigkeit }
   | { a: 'pause'; paused: boolean }
   | { a: 'speed'; speed: number }
   | { a: 'answerCall'; callId: string }

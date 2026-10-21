@@ -8,6 +8,7 @@ import type { Action } from '../shared/protocol';
 import type {
   CallState,
   Dienstzeit,
+  DwdMeldung,
   FmsStatus,
   IncidentState,
   Player,
@@ -22,6 +23,7 @@ import type {
 } from '../shared/types';
 import { ensureTmo } from '../shared/fleet';
 import { inDienst } from '../shared/lstsim';
+import { HAEUFIGKEIT_STUNDEN, dateForSeason, seasonOf, tageszeitFaktor, type Haeufigkeit, type Season } from '../shared/jahreszeit';
 import { pzcFachbereich, pzcFuer, pzcSprech } from '../shared/pzc';
 import {
   BMA_REAL_LAGE,
@@ -40,6 +42,24 @@ import {
   type CallerFacts,
   type IncidentTemplate,
 } from './callgen';
+import {
+  ALLE_VORLAGEN,
+  GSL_TEMPLATES,
+  SAISON_FAKTOR,
+  SAISON_TEMPLATES,
+  WETTER_DAUER,
+  WETTER_JE_SAISON,
+  WETTER_SAISON_FAKTOR,
+  WETTER_STUFEN,
+  dwdText,
+  dwdTitel,
+  dwdZeit,
+  wetterAnteil,
+  wetterRate,
+  wetterVorlagen,
+  type LageTemplate,
+  type WetterLage,
+} from './lagen';
 
 interface PatientTruth {
   specialty: string;
@@ -79,12 +99,19 @@ interface Truth {
   retries?: number;
   /** Lage hat sich vor Ort entwickelt (Nachforderung bereits ausgewürfelt) */
   eskaliert?: boolean;
+  /** Einsatz, der zu dieser Lage angelegt wurde */
+  incidentId?: string;
+  /** Weiterer Anrufer zu einer bereits gemeldeten Lage (Großschadenslage): die ursprüngliche Lage */
+  main?: Truth;
 }
 
 const MISSED_AFTER_MS = 90_000;
 /** Anteil der Übergaben von der KVB (116117) an allen Notrufen */
 const KVB_SHARE = 0.06;
 const SPEAK_PENALTY_MS = 180_000;
+/** Großschadenslagen frühestens nach so viel Spielzeit, Unwetter frühestens nach 15 Minuten */
+const GSL_MIN_MS = 45 * 60_000;
+const UNWETTER_MIN_MS = 15 * 60_000;
 
 export interface GameEvents {
   speech?: (text: string) => void;
@@ -140,6 +167,15 @@ export class Game {
   private nextCallAt = 15_000;
   private nextBmaAt = 0;
   private nextKvbAt = Infinity;
+  /** Uhrzeit beim Schichtbeginn in Minuten nach Mitternacht (vor dem Start einstellbar) */
+  private clockStart: number;
+  private gslFreq: Haeufigkeit = 'normal';
+  private uwFreq: Haeufigkeit = 'normal';
+  private nextGslAt = Infinity;
+  private nextUwAt = Infinity;
+  /** Laufende oder angekündigte Wetterlage */
+  private wetter?: WetterLage;
+  private dwd: DwdMeldung[] = [];
   private answerSum = 0;
   private hilfsSum = 0;
   private penalized = new Set<string>();
@@ -155,6 +191,7 @@ export class Game {
     ensureStichworte(scn);
     const d = opts.startDate ?? new Date();
     this.startDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    this.clockStart = scn.settings.startClock;
     for (const st of scn.stations) {
       for (const v of st.vehicles) {
         if (v.dienst?.length) this.dienst.set(v.id, v.dienst);
@@ -371,7 +408,7 @@ export class Game {
   /** Erzeugt einen neuen Notruf (optional mit fester Vorlage, für Tests) */
   spawnCall(templateId?: string): CallState | null {
     const tpl = templateId
-      ? TEMPLATES.find((t) => t.id === templateId)
+      ? ALLE_VORLAGEN.find((t) => t.id === templateId)
       : this.weightedTemplate();
     if (!tpl) return null;
     const truth = this.buildTruth(tpl);
@@ -380,13 +417,22 @@ export class Game {
   }
 
   private weightedTemplate(): IncidentTemplate {
-    const usable = TEMPLATES.filter((t) => t.where !== 'objekt' || this.scn.objects.some((o) => !t.objectKinds || t.objectKinds.includes(o.kind)));
+    const season = this.season();
+    const hour = Math.floor((((this.gameMinute() % 1440) + 1440) % 1440) / 60);
+    const night = hour >= 20 || hour < 6;
+    // Während eines Unwetters ist ein Großteil der Notrufe wetterbedingt
+    const lage = this.wetterAktiv();
+    const wetterPool = lage && this.rng() < wetterAnteil(lage.art, lage.stufe) ? wetterVorlagen(lage.art) : [];
+    const pool: LageTemplate[] = wetterPool.length ? wetterPool : [...TEMPLATES, ...SAISON_TEMPLATES.filter((t) => t.seasons?.includes(season))];
+    const usable = pool.filter((t) => t.where !== 'objekt' || this.scn.objects.some((o) => !t.objectKinds || t.objectKinds.includes(o.kind)));
     // Kürzlich gespielte Vorlagen seltener, damit sich Einsätze nicht ständig wiederholen
     const w = (t: IncidentTemplate) => {
+      // Jahreszeit; Krankentransporte fahren fast nur tagsüber
+      const base = t.weight * (wetterPool.length ? 1 : SAISON_FAKTOR[t.id]?.[season] ?? 1) * (night && t.stichwort === 'RD KTP' ? 0.1 : 1);
       const i = this.recentTpl.lastIndexOf(t.id);
-      if (i < 0) return t.weight;
+      if (i < 0) return base;
       const age = this.recentTpl.length - i;
-      return t.weight * (age <= 3 ? 0.05 : age <= 8 ? 0.35 : 0.7);
+      return base * (age <= 3 ? 0.05 : age <= 8 ? 0.35 : 0.7);
     };
     const total = usable.reduce((s, t) => s + w(t), 0);
     let r = this.rng() * total;
@@ -556,7 +602,10 @@ export class Game {
         }
         return;
       }
+      case 'setup':
+        return this.setup(action);
       case 'start':
+        if (!this.started) this.planLagen();
         this.started = true;
         this.running = true;
         return;
@@ -768,7 +817,12 @@ export class Game {
     call.typing = false;
     const truth = this.callTruth.get(call.id)!;
     if (!call.incidentId) {
-      if (truth.fake) this.addScore(10, 'Fehlanruf korrekt ohne Einsatz beendet');
+      const lage = truth.main ?? truth;
+      if (truth.main || this.calls.some((c) => c !== call && this.callTruth.get(c.id)?.main === truth)) {
+        // Mehrfachmeldung zu einer Großschadenslage: ein Einsatz genügt
+        if (lage.incidentId) this.addScore(5, 'Weitere Meldung zur bekannten Lage, kein doppelter Einsatz');
+        else this.addScore(-10, 'Lage gemeldet, aber noch kein Einsatz angelegt');
+      } else if (truth.fake) this.addScore(10, 'Fehlanruf korrekt ohne Einsatz beendet');
       else if (truth.tpl.kvb) this.addScore(-10, 'Anrufer nicht an den ärztlichen Bereitschaftsdienst (116117) vermittelt');
       else this.addScore(-25, 'Notruf beendet, ohne einen Einsatz anzulegen');
     }
@@ -814,7 +868,14 @@ export class Game {
     this.incidents.push(inc);
     this.score.incidentsCreated++;
     if (call) call.incidentId = inc.id;
-    if (truth) {
+    // Weiterer Anrufer zu einer Großschadenslage: gehört zur ursprünglichen Lage
+    if (truth?.main) truth = truth.main;
+    const offen = truth?.incidentId ? this.incident(truth.incidentId) : undefined;
+    if (truth && offen && offen.status !== 'abgeschlossen') {
+      this.addScore(-10, `${inc.nr}: Lage ist bereits als ${offen.nr} angelegt (doppelter Einsatz)`);
+      this.incTruth.set(inc.id, this.genericTruth(inc, `Einsatzstelle identisch mit ${offen.nr}, Kräfte dort bereits tätig.`));
+    } else if (truth) {
+      truth.incidentId = inc.id;
       if (truth.fake) {
         this.addScore(-15, `${inc.nr}: Einsatz zu einem Fehlanruf angelegt`);
         truth = this.genericTruth(inc, 'An der Einsatzstelle nichts feststellbar, vermutlich Fehlanruf.');
@@ -823,7 +884,7 @@ export class Game {
       } else {
         // Wertung Stichwort
         const trueSw = this.scn.stichworte.find((s) => s.code === truth!.stichwort);
-        if (truth.stichwort === sw.code) {
+        if (truth.stichwort === sw.code || (truth.tpl as LageTemplate).auchRichtig?.includes(sw.code)) {
           this.score.stichwortCorrect++;
           this.addScore(20, `${inc.nr}: Stichwort ${sw.code} korrekt`);
         } else if (trueSw && trueSw.category === sw.category) {
@@ -1476,7 +1537,7 @@ export class Game {
 
   /** Minute seit Mitternacht des Starttages */
   private gameMinute() {
-    return Math.floor(this.scn.settings.startClock + this.time / 60000);
+    return Math.floor(this.clockStart + this.time / 60000);
   }
 
   /** Ist der Fachbereich der Klinik in IVENA abgemeldet? */
@@ -1548,6 +1609,117 @@ export class Game {
     }
   }
 
+  // ---------- Jahreszeit, Großschadenslagen, Unwetter ----------
+  season(): Season {
+    return seasonOf(this.startDate);
+  }
+
+  /** Vor Schichtbeginn: Uhrzeit, Jahreszeit und Häufigkeit besonderer Lagen einstellen */
+  private setup(a: Extract<Action, { a: 'setup' }>): string | void {
+    if (this.started) return 'Die Schicht läuft bereits';
+    if (a.clock !== undefined) {
+      if (!isFinite(a.clock)) return 'Ungültige Uhrzeit';
+      this.clockStart = ((Math.round(a.clock) % 1440) + 1440) % 1440;
+    }
+    if (a.season) this.startDate = dateForSeason(new Date(), a.season);
+    if (a.gsl && a.gsl in HAEUFIGKEIT_STUNDEN) this.gslFreq = a.gsl;
+    if (a.unwetter && a.unwetter in HAEUFIGKEIT_STUNDEN) this.uwFreq = a.unwetter;
+    // Dienstpläne zur neuen Uhrzeit bzw. zum neuen Datum
+    this.lastDienstMinute = -1;
+    this.checkDienst();
+  }
+
+  /** Beim Schichtbeginn: erste Großschadenslage und erstes Unwetter auswürfeln */
+  private planLagen() {
+    if (this.scn.settings.callsPerHour <= 0) return;
+    this.nextGslAt = this.time + Math.max(GSL_MIN_MS, this.expDelay(1 / HAEUFIGKEIT_STUNDEN[this.gslFreq]));
+    this.planUnwetter(UNWETTER_MIN_MS);
+  }
+
+  private planUnwetter(minMs: number) {
+    const perHour = WETTER_SAISON_FAKTOR[this.season()] / HAEUFIGKEIT_STUNDEN[this.uwFreq];
+    this.nextUwAt = this.time + Math.max(minMs, this.expDelay(perHour));
+  }
+
+  /** Wetterlage, die gerade wirkt (Vorabinformation und Vorlaufzeit zählen noch nicht) */
+  private wetterAktiv(): WetterLage | undefined {
+    const w = this.wetter;
+    return w && this.time >= w.von && this.time < w.bis ? w : undefined;
+  }
+
+  private dwdMelden(kind: DwdMeldung['kind'], lage: WetterLage) {
+    const zeit = (t: number) => dwdZeit(this.startDate, this.clockStart, t);
+    this.dwd.push({
+      id: `dwd${this.dwd.length + 1}`,
+      kind,
+      t: this.time,
+      stufe: lage.stufe,
+      art: lage.art,
+      titel: dwdTitel(kind, lage),
+      von: lage.von,
+      bis: lage.bis,
+      text: dwdText(kind, lage, this.scn.ilsName, zeit, this.time),
+    });
+  }
+
+  /** Unwetter: DWD-Warnung (bei schweren Lagen vorher eine Vorabinformation), dann mehr und wetterbedingte Notrufe */
+  startUnwetter(art?: WetterLage['art'], stufe?: WetterLage['stufe']): WetterLage | null {
+    if (this.wetter) return null;
+    const weighted = <T,>(list: [T, number][]): T => {
+      let r = this.rng() * list.reduce((n, [, w]) => n + w, 0);
+      for (const [v, w] of list) if ((r -= w) <= 0) return v;
+      return list[list.length - 1][0];
+    };
+    art ??= weighted(WETTER_JE_SAISON[this.season()]);
+    const stufen = WETTER_STUFEN[art];
+    const st = stufe ? stufen.find((x) => x[0] === stufe) ?? stufen[0] : weighted(stufen.map((x) => [x, x[1]] as [typeof x, number]));
+    const vorab = st[0] >= 3 && this.rng() < 0.6;
+    const vorlauf = vorab ? this.rand(90, 150) : this.rand(20, 45);
+    const von = this.time + vorlauf * 60_000;
+    const dauer = WETTER_DAUER[art];
+    const lage: WetterLage = { art, stufe: st[0], info: st[2], von, bis: von + this.rand(dauer[0], dauer[1]) * 60_000 };
+    this.wetter = lage;
+    this.nextUwAt = Infinity;
+    if (vorab) {
+      this.dwdMelden('vorab', lage);
+      this.after(von - this.time - this.rand(20, 45) * 60_000, () => this.dwdMelden('warnung', lage));
+    } else this.dwdMelden('warnung', lage);
+    this.after(lage.bis - this.time, () => {
+      this.dwdMelden('aufhebung', lage);
+      this.wetter = undefined;
+      this.planUnwetter(60 * 60_000);
+    });
+    return lage;
+  }
+
+  /** Großschadenslage: erster Notruf, danach weitere Anrufer zur selben Lage */
+  startGsl(templateId?: string): CallState | null {
+    const season = this.season();
+    const usable = GSL_TEMPLATES.filter(
+      (t) =>
+        (!templateId || t.id === templateId) &&
+        (!t.seasons || templateId || t.seasons.includes(season)) &&
+        (t.where !== 'objekt' || this.scn.objects.some((o) => t.objectKinds?.includes(o.kind))) &&
+        (t.where !== 'autobahn' || this.scn.roads.some((r) => r.type === 'autobahn')),
+    );
+    if (!usable.length) return null;
+    const tpl = this.pick(usable);
+    const main = this.buildTruth(tpl);
+    if (!main) return null;
+    const call = this.ring(main);
+    const weitere = [...(tpl.weitere ?? [])].sort(() => this.rng() - 0.5).slice(0, 2 + Math.floor(this.rng() * 3));
+    let at = 0;
+    for (const opening of weitere) {
+      at += this.rand(25, 120) * 1000;
+      this.after(at, () => {
+        const dup = this.buildTruth({ ...tpl, opening: [opening] });
+        if (!dup) return;
+        this.ring({ ...dup, pos: main.pos, address: main.address, spokenWhere: main.spokenWhere, objekt: main.objekt, main });
+      });
+    }
+    return call;
+  }
+
   // ---------- Takt ----------
   tick(realDtMs: number) {
     if (!this.running) return;
@@ -1563,10 +1735,19 @@ export class Game {
       for (const s of due) s.fn();
     }
 
-    // neue Notrufe
+    // Großschadenslage und Unwetter
+    if (this.time >= this.nextGslAt) {
+      this.startGsl();
+      this.nextGslAt = this.time + Math.max(GSL_MIN_MS, this.expDelay(1 / HAEUFIGKEIT_STUNDEN[this.gslFreq]));
+    }
+    if (this.time >= this.nextUwAt) this.startUnwetter();
+
+    // neue Notrufe: nachts weniger, bei Unwetter deutlich mehr
     if (this.time >= this.nextCallAt) {
-      if (this.calls.filter((c) => c.state === 'ringing').length < 4) this.spawnCall();
-      this.nextCallAt = this.time + this.expDelay(this.scn.settings.callsPerHour);
+      const lage = this.wetterAktiv();
+      if (this.calls.filter((c) => c.state === 'ringing' && c.kind === '112').length < (lage ? 6 : 4)) this.spawnCall();
+      const rate = this.scn.settings.callsPerHour * tageszeitFaktor(this.gameMinute()) * (lage ? wetterRate(lage.art, lage.stufe) : 1);
+      this.nextCallAt = this.time + this.expDelay(rate);
     }
     if (this.time >= this.nextBmaAt) {
       this.spawnBma();
@@ -1662,8 +1843,10 @@ export class Game {
       started: this.started,
       speed: this.speed,
       time: this.time,
-      clockStart: this.scn.settings.startClock,
+      clockStart: this.clockStart,
       startDate: `${this.startDate.getFullYear()}-${String(this.startDate.getMonth() + 1).padStart(2, '0')}-${String(this.startDate.getDate()).padStart(2, '0')}`,
+      setup: { season: this.season(), gsl: this.gslFreq, unwetter: this.uwFreq },
+      dwd: this.dwd.slice(-20),
       players: this.players,
       calls: this.calls,
       incidents: this.incidents,
