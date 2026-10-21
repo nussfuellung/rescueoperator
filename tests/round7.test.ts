@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_STICHWORTE, ensureStichworte } from '../shared/catalog';
-import { SCHLAGWORTE, formatSchlagwort, schlagwortByNr, searchSchlagworte } from '../shared/schlagworte';
+import { SCHLAGWORTE, formatSchlagwort, schlagwortByNr, schlagworteNachKat, searchSchlagworte } from '../shared/schlagworte';
 import { BMA_TEMPLATE, TEMPLATES } from '../server/callgen';
 import { generateScenario } from '../shared/mapgen';
 import { Game } from '../server/game';
@@ -26,6 +26,15 @@ describe('ABek-Schlagworte', () => {
     ensureStichworte(scn);
     expect(scn.stichworte[0].code).toBe('THL P EINGESCHLOSSEN');
     expect(scn.stichworte.length).toBe(DEFAULT_STICHWORTE.length);
+  });
+
+  it('unterteilt RD 1 und RD 2 nach Notfallbild', () => {
+    const rd = SCHLAGWORTE.filter((s) => s.nr.startsWith('#R'));
+    expect(new Set(rd.map((s) => s.nr)).size).toBe(rd.length);
+    for (const code of ['RD 1', 'RD 2']) {
+      const kats = schlagworteNachKat(code).map(([k]) => k);
+      for (const k of ['Herz-Kreislauf', 'Neuro', 'Trauma', 'Atmung', 'Sonstiges']) expect(kats, code).toContain(k);
+    }
   });
 
   it('alarmiert mit Schlagwort und zusätzlichem RTW', () => {

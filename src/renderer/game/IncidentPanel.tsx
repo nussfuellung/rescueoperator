@@ -1,11 +1,12 @@
 // Einsatzliste, Einsatzdetails und Disposition nach AAO.
-import { aaoMitSchlagwort } from '../../../shared/schlagworte';
+import { aaoMitSchlagwort, findSchlagwort, schlagworteNachKat } from '../../../shared/schlagworte';
 import { useEffect, useMemo, useState } from 'react';
 import { AIR_SPEED, AIR_TURNOUT, FMS_COLOR, FMS_TEXT, formatClock, formatDuration, shortCallsign } from '../../../shared/catalog';
 import { computeProposal } from '../../../shared/dispatch';
 import type { IncidentState } from '../../../shared/types';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
+import { SchlagwortSelect } from './CallPanel';
 
 export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
   const { state } = ctx;
@@ -30,7 +31,10 @@ export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
             }}
           >
             <span className={`badge ${i.status}`}>{i.status}</span>
-            <b>{i.stichwort}</b>
+            <span className="sw">
+              <b>{i.stichwort}</b>
+              {findSchlagwort(i.schlagwort) && <span className="kat">{findSchlagwort(i.schlagwort)!.kat}</span>}
+            </span>
             <span className="addr">{i.address}</span>
             <span className="muted small">
               {i.unitIds.length} Fz · {formatDuration(state.time - i.createdAt)}
@@ -132,6 +136,14 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
             </option>
           ))}
         </select>
+        {schlagworteNachKat(inc.stichwort).length > 0 && (
+          <SchlagwortSelect
+            code={inc.stichwort}
+            value={inc.schlagwort}
+            onChange={(v) => conn.send({ a: 'updateIncident', incidentId: inc.id, schlagwort: v })}
+            disabled={inc.status === 'abgeschlossen'}
+          />
+        )}
         {inc.patients > 0 && <span className="muted small">{inc.patients} Pat.</span>}
         {inc.polizei ? (
           <span className="polizei-tag" title="Polizei verständigt">

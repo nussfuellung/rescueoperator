@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatDuration } from '../../../shared/catalog';
 import { geocode, nearestTown, reverseGeocode, streetDirectory } from '../../../shared/geo';
 import { computeProposal } from '../../../shared/dispatch';
-import { aaoMitSchlagwort, findSchlagwort, formatSchlagwort, schlagwortByNr, searchSchlagworte } from '../../../shared/schlagworte';
+import { aaoMitSchlagwort, findSchlagwort, formatSchlagwort, schlagwortByNr, schlagworteNachKat, searchSchlagworte } from '../../../shared/schlagworte';
 import type { CallState, IncidentState, QuestionId, Vec } from '../../../shared/types';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
@@ -578,6 +578,9 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
             Sondersignal
           </label>
         </div>
+        {stichwort && schlagworteNachKat(stichwort).length > 0 && (
+          <SchlagwortSelect code={stichwort} value={schlagwort} onChange={setSchlagwort} />
+        )}
         {schlagwort && (
           <div className="em-schlagwort">
             <code>{schlagwort}</code>
@@ -651,5 +654,24 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
         )}
       </div>
     </form>
+  );
+}
+
+/** Notfallbild zum Stichwort wählen, nach Kategorie gruppiert (RD 1 → Herz-Kreislauf, Neuro, Trauma, …) */
+export function SchlagwortSelect({ code, value, onChange, disabled }: { code: string; value?: string; onChange: (v: string) => void; disabled?: boolean }) {
+  const groups = schlagworteNachKat(code);
+  return (
+    <select className="schlagwort-select" value={value ?? ''} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
+      <option value="">– Schlagwort / Notfallbild –</option>
+      {groups.map(([kat, list]) => (
+        <optgroup key={kat} label={kat}>
+          {list.map((s) => (
+            <option key={formatSchlagwort(s)} value={formatSchlagwort(s)}>
+              {s.nr} · {s.text}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
   );
 }

@@ -590,7 +590,7 @@ export class Game {
           if (action.schlagwort === undefined && inc.schlagwort && findSchlagwort(inc.schlagwort)?.code !== inc.stichwort) inc.schlagwort = undefined;
         }
         if (action.schlagwort !== undefined && action.schlagwort !== inc.schlagwort) {
-          inc.schlagwort = findSchlagwort(action.schlagwort) ? action.schlagwort : undefined;
+          inc.schlagwort = findSchlagwort(action.schlagwort)?.code === inc.stichwort ? action.schlagwort : undefined;
           if (inc.schlagwort) this.log(inc, `Schlagwort: ${inc.schlagwort}`);
         }
         if (action.note !== undefined) inc.note = action.note;
@@ -834,6 +834,7 @@ export class Game {
         // Passendes Schlagwort
         const trueSlw = schlagwortByNr(truth.tpl.schlagwort, truth.stichwort);
         if (trueSlw && inc.schlagwort === formatSchlagwort(trueSlw)) this.addScore(5, `${inc.nr}: Schlagwort ${trueSlw.nr} passend`);
+        else if (trueSlw && findSchlagwort(inc.schlagwort)?.kat === trueSlw.kat) this.addScore(2, `${inc.nr}: Notfallbild ${trueSlw.kat} passend (genauer: ${trueSlw.nr} ${trueSlw.text})`);
         // Wertung Einsatzort
         const d = dist(truth.pos, inc);
         const tolerance = truth.tpl.where === 'ausserorts' || truth.tpl.where === 'autobahn' ? 1200 : 200;
