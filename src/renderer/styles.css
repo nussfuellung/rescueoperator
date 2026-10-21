@@ -1777,6 +1777,8 @@ button.attention { border-color: var(--accent); color: var(--accent); }
 
 /* DWD-Wetterwarnungen */
 .dwd-btn { font-weight: 600; }
+/* Gelb (Stufe 1) ist auf hellem Grund nicht lesbar: dort nur der Rahmen in Warnfarbe */
+:root[data-theme='light'] .dwd-btn { color: var(--text) !important; border-width: 2px; }
 .modal.dwd { max-height: 88vh; }
 .dwd-msg { border-left: 5px solid var(--line); background: var(--panel2); padding: 8px 12px; margin-bottom: 10px; border-radius: 4px; }
 .dwd-msg.old { opacity: 0.7; }
