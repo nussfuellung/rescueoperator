@@ -1757,6 +1757,8 @@ button.attention { border-color: var(--accent); color: var(--accent); }
 .call-row.rtw { align-items: stretch; }
 .call-row.rtw .transcript { height: auto; max-height: 140px; }
 .call-row.rtw .row { flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.call-row.rtw .grow { min-width: 0; }
+.call-row.rtw select { max-width: 100%; min-width: 0; }
 .pzc-teile { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-top: 4px; }
 .pzc-teile code { font-size: 13px; }
 .pzc-liste td:first-child { font-family: monospace; font-weight: 700; }
