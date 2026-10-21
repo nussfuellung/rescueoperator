@@ -95,7 +95,7 @@ function DesktopApp() {
                 Schicht beitreten
               </button>
               <button onClick={() => setScreen('editor')}>Leitstellen-Editor</button>
-              <button onClick={() => setShowSettings(true)}>Einstellungen (Sprache, Karte)</button>
+              <button onClick={() => setShowSettings(true)}>Einstellungen (Darstellung, Sprache, Karte)</button>
             </div>
             {!name.trim() && <p className="muted small">Bitte zuerst einen Namen eingeben.</p>}
           </>

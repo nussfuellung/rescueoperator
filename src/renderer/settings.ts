@@ -1,7 +1,8 @@
-// Lokale Einstellungen pro Arbeitsplatz (Ton, Sprache, Fenster, Karte).
+// Lokale Einstellungen pro Arbeitsplatz (Ton, Sprache, Fenster, Karte, Farbschema).
 import { useSyncExternalStore } from 'react';
 
 export type TtsEngine = 'auto' | 'piper' | 'browser' | 'system';
+export type Theme = 'dark' | 'light' | 'system';
 
 export interface Settings {
   ttsEnabled: boolean;
@@ -16,6 +17,7 @@ export interface Settings {
   micDeviceId: string;
   mapTiles: boolean;
   tileUrl: string;
+  theme: Theme;
 }
 
 export const DEFAULT_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -32,6 +34,7 @@ const DEFAULTS: Settings = {
   micDeviceId: '',
   mapTiles: true,
   tileUrl: DEFAULT_TILE_URL,
+  theme: 'dark',
 };
 
 const KEY = 'lst.settings';
