@@ -632,6 +632,10 @@ export class Game {
         return this.alarm(player, action.incidentId, action.unitIds);
       case 'releaseUnit':
         return this.releaseUnit(action.unitId, true);
+      case 'cover':
+        return this.cover(player, action);
+      case 'sendHome':
+        return this.sendHome(action.unitId);
       case 'closeIncident': {
         const inc = this.incident(action.incidentId);
         if (!inc) return 'Einsatz nicht gefunden';
@@ -891,6 +895,7 @@ export class Game {
       if (u.incidentId === inc.id) continue;
       if (![1, 2].includes(u.baseStatus)) continue;
       u.incidentId = inc.id;
+      u.cover = undefined;
       u.task = 'alarmed';
       u.hint = `Alarm: ${inc.schlagwort ?? `${inc.stichwort} ${inc.label}`} – ${inc.address}${inc.note ? ' – ' + inc.note : ''}`;
       const career = this.station(u).career || this.typeOf(u)?.org === 'RD';
@@ -915,6 +920,68 @@ export class Game {
       else if (sec < 180) this.addScore(5, `${inc.nr}: Alarmierung nach ${Math.round(sec)} s`);
     }
     if (inc.status === 'offen') inc.status = 'alarmiert';
+  }
+
+  /**
+   * Gebietsabsicherung: freie Fahrzeuge an eine andere Wache oder einen Bereitstellungsort verlegen.
+   * Die Besatzung rückt mit Status 3 aus, fährt mit Status 1 ohne Sondersignal hin und bleibt dort auf Status 1,
+   * bis sie mit H (Fahren Sie Wache an) zurückgeschickt oder zu einem Einsatz alarmiert wird.
+   */
+  private cover(player: Player, a: Extract<Action, { a: 'cover' }>): string | void {
+    let target: NonNullable<UnitState['cover']>;
+    if (a.stationId) {
+      const st = this.scn.stations.find((s) => s.id === a.stationId);
+      if (!st) return 'Wache nicht gefunden';
+      target = { name: st.name, x: st.x, y: st.y, stationId: st.id };
+    } else if (a.x !== undefined && a.y !== undefined && isFinite(a.x) && isFinite(a.y)) {
+      const hit = reverseGeocode(this.scn, { x: a.x, y: a.y });
+      const name = a.name?.trim().slice(0, 80) || (hit && hit.distance < 300 ? `${hit.street}${hit.town && !hit.street.includes(hit.town) ? `, ${hit.town}` : ''}` : `bei ${nearestTown(this.scn.towns, { x: a.x, y: a.y })?.name ?? 'Kartenpunkt'}`);
+      target = { name, x: a.x, y: a.y };
+    } else return 'Kein Absicherungsstandort angegeben';
+    const sent: string[] = [];
+    let reason = '';
+    for (const id of a.unitIds) {
+      const u = this.unit(id);
+      if (!u) continue;
+      if (u.incidentId || u.hasPatient) {
+        reason = `${shortCallsign(u.callsign)} ist im Einsatz`;
+        continue;
+      }
+      if (![1, 2].includes(u.baseStatus)) {
+        reason = `${shortCallsign(u.callsign)} ist nicht einsatzbereit`;
+        continue;
+      }
+      if (target.stationId === u.stationId) {
+        reason = `${shortCallsign(u.callsign)} gehört zu dieser Wache, dafür H – Fahren Sie Wache an`;
+        continue;
+      }
+      const atStation = u.task === 'station' || (u.task === 'alarmed' && u.status === 2);
+      const career = this.station(u).career || this.typeOf(u)?.org === 'RD';
+      u.cover = target;
+      u.task = 'alarmed';
+      u.hint = `Gebietsabsicherung: Fahren Sie ${target.name} an. Beim Ausrücken Status 3, dann Status 1 bis zum Standort und dort auf Status 1 bleiben.`;
+      u.timer = u.crewPlayerId ? undefined : this.time + (atStation ? (career ? this.rand(60, 120) : this.rand(180, 330)) : this.rand(5, 12)) * 1000;
+      sent.push(shortCallsign(u.callsign));
+      this.radioMsg(this.scn.ilsName, u.callsign, `Gebietsabsicherung: Verlegen Sie nach ${target.name} – ohne Sondersignal`, 'system');
+    }
+    if (!sent.length) return reason || 'Keine verfügbaren Fahrzeuge ausgewählt';
+    this.events.toast?.(player.id, `Gebietsabsicherung ${target.name}: ${sent.join(', ')}`, 'info');
+  }
+
+  /** FMS-Auftrag H: Fahren Sie Wache an. Beendet auch eine Gebietsabsicherung. */
+  private sendHome(unitId: string): string | void {
+    const u = this.unit(unitId);
+    if (!u) return 'Fahrzeug nicht gefunden';
+    if (u.hasPatient) return `${shortCallsign(u.callsign)} hat einen Patienten an Bord`;
+    if (u.task === 'station' && !u.incidentId) return `${shortCallsign(u.callsign)} ist bereits auf der Wache`;
+    if (u.task === 'returning') return `${shortCallsign(u.callsign)} fährt bereits zur Wache`;
+    this.radioMsg(this.scn.ilsName, u.callsign, 'H – Fahren Sie Wache an', 'fms');
+    u.cover = undefined;
+    const err = this.releaseUnit(u.id, true);
+    if (err) return err;
+    const returning = (u.task as UnitState['task']) === 'returning';
+    if (u.crewPlayerId && returning) u.hint = 'H – Fahren Sie Wache an. Auf der Wache Status 2.';
+    if (!u.crewPlayerId && returning && this.rng() < 0.5) this.after(this.rand(2500, 5000), () => this.radioMsg(u.callsign, this.scn.ilsName, 'Verstanden, rücken ein.', 'voice'));
   }
 
   private releaseUnit(unitId: string, byDispatcher: boolean): string | void {
@@ -969,6 +1036,8 @@ export class Game {
           return `an der Einsatzstelle${inc ? ` ${inc.address}` : ''}`;
         case 'atHospital':
           return `am ${hosp?.name ?? 'Krankenhaus'}`;
+        case 'covering':
+          return `zur Gebietsabsicherung ${u.cover ? `am Standort ${u.cover.name}` : 'am Standort'}`;
         default: {
           const hit = reverseGeocode(this.scn, u);
           return hit && hit.distance < 250 ? `${hit.street}${hit.town && !hit.street.includes(hit.town) ? ` in ${hit.town}` : ''}` : `bei ${town}`;
@@ -1022,6 +1091,10 @@ export class Game {
         return 'Verstanden, rücken ein zur Wache.';
       }
       if (u.task === 'station') return 'Wir sind bereits auf der Wache, kommen.';
+      if (!u.incidentId) {
+        this.returnToStation(u);
+        return 'Verstanden, rücken ein zur Wache.';
+      }
       return 'Verstanden, wir rücken ein, sobald der Einsatz abgearbeitet ist.';
     }
     if (has(/ohne sondersignal|ohne sosi|sondersignal aus/)) return 'Verstanden, weiter ohne Sondersignal.';
@@ -1049,6 +1122,7 @@ export class Game {
 
   private returnToStation(u: UnitState) {
     const st = this.station(u);
+    u.cover = undefined;
     u.task = 'returning';
     this.setStatus(u, 1);
     this.startRoute(u, st, false);
@@ -1139,6 +1213,7 @@ export class Game {
     switch (s) {
       case 3:
         if (u.task !== 'alarmed') return 'Kein offener Einsatzauftrag';
+        if (u.cover && !u.incidentId) u.hint = `Gebietsabsicherung: Unterwegs zu ${u.cover.name}, jetzt Status 1 drücken.`;
         u.timer = this.time;
         return;
       case 4:
@@ -1163,8 +1238,9 @@ export class Game {
           this.finishHospital(u);
           return;
         }
-        if (u.task === 'station' || u.task === 'free' || u.task === 'returning') {
+        if (u.task === 'station' || u.task === 'free' || u.task === 'returning' || u.task === 'toCover' || u.task === 'covering') {
           this.setStatus(u, 1);
+          if (u.task === 'toCover') u.hint = `Gebietsabsicherung: weiter zu ${u.cover?.name ?? 'Standort'}, dort auf Status 1 bleiben.`;
           return;
         }
         return 'Status 1 ist gerade nicht möglich';
@@ -1179,6 +1255,31 @@ export class Game {
       default:
         this.setStatus(u, s);
     }
+  }
+
+  /** Gebietsabsicherung: Ausrücken mit Status 3, kurz danach Status 1 für die Fahrt ohne Sondersignal */
+  private departToCover(u: UnitState) {
+    const c = u.cover!;
+    u.task = 'toCover';
+    u.timer = undefined;
+    this.setStatus(u, 3);
+    this.startRoute(u, c, false);
+    if (u.crewPlayerId) return;
+    this.after(this.rand(8, 20) * 1000, () => {
+      if (u.task === 'toCover' && u.cover === c && u.baseStatus === 3) this.setStatus(u, 1);
+    });
+  }
+
+  private arriveCover(u: UnitState) {
+    u.task = 'covering';
+    if (u.baseStatus !== 1) this.setStatus(u, 1);
+    const name = u.cover?.name ?? 'Standort';
+    if (u.crewPlayerId) {
+      u.hint = `Am Absicherungsstandort ${name}: auf Status 1 bleiben, bis die Leitstelle H – Fahren Sie Wache an schickt.`;
+      return;
+    }
+    u.hint = undefined;
+    this.radioMsg(u.callsign, this.scn.ilsName, `Sind am Absicherungsstandort ${name} angekommen, stehen auf Status 1, kommen.`, 'voice');
   }
 
   // ---------- Bewegung ----------
@@ -1601,7 +1702,8 @@ export class Game {
       if (u.task === 'alarmed' && u.timer !== undefined && this.time >= u.timer) {
         const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
         if (!inc) {
-          this.returnToStation(u);
+          if (u.cover) this.departToCover(u);
+          else this.returnToStation(u);
           continue;
         }
         u.task = 'toScene';
@@ -1619,7 +1721,8 @@ export class Game {
             this.setStatus(u, 8);
             if (u.crewPlayerId) u.hint = 'Patient übergeben? Dann Status 1 drücken.';
             else u.timer = this.time + this.rand(5, 10) * 60_000;
-          } else if (u.task === 'returning') {
+          } else if (u.task === 'toCover') this.arriveCover(u);
+          else if (u.task === 'returning') {
             u.task = 'station';
             const st = this.station(u);
             u.x = st.x;

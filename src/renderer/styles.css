@@ -1635,3 +1635,102 @@ button.attention { border-color: var(--accent); color: var(--accent); }
 .ivena-cell.none { background: repeating-linear-gradient(45deg, transparent 0 4px, rgba(139, 154, 171, 0.15) 4px 8px); }
 .call-row.ringing.kvb { border-color: #2a9d8f; }
 .polizei-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: #1d3557; color: #fff; }
+
+/* Statusliste: Rechtsklick-Menü und Gebietsabsicherung */
+.unit-menu {
+  position: fixed;
+  z-index: 30;
+  min-width: 210px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.unit-menu-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 4px 6px 6px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 3px;
+}
+.unit-menu button {
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+.unit-menu button:hover:not(:disabled) {
+  background: var(--primary);
+  color: #fff;
+}
+.unit-menu button:disabled {
+  opacity: 0.45;
+}
+.tile.covering {
+  outline: 2px dashed rgba(255, 255, 255, 0.85);
+  outline-offset: -3px;
+}
+.tile.covering.selected {
+  outline-style: solid;
+}
+.cover-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.cover-chip {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+.cover-dialog .cover-stations {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 10px 0;
+  max-height: 50vh;
+  overflow: auto;
+}
+.cover-station {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+}
+.cover-station .tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.cover-station .tag.warn {
+  background: var(--accent);
+  color: #000;
+}
+.cover-picking {
+  position: fixed;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  background: var(--primary);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 6px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}

@@ -42,6 +42,10 @@ export type Action =
   | { a: 'crewTmo'; group: string }
   | { a: 'alarm'; incidentId: string; unitIds: string[] }
   | { a: 'releaseUnit'; unitId: string }
+  /** Gebietsabsicherung: Fahrzeuge an eine Wache oder einen Punkt auf der Karte verlegen */
+  | { a: 'cover'; unitIds: string[]; stationId?: string; x?: number; y?: number; name?: string }
+  /** FMS-Auftrag H: Fahren Sie Wache an */
+  | { a: 'sendHome'; unitId: string }
   | { a: 'closeIncident'; incidentId: string }
   | { a: 'speakPermit'; unitId: string }
   | { a: 'assignHospital'; unitId: string; hospitalId: string }

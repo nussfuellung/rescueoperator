@@ -20,6 +20,8 @@ export interface MapData {
   selectedUnitId?: string;
   marker?: Vec | null;
   highlightUnitIds?: string[];
+  /** Fahrzeug orten: pulsierender Ring um das Fahrzeug bis zum Zeitpunkt until (Date.now) */
+  ping?: { unitId: string; until: number } | null;
 }
 
 export interface EditorOverlay {
@@ -630,6 +632,21 @@ export function MapView(props: Props) {
         ctx.fillText(String(u.status), x - tw / 2 + 4, y + 1);
         ctx.textAlign = 'center';
         ctx.fillText(text, x + 5, y + 1);
+      }
+
+      // Fahrzeug orten
+      const ping = p.data?.ping;
+      if (ping && Date.now() < ping.until) {
+        const u = units.find((x) => x.id === ping.unitId);
+        if (u) {
+          const [x, y] = toScreen(u.task === 'station' ? unitDrawPos(u, scn, units, v.scale) : shown.get(u.id) ?? u);
+          const k = (now % 1200) / 1200;
+          ctx.strokeStyle = `rgba(31,111,235,${1 - k})`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(x, y, 14 + k * 30, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
 
       // Marker (vom Calltaker gesetzter Einsatzort)

@@ -207,7 +207,11 @@ export type UnitTask =
   | 'toHospital'
   | 'atHospital'
   | 'returning'
-  | 'free';
+  | 'free'
+  /** Fahrt zum Standort einer Gebietsabsicherung (Status 3 beim Ausrücken, dann Status 1) */
+  | 'toCover'
+  /** Steht zur Gebietsabsicherung am Standort, Status 1 */
+  | 'covering';
 
 export interface SpeakRequest {
   kind: 'lage' | 'nachforderung' | 'zielklinik' | 'info' | 'crew';
@@ -245,6 +249,8 @@ export interface UnitState {
   hint?: string;
   /** Aktuell geschaltete TMO-Rufgruppe */
   tmo?: string;
+  /** Gebietsabsicherung: Standort, an dem das Fahrzeug bereitsteht */
+  cover?: { name: string; x: number; y: number; stationId?: string };
 }
 
 export interface CallLine {
