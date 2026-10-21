@@ -1,5 +1,6 @@
 // Gemeinsame Datentypen für Editor, Server und Client.
 // Koordinaten sind Meter in einem lokalen Kartensystem (x nach Osten, y nach Süden).
+import type { Haeufigkeit, Season } from './jahreszeit';
 
 export interface Vec {
   x: number;
@@ -385,6 +386,10 @@ export interface PublicState {
   clockStart: number;
   /** Datum des Schichtbeginns (JJJJ-MM-TT), für Wochentag und Kalenderwoche */
   startDate?: string;
+  /** Jahreszeit (ergibt sich aus dem Startdatum) und Häufigkeit besonderer Lagen, vor Schichtbeginn einstellbar */
+  setup?: { season: Season; gsl: Haeufigkeit; unwetter: Haeufigkeit };
+  /** Wetterwarnungen des Deutschen Wetterdienstes an die Leitstelle */
+  dwd?: DwdMeldung[];
   players: Player[];
   calls: CallState[];
   incidents: IncidentState[];
@@ -398,4 +403,24 @@ export interface PublicState {
 export interface IvenaState {
   abmeldungen: { hospitalId: string; fach: string; bis: number; grund: string }[];
   zuweisungen: { t: number; hospitalId: string; callsign: string; pzc?: string; nr?: string; trotzAbmeldung?: boolean }[];
+}
+
+export type WetterArt = 'gewitter' | 'sturm' | 'starkregen' | 'glatteis' | 'schnee' | 'hitze';
+
+/** Meldung des Deutschen Wetterdienstes (Vorabinformation, amtliche Warnung oder Aufhebung) */
+export interface DwdMeldung {
+  id: string;
+  kind: 'vorab' | 'warnung' | 'aufhebung';
+  /** Eingang in der Leitstelle (Spielzeit) */
+  t: number;
+  /** Warnstufe 1 (gelb) bis 4 (violett) */
+  stufe: 1 | 2 | 3 | 4;
+  art: WetterArt;
+  /** Überschrift, z. B. "Amtliche UNWETTERWARNUNG vor ORKANBÖEN" */
+  titel: string;
+  /** Gültigkeit (Spielzeit) */
+  von: number;
+  bis: number;
+  /** Vollständiger Meldungstext wie im Fax bzw. FeWIS */
+  text: string;
 }

@@ -21,6 +21,8 @@ import { MicStatus } from '../audio/SpeechUi';
 import { DeviceModal } from './DeviceModal';
 import { IvenaModal } from './Ivena';
 import { isoWeek } from '../../../shared/lstsim';
+import { DwdButton } from './Dwd';
+import { HAEUFIGKEITEN, HAEUFIGKEIT_LABEL, SEASONS, SEASON_ICON, SEASON_LABEL, type Season } from '../../../shared/jahreszeit';
 
 export interface GameCtx {
   scn: Scenario;
@@ -207,6 +209,12 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
       <div className="brand">{scn.ilsName}</div>
       <div className="clock">{formatClock(state.clockStart, state.time)}</div>
       {state.startDate && <div className="date small muted">{dayLabel(state.startDate, state.clockStart, state.time)}</div>}
+      {state.setup && (
+        <div className="small muted" title="Jahreszeit">
+          {SEASON_ICON[state.setup.season]} {SEASON_LABEL[state.setup.season]}
+        </div>
+      )}
+      {me?.role !== 'crew' && <DwdButton state={state} notify={state.started} />}
       <div className="speed">
         <button
           onClick={() => conn.send(state.running ? { a: 'pause', paused: true } : state.started ? { a: 'pause', paused: false } : { a: 'start' })}
@@ -436,6 +444,56 @@ function Lobby({ ctx, hostInfo }: { ctx: GameCtx; hostInfo: { port: number; addr
             <b>{hostInfo.addresses.map((a) => `${a}:${hostInfo.port}`).join(', ') || `localhost:${hostInfo.port}`}</b>
           </p>
         )}
+        {state.setup && (
+          <div className="setup-grid">
+            <label>
+              Uhrzeit bei Schichtbeginn
+              <input
+                type="time"
+                value={hhmm(state.clockStart)}
+                onChange={(e) => {
+                  const [h, m] = e.target.value.split(':').map(Number);
+                  if (isFinite(h) && isFinite(m)) conn.send({ a: 'setup', clock: h * 60 + m });
+                }}
+              />
+            </label>
+            <label>
+              Jahreszeit
+              <select value={state.setup.season} onChange={(e) => conn.send({ a: 'setup', season: e.target.value as Season })}>
+                {SEASONS.map((s) => (
+                  <option key={s} value={s}>
+                    {SEASON_ICON[s]} {SEASON_LABEL[s]}
+                  </option>
+                ))}
+              </select>
+              {state.startDate && <span className="small muted">{dayLabel(state.startDate, state.clockStart, 0)}</span>}
+            </label>
+            <label>
+              Großschadenslagen
+              <select value={state.setup.gsl} onChange={(e) => conn.send({ a: 'setup', gsl: e.target.value as typeof HAEUFIGKEITEN[number] })}>
+                {HAEUFIGKEITEN.map((h) => (
+                  <option key={h} value={h}>
+                    {HAEUFIGKEIT_LABEL[h]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Unwetter mit DWD-Warnung
+              <select value={state.setup.unwetter} onChange={(e) => conn.send({ a: 'setup', unwetter: e.target.value as typeof HAEUFIGKEITEN[number] })}>
+                {HAEUFIGKEITEN.map((h) => (
+                  <option key={h} value={h}>
+                    {HAEUFIGKEIT_LABEL[h]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+        <p className="muted small">
+          Je nach Jahreszeit gibt es andere Einsätze (Glätte, Kaminbrand und Rodelunfall im Winter, Badeunfall, Wespenstich und Flächenbrand im Sommer).
+          Nachts kommen weniger Notrufe. Bei Unwetter bekommt die Leitstelle eine Warnung des DWD, danach steigen die Notrufe stark an.
+        </p>
         <h3>Im Dienst</h3>
         <ul className="players">
           {state.players.map((p) => (
@@ -547,6 +605,10 @@ export function useSounds(state?: PublicState, only: { calls?: boolean; radio?: 
       }
     }
   }, [state]);
+}
+
+function hhmm(min: number): string {
+  return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 }
 
 /** "Di 20.10. · KW 43" für die Kopfleiste (Dienstzeiten hängen von Wochentag und Kalenderwoche ab) */
