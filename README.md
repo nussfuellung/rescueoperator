@@ -18,6 +18,10 @@ Danach:
 
 Mitspieler starten dieselbe App, wählen **Schicht beitreten** und geben die Adresse ein, die beim Host oben rechts und in der Schichtbesprechung steht (z. B. `192.168.0.23:4711`).
 
+### Online spielen
+
+Über **Online spielen** treffen sich Spieler auf einem Online-Server statt im LAN. Adresse des Servers eintragen, **Verbinden**, dann einer offenen Sitzung aus der Liste beitreten, einer privaten Sitzung mit **Beitrittscode** beitreten oder eine **neue Sitzung** erstellen (Leitstelle, offen oder privat, 1 bis 8 Spieler). Der Host kann Sichtbarkeit und Spielerzahl im Spiel über den 🌐-Knopf ändern. Jeder Spieler ist höchstens in einer Sitzung; verlässt der letzte Spieler eine Sitzung, wird sie geschlossen. Spiel und Server müssen dieselbe Hauptversion haben (z. B. beide 0.11). Der Online-Server selbst ist nicht Teil dieses Repos.
+
 ## Aus dem Quellcode starten
 
 Voraussetzung: Node.js 20 oder neuer.

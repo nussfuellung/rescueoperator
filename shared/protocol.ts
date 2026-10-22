@@ -2,6 +2,34 @@ import type { Haeufigkeit, Season } from './jahreszeit';
 import type { PublicState, QuestionId, Role, Scenario } from './types';
 
 export const DEFAULT_PORT = 4711;
+/** Standard-Port des Online-Servers (Sitzungen über das Internet) */
+export const ONLINE_PORT = 4800;
+/** Höchstzahl der Spieler in einer Online-Sitzung */
+export const MAX_SPIELER_ONLINE = 8;
+
+export type Sichtbarkeit = 'offen' | 'privat';
+
+/** Online-Sitzung auf dem Multiplayer-Server, wie sie Lobby und Spieler sehen */
+export interface SitzungInfo {
+  /** Beitrittscode, z. B. "K7QX2M" */
+  code: string;
+  name: string;
+  sichtbarkeit: Sichtbarkeit;
+  maxSpieler: number;
+  spieler: number;
+  hostName: string;
+  /** Spieler-ID des Hosts in dieser Sitzung (nur für Teilnehmer) */
+  hostId?: string;
+  leitstelle: string;
+  laeuft: boolean;
+}
+
+/** Antwort von GET /api/sitzungen des Online-Servers */
+export interface SitzungListe {
+  version: string;
+  serverName: string;
+  sitzungen: SitzungInfo[];
+}
 
 export type Action =
   | { a: 'setRole'; role: Role; unitId?: string }
@@ -66,12 +94,32 @@ export type ClientMsg =
       link?: string;
       /** Szenario ohne Straßennetz senden (Tablet-Ansicht braucht keine Karte) */
       lite?: boolean;
+      /** Online-Server: dauerhafte Kennung dieser Installation (eine Sitzung je Spieler) */
+      clientId?: string;
+      /** Online-Server: Spielversion, muss zum Server passen */
+      version?: string;
+      /** Online-Server: neue Sitzung anlegen oder per Code beitreten */
+      sitzung?:
+        | {
+            neu: {
+              name: string;
+              sichtbarkeit: Sichtbarkeit;
+              maxSpieler: number;
+              /** Leitstelle als gzip-komprimiertes JSON in Base64 */
+              szenarioGz: string;
+            };
+          }
+        | { code: string };
     }
   | { t: 'action'; action: Action }
+  /** Online-Server: Host ändert Sichtbarkeit oder Spielerzahl */
+  | { t: 'sitzung'; sichtbarkeit?: Sichtbarkeit; maxSpieler?: number }
   | { t: 'ping' };
 
 export type ServerMsg =
-  | { t: 'welcome'; playerId: string; scenario: Scenario; linkCode?: string }
+  | { t: 'welcome'; playerId: string; scenario: Scenario; linkCode?: string; sitzung?: SitzungInfo }
+  /** Online-Server: Sitzung hat sich geändert (Spieler, Host, Einstellungen) */
+  | { t: 'sitzung'; sitzung: SitzungInfo }
   | { t: 'state'; state: PublicState }
   | { t: 'toast'; text: string; level: 'info' | 'warn' | 'error' }
   | { t: 'speech'; text: string }
