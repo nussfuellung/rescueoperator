@@ -4,7 +4,7 @@ import { MAX_SPIELER_ONLINE, type Sichtbarkeit, type SitzungListe } from '../../
 import type { Role } from '../../shared/types';
 import { api, isDesktop, type ScenarioInfo } from './api';
 import { conn } from './net';
-import { clientId, ladeSitzungen, passendeVersion, serverUrls, szenarioFuerServer } from './online';
+import { STANDARD_SERVER, clientId, ladeSitzungen, passendeVersion, serverUrls, szenarioFuerServer } from './online';
 import { APP_VERSION } from './version';
 
 const store = {
@@ -27,8 +27,10 @@ const store = {
 type Tab = 'liste' | 'code' | 'neu';
 
 export function OnlineForm(props: { name: string; role: Role; onBack: () => void; onJoined: () => void }) {
-  // Im Browser vom Online-Server geöffnet: dieser Server ist vorbelegt
-  const [addr, setAddr] = useState(() => store.get('lst.online', !isDesktop && /^https?:$/.test(location.protocol) ? location.origin : ''));
+  // Vorbelegt: zuletzt benutzter Server, im Browser der Server, der die Seite ausliefert, sonst der offizielle
+  const [addr, setAddr] = useState(() =>
+    store.get('lst.online', !isDesktop && /^https?:$/.test(location.protocol) && !/^(localhost|127\.)/.test(location.hostname) ? location.origin : STANDARD_SERVER),
+  );
   const [liste, setListe] = useState<SitzungListe | null>(null);
   const [tab, setTab] = useState<Tab>('liste');
   const [err, setErr] = useState('');

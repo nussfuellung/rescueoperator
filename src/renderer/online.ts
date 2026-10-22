@@ -3,6 +3,9 @@ import { gzipSync, strToU8 } from 'fflate';
 import { ONLINE_PORT, type SitzungListe } from '../../shared/protocol';
 import type { Scenario } from '../../shared/types';
 
+/** Offizieller Online-Server, vorbelegt im Menü „Online spielen“ */
+export const STANDARD_SERVER = 'https://v35242.1blu.de';
+
 /** Dauerhafte Kennung dieser Installation: Der Server lässt je Kennung nur eine Sitzung zu */
 export function clientId(): string {
   const KEY = 'lst.clientId';
