@@ -1,5 +1,5 @@
 // Neuronale Sprachausgabe mit Piper (offline): Der Spielserver erzeugt WAV-Dateien, die Oberfläche und Tablets abspielen.
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -52,6 +52,14 @@ export class Piper {
     const bin = process.platform === 'win32' ? 'piper.exe' : 'piper';
     const dir = findUp(all, join('piper', PLATFORM)) ?? findUp(all, join('vendor', 'piper', PLATFORM));
     this.exe = (dir ? [join(dir, 'piper', bin), join(dir, bin)] : []).find((c) => existsSync(c) && statSync(c).isFile());
+    if (this.exe && process.platform === 'darwin') {
+      // Aus dem Internet geladen: macOS würde das mitgelieferte Programm sonst trotz freigegebener App blockieren
+      try {
+        execFileSync('xattr', ['-dr', 'com.apple.quarantine', dirname(this.exe)], { stdio: 'ignore' });
+      } catch {
+        // kein Schreibrecht oder kein Attribut: dann eben so versuchen, selfTest fällt notfalls auf die Systemstimme zurück
+      }
+    }
     const sdir = findUp(all, 'stimmen') ?? findUp(all, join('vendor', 'stimmen'));
     if (sdir) {
       for (const f of readdirSync(sdir, { recursive: true }) as string[]) {

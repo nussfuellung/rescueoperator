@@ -1,0 +1,46 @@
+# Baut Piper nativ für Macs mit Apple-Chip und mit Intel und prüft, ob es wirklich spricht.
+# Wird vom Release-Workflow aufgerufen; das Ergebnis wird zwischengespeichert, solange sich das Bauskript nicht ändert.
+name: Piper für macOS
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/piper-mac-bauen.sh
+      - .github/workflows/piper-mac.yml
+
+jobs:
+  piper:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            arch: arm64
+          - os: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: vendor/piper/mac-${{ matrix.arch }}
+          key: piper-mac-${{ matrix.arch }}-${{ hashFiles('scripts/piper-mac-bauen.sh') }}
+      - name: Piper bauen
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash scripts/piper-mac-bauen.sh
+      - name: Probe sprechen
+        run: |
+          curl -sSfL -o stimme.tar.gz https://github.com/rhasspy/piper/releases/download/v0.0.2/voice-de-thorsten-low.tar.gz
+          mkdir stimme && tar xzf stimme.tar.gz -C stimme
+          MODEL=$(find stimme -name '*.onnx' | head -1)
+          echo "Hallo, hier spricht die Leitstelle." | vendor/piper/mac-${{ matrix.arch }}/piper/piper --model "$MODEL" --output_file probe.wav
+          ls -la probe.wav
+          test "$(stat -f %z probe.wav)" -gt 10000
+      - uses: actions/upload-artifact@v4
+        with:
+          name: piper-mac-${{ matrix.arch }}
+          path: vendor/piper/mac-${{ matrix.arch }}
+          if-no-files-found: error

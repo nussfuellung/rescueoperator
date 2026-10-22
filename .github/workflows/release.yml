@@ -11,7 +11,11 @@ permissions:
   contents: write
 
 jobs:
+  piper-mac:
+    uses: ./.github/workflows/piper-mac.yml
+
   build:
+    needs: piper-mac
     strategy:
       fail-fast: false
       matrix:
@@ -42,6 +46,21 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node scripts/piper-holen.mjs
+      - name: Piper für macOS übernehmen
+        if: runner.os == 'macOS'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: piper-mac-*
+          path: vendor/piper-mac
+      - name: Piper für macOS einsortieren
+        if: runner.os == 'macOS'
+        run: |
+          for a in arm64 x64; do
+            mkdir -p vendor/piper/mac-$a
+            cp -R vendor/piper-mac/piper-mac-$a/. vendor/piper/mac-$a/
+            chmod +x vendor/piper/mac-$a/piper/piper
+          done
+          ls -R vendor/piper | head -20
       - run: ${{ matrix.build }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -53,6 +72,8 @@ jobs:
 
   release:
     needs: build
+    # Auf anderen Branches nur bauen und prüfen, kein Release anlegen
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

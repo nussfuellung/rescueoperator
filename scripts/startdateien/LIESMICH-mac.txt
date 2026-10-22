@@ -12,4 +12,4 @@ rescue.Operator für Mac mit {CHIP}
 
 Welcher Chip? Apfel-Menü > "Über diesen Mac": "Chip Apple M…" = Apple-Chip,
 "Prozessor Intel…" = Intel.
-Auf dem Mac spricht die Systemstimme, die Piper-Stimmen gibt es nur unter Windows und Linux.
+Die natürlichen Piper-Stimmen (Thorsten, Karlsson, Kerstin, Eva) sind dabei.

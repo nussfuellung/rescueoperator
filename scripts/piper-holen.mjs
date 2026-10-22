@@ -10,7 +10,7 @@ const platforms = [
   ['win-x64', 'piper_windows_amd64.zip'],
   ['linux-x64', 'piper_linux_x86_64.tar.gz'],
 ];
-// macOS fehlt: Die Piper-Pakete für macOS enthalten die nötigen Bibliotheken nicht. Dort spricht die Systemstimme.
+// macOS: Die offiziellen Mac-Pakete taugen nicht (nur Intel, ohne Bibliotheken). Piper für den Mac baut scripts/piper-mac-bauen.sh.
 // Thorsten und Kerstin: CC0; Karlsson und Eva: M-AILABS-Datensatz
 const voices = ['thorsten-low', 'kerstin-low', 'karlsson-low', 'eva_k-x-low'];
 
