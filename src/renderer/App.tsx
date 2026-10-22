@@ -8,8 +8,9 @@ import { GameScreen } from './game/GameScreen';
 import { EditorScreen } from './editor/EditorScreen';
 import { SettingsModal } from './SettingsModal';
 import { MobileScreen } from './game/MobileScreen';
+import { OnlineForm } from './OnlineForm';
 
-type Screen = 'menu' | 'host' | 'join' | 'editor' | 'game';
+type Screen = 'menu' | 'host' | 'join' | 'online' | 'editor' | 'game';
 
 const store = {
   get(k: string, d: string) {
@@ -66,11 +67,11 @@ function DesktopApp() {
 
   return (
     <div className="menu-bg">
-      <div className="menu-card">
+      <div className={`menu-card${screen === 'online' ? ' wide' : ''}`}>
         <h1>
           rescue<span>.Operator</span>
         </h1>
-        <p className="muted">Leitstellensimulator für Feuerwehr und Rettungsdienst · Multiplayer im LAN</p>
+        <p className="muted">Leitstellensimulator für Feuerwehr und Rettungsdienst · Multiplayer im LAN und online</p>
         {screen === 'menu' && (
           <>
             <label>
@@ -93,6 +94,9 @@ function DesktopApp() {
               </button>
               <button onClick={() => setScreen('join')} disabled={!name.trim()}>
                 Schicht beitreten
+              </button>
+              <button onClick={() => setScreen('online')} disabled={!name.trim()}>
+                Online spielen
               </button>
               <button onClick={() => setScreen('editor')}>Leitstellen-Editor</button>
               <button onClick={() => setShowSettings(true)}>Einstellungen (Darstellung, Sprache, Karte)</button>
@@ -120,6 +124,7 @@ function DesktopApp() {
             }}
           />
         )}
+        {screen === 'online' && <OnlineForm name={name} role={role} onBack={() => setScreen('menu')} onJoined={() => setScreen('game')} />}
         {net.error && <p className="error">{net.error}</p>}
       </div>
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}

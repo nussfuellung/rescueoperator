@@ -22,6 +22,7 @@ import { DeviceModal } from './DeviceModal';
 import { IvenaModal } from './Ivena';
 import { isoWeek } from '../../../shared/lstsim';
 import { DwdButton } from './Dwd';
+import { SitzungEinstellungen, SitzungKopf } from './OnlineSitzung';
 import { HAEUFIGKEITEN, HAEUFIGKEIT_LABEL, SEASONS, SEASON_ICON, SEASON_LABEL, type Season } from '../../../shared/jahreszeit';
 
 export interface GameCtx {
@@ -232,6 +233,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
       </button>
       <div className="spacer" />
       <MicStatus />
+      {net.sitzung && <SitzungKopf sitzung={net.sitzung} />}
       {props.hostInfo && (
         <div className="hostinfo" title="Andere Spieler im LAN treten mit dieser Adresse bei">
           Host: {props.hostInfo.addresses.map((a) => `${a}:${props.hostInfo!.port}`).join(' · ') || `localhost:${props.hostInfo.port}`}
@@ -290,7 +292,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
           })()}
         </button>
       )}
-      {me?.role !== 'crew' && (
+      {me?.role !== 'crew' && !net.sitzung && (
         <button onClick={() => setShowDevice(true)} title="Telefon und Funk auf ein Tablet oder Handy im selben Netz auslagern">
           📱 Tablet{remote.length ? ' ✓' : ''}
         </button>
@@ -429,6 +431,7 @@ export function useReadAloud(state: PublicState | undefined, me: string | undefi
 
 function Lobby({ ctx, hostInfo }: { ctx: GameCtx; hostInfo: { port: number; addresses: string[] } | null }) {
   const { state, scn } = ctx;
+  const net = useNet();
   return (
     <div className="modal-bg">
       <div className="modal">
@@ -438,6 +441,7 @@ function Lobby({ ctx, hostInfo }: { ctx: GameCtx; hostInfo: { port: number; addr
           {scn.stations.reduce((n, s) => n + s.vehicles.length, 0)} Fahrzeuge · {scn.hospitals.length} Kliniken · ca.{' '}
           {scn.settings.callsPerHour} Notrufe pro Stunde
         </p>
+        {net.sitzung && <SitzungEinstellungen sitzung={net.sitzung} />}
         {hostInfo && (
           <p>
             Andere Spieler treten bei mit:{' '}

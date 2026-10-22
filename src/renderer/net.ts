@@ -1,6 +1,6 @@
 // WebSocket-Verbindung zum Spielserver mit einfachem Store für React.
 import { useSyncExternalStore } from 'react';
-import type { Action, ClientMsg, ServerMsg } from '../../shared/protocol';
+import type { Action, ClientMsg, ServerMsg, Sichtbarkeit, SitzungInfo } from '../../shared/protocol';
 import type { PublicState, Role, Scenario } from '../../shared/types';
 
 export interface Toast {
@@ -20,7 +20,11 @@ export interface NetSnapshot {
   linkCode?: string;
   /** Adresse des Servers (für den Kopplungs-Link) */
   url?: string;
+  /** Online-Sitzung, wenn mit dem Multiplayer-Server verbunden */
+  sitzung?: SitzungInfo;
 }
+
+type HelloOpts = Omit<Extract<ClientMsg, { t: 'hello' }>, 't' | 'name' | 'role'>;
 
 export class Connection {
   private ws?: WebSocket;
@@ -40,9 +44,9 @@ export class Connection {
 
   getSnapshot = () => this.snap;
 
-  connect(url: string, name: string, role: Role, opts: { link?: string; lite?: boolean } = {}): Promise<void> {
+  connect(url: string, name: string, role: Role, opts: HelloOpts = {}): Promise<void> {
     this.close();
-    this.set({ status: 'connecting', error: undefined, state: undefined, scenario: undefined, url });
+    this.set({ status: 'connecting', error: undefined, state: undefined, scenario: undefined, sitzung: undefined, url });
     return new Promise((resolve, reject) => {
       let settled = false;
       const ws = new WebSocket(url);
@@ -52,7 +56,7 @@ export class Connection {
         const msg = JSON.parse(ev.data) as ServerMsg;
         switch (msg.t) {
           case 'welcome':
-            this.set({ status: 'online', playerId: msg.playerId, scenario: msg.scenario, linkCode: msg.linkCode });
+            this.set({ status: 'online', playerId: msg.playerId, scenario: msg.scenario, linkCode: msg.linkCode, sitzung: msg.sitzung });
             if (!settled) {
               settled = true;
               resolve();
@@ -60,6 +64,9 @@ export class Connection {
             break;
           case 'state':
             this.set({ state: msg.state });
+            break;
+          case 'sitzung':
+            this.set({ sitzung: msg.sitzung });
             break;
           case 'toast':
             this.toast(msg.text, msg.level);
@@ -82,6 +89,12 @@ export class Connection {
       };
       ws.onclose = () => {
         if (this.ws === ws) this.set({ status: 'closed' });
+        if (!settled) {
+          settled = true;
+          const text = this.snap.error ?? `Verbindung zu ${url} abgebrochen`;
+          this.set({ error: text });
+          reject(new Error(text));
+        }
       };
     });
   }
@@ -92,7 +105,7 @@ export class Connection {
       this.ws = undefined;
       ws.close();
     }
-    this.set({ status: 'idle', state: undefined });
+    this.set({ status: 'idle', state: undefined, sitzung: undefined });
   }
 
   private raw(msg: ClientMsg) {
@@ -101,6 +114,11 @@ export class Connection {
 
   send(action: Action) {
     this.raw({ t: 'action', action });
+  }
+
+  /** Online-Sitzung: nur der Host darf Sichtbarkeit und Spielerzahl ändern */
+  sitzungAendern(patch: { sichtbarkeit?: Sichtbarkeit; maxSpieler?: number }) {
+    this.raw({ t: 'sitzung', ...patch });
   }
 
   toast(text: string, level: Toast['level'] = 'info') {
