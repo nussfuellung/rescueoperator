@@ -105,8 +105,10 @@ export type ClientMsg =
               name: string;
               sichtbarkeit: Sichtbarkeit;
               maxSpieler: number;
-              /** Leitstelle als gzip-komprimiertes JSON in Base64 */
-              szenarioGz: string;
+              /** Leitstelle als gzip-komprimiertes JSON in Base64; fehlt, wenn der Server sie schon hat */
+              szenarioGz?: string;
+              /** SHA-256 (hex) des Leitstellen-JSON: damit findet der Server eine schon hochgeladene Leitstelle */
+              szenarioHash?: string;
             };
           }
         | { code: string };

@@ -292,8 +292,8 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
           })()}
         </button>
       )}
-      {me?.role !== 'crew' && !net.sitzung && (
-        <button onClick={() => setShowDevice(true)} title="Telefon und Funk auf ein Tablet oder Handy im selben Netz auslagern">
+      {me?.role !== 'crew' && (
+        <button onClick={() => setShowDevice(true)} title="Telefon und Funk auf ein Tablet oder Handy auslagern">
           📱 Tablet{remote.length ? ' ✓' : ''}
         </button>
       )}

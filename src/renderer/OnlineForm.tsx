@@ -2,9 +2,9 @@
 import { useEffect, useState } from 'react';
 import { MAX_SPIELER_ONLINE, type Sichtbarkeit, type SitzungListe } from '../../shared/protocol';
 import type { Role } from '../../shared/types';
-import { api, type ScenarioInfo } from './api';
+import { api, isDesktop, type ScenarioInfo } from './api';
 import { conn } from './net';
-import { clientId, ladeSitzungen, packeSzenario, passendeVersion, serverUrls } from './online';
+import { clientId, ladeSitzungen, passendeVersion, serverUrls, szenarioFuerServer } from './online';
 import { APP_VERSION } from './version';
 
 const store = {
@@ -27,7 +27,8 @@ const store = {
 type Tab = 'liste' | 'code' | 'neu';
 
 export function OnlineForm(props: { name: string; role: Role; onBack: () => void; onJoined: () => void }) {
-  const [addr, setAddr] = useState(() => store.get('lst.online', ''));
+  // Im Browser vom Online-Server geöffnet: dieser Server ist vorbelegt
+  const [addr, setAddr] = useState(() => store.get('lst.online', !isDesktop && /^https?:$/.test(location.protocol) ? location.origin : ''));
   const [liste, setListe] = useState<SitzungListe | null>(null);
   const [tab, setTab] = useState<Tab>('liste');
   const [err, setErr] = useState('');
@@ -39,6 +40,7 @@ export function OnlineForm(props: { name: string; role: Role; onBack: () => void
   const [sitzungName, setSitzungName] = useState(`Schicht von ${props.name.trim()}`);
   const [sichtbarkeit, setSichtbarkeit] = useState<Sichtbarkeit>('offen');
   const [maxSpieler, setMaxSpieler] = useState(4);
+  const [hochladen, setHochladen] = useState(false);
 
   useEffect(() => {
     api.listScenarios().then((l) => {
@@ -96,7 +98,9 @@ export function OnlineForm(props: { name: string; role: Role; onBack: () => void
     setErr('');
     try {
       const scn = await api.loadScenario(sel);
-      await verbinden({ neu: { name: sitzungName.trim() || `Schicht von ${props.name.trim()}`, sichtbarkeit, maxSpieler, szenarioGz: packeSzenario(scn) } });
+      const daten = await szenarioFuerServer(addr, scn);
+      setHochladen(!!daten.szenarioGz);
+      await verbinden({ neu: { name: sitzungName.trim() || `Schicht von ${props.name.trim()}`, sichtbarkeit, maxSpieler, ...daten } });
     } catch (e) {
       setErr((e as Error).message);
       setBusy(false);
@@ -219,7 +223,7 @@ export function OnlineForm(props: { name: string; role: Role; onBack: () => void
               </div>
               <div className="menu-buttons">
                 <button className="primary" disabled={busy || !sel} onClick={() => void erstellen()}>
-                  {busy ? 'Leitstelle wird hochgeladen …' : 'Sitzung erstellen'}
+                  {busy ? (hochladen ? 'Leitstelle wird hochgeladen …' : 'Sitzung wird erstellt …') : 'Sitzung erstellen'}
                 </button>
               </div>
             </>

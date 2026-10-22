@@ -27,7 +27,10 @@ export function DeviceModal(props: {
   const loopback = !!server && !props.hostInfo && /^(127\.|localhost)/.test(server.hostname);
   const [hostIdx, setHostIdx] = useState(0);
   const host = hosts[hostIdx] ?? hosts[0];
-  const link = host && net.linkCode ? `http://${host}/?geraet=${net.linkCode}&bereiche=${choice}` : '';
+  // Online liefert der Sitzungs-Server die Web-App aus (auch über HTTPS), im LAN der Host-Rechner
+  const online = !!net.sitzung;
+  const proto = online && server ? server.protocol : 'http:';
+  const link = host && net.linkCode ? `${proto}//${host}/?geraet=${net.linkCode}&bereiche=${choice}` : '';
 
   useEffect(() => {
     if (!link) return;
@@ -46,7 +49,7 @@ export function DeviceModal(props: {
       <div className="modal device-modal" onClick={(e) => e.stopPropagation()}>
         <h2>Tablet oder Handy koppeln</h2>
         <p className="small muted">
-          Telefon und Funk lassen sich auf ein iPad, Android-Tablet oder Handy im selben WLAN auslagern. Das Gerät übernimmt deinen Platz: Ein dort
+          Telefon und Funk lassen sich auf ein iPad, Android-Tablet oder Handy {online ? 'mit Internetzugang' : 'im selben WLAN'} auslagern. Das Gerät übernimmt deinen Platz: Ein dort
           angenommener Notruf erscheint hier in der Einsatzmaske, Funk und Sprechwünsche laufen über das Gerät.
         </p>
         <div className="row">
@@ -75,11 +78,17 @@ export function DeviceModal(props: {
             {qr && <img src={qr} alt="QR-Code zum Koppeln" width={240} height={240} />}
             <div className="device-steps small">
               <ol>
-                <li>Tablet oder Handy ins selbe WLAN wie diesen Rechner bringen.</li>
+                <li>{online ? 'Tablet oder Handy mit dem Internet verbinden (WLAN oder Mobilfunk).' : 'Tablet oder Handy ins selbe WLAN wie diesen Rechner bringen.'}</li>
                 <li>QR-Code mit der Kamera scannen oder die Adresse im Browser eingeben:</li>
               </ol>
               <code className="device-link">{link}</code>
-              {loopback && <p className="error">Du bist über localhost verbunden. Für das Tablet die LAN-Adresse des Host-Rechners verwenden.</p>}
+              {loopback && (
+                <p className="error">
+                  {online
+                    ? 'Du bist über localhost mit dem Online-Server verbunden. Für das Tablet die öffentliche Adresse des Servers verwenden.'
+                    : 'Du bist über localhost verbunden. Für das Tablet die LAN-Adresse des Host-Rechners verwenden.'}
+                </p>
+              )}
               {hosts.length > 1 && (
                 <label>
                   Netzwerk
@@ -93,7 +102,7 @@ export function DeviceModal(props: {
                 </label>
               )}
               <p className="muted">
-                Fragt Windows nach der Firewall, „Private Netzwerke“ erlauben. Spracheingabe gibt es auf dem Gerät nicht (der Browser erlaubt das Mikrofon
+                {online ? '' : 'Fragt Windows nach der Firewall, „Private Netzwerke“ erlauben. '}Spracheingabe gibt es auf dem Gerät nicht (der Browser erlaubt das Mikrofon
                 nur über HTTPS), die Sprachausgabe funktioniert.
               </p>
             </div>

@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('lst', {
   ttsAvailable: () => ipcRenderer.invoke('tts:available'),
   ttsSpeak: (text: string, voice: number, rate: number) => ipcRenderer.invoke('tts:speak', text, voice, rate),
   ttsStop: () => ipcRenderer.invoke('tts:stop'),
+  piperInfo: () => ipcRenderer.invoke('piper:info'),
+  piperSynth: (text: string, stimme: string, tempo: number) => ipcRenderer.invoke('piper:synth', text, stimme, tempo),
   sttInfo: () => ipcRenderer.invoke('stt:info'),
   sttDownload: () => ipcRenderer.invoke('stt:download'),
   sttImport: () => ipcRenderer.invoke('stt:import'),

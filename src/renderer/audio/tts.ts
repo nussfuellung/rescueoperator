@@ -26,15 +26,24 @@ function httpBase(): string | null {
   return url ? url.replace(/^ws/, 'http').replace(/\/+$/, '') : null;
 }
 
+/** Online-Sitzung in der Desktop-App: Piper-Stimmen dieses Rechners statt des Servers */
+const LOKAL = 'lokal';
+function piperBase(): string | null {
+  if (conn.snap.sitzung && window.lst?.piperSynth) return LOKAL;
+  return httpBase();
+}
+
 /** Fragt den Server einmal, ob Piper-Stimmen bereitstehen */
 export function piperInfo(): Promise<PiperInfo | null> {
-  const base = httpBase();
+  const base = piperBase();
   if (!base) return Promise.resolve(null);
   if (piper?.base !== base) {
     const p: NonNullable<typeof piper> = {
       base,
-      info: fetch(`${base}/tts/info`)
-        .then((r) => (r.ok ? (r.json() as Promise<PiperInfo>) : null))
+      info: (base === LOKAL
+        ? window.lst!.piperInfo!()
+        : fetch(`${base}/tts/info`).then((r) => (r.ok ? (r.json() as Promise<PiperInfo>) : null))
+      )
         .catch(() => null)
         .then((v) => (p.value = v)),
     };
@@ -44,7 +53,7 @@ export function piperInfo(): Promise<PiperInfo | null> {
 }
 
 function piperReady() {
-  return !!piper && piper.base === httpBase() && !!piper.value?.available;
+  return !!piper && piper.base === piperBase() && !!piper.value?.available;
 }
 
 function hash(s: string) {
@@ -61,8 +70,14 @@ function pickStimme(item: Item): string {
 }
 
 function fetchPiper(item: Item): Promise<ArrayBuffer | null> {
-  const base = httpBase();
+  const base = piperBase();
   if (!base) return Promise.resolve(null);
+  if (base === LOKAL) {
+    return window
+      .lst!.piperSynth!(item.text, pickStimme(item), item.voice === 'radio' ? 1.1 : 1)
+      .then((u) => (u ? (u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength) as ArrayBuffer) : null))
+      .catch(() => null);
+  }
   const q = new URLSearchParams({ text: item.text, stimme: pickStimme(item), tempo: item.voice === 'radio' ? '1.1' : '1' });
   return fetch(`${base}/tts?${q}`)
     .then((r) => (r.ok ? r.arrayBuffer() : null))
