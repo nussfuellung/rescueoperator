@@ -72,6 +72,8 @@ jobs:
 
   release:
     needs: build
+    # Auf anderen Branches nur bauen und prüfen, kein Release anlegen
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
