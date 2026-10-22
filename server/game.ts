@@ -37,6 +37,7 @@ import {
   YES_NO,
   classifyAll,
   fallbackAnswers,
+  ADDRESS_NOT_YET_SAID,
   isYesNoQuestion,
   questionText,
   type CallerFacts,
@@ -88,6 +89,8 @@ interface Truth {
   objekt?: string;
   fake: boolean;
   tcprGiven?: boolean;
+  /** Der Anrufer hat den Notfallort schon genannt */
+  whereSaid?: boolean;
   // Einsatzfortschritt
   reported?: boolean;
   progress?: number;
@@ -824,7 +827,9 @@ export class Game {
     this.callerSays(call, this.fill(this.pick(truth.tpl.opening), truth));
     if (!truth.fake && this.rng() < 0.7) {
       this.after(4000, () => {
-        if (call.state === 'active') this.callerSays(call, truth.spokenWhere, 1500);
+        if (call.state !== 'active' || truth.whereSaid) return;
+        truth.whereSaid = true;
+        this.callerSays(call, truth.spokenWhere, 1500);
       });
     }
   }
@@ -861,9 +866,13 @@ export class Game {
         truth.tcprGiven = true;
         this.addScore(15, 'Telefonreanimation angeleitet');
       }
-      const pool =
-        truth.tpl.answers[qq] ??
-        (truth.fake && truth.tpl.answers.was ? truth.tpl.answers.was : fallbackAnswers(qq, truth.tpl, truth.facts?.role ?? 'angehoerig'));
+      // Rückbestätigung, obwohl der Anrufer noch gar keinen Ort genannt hat: dann nennt er ihn jetzt
+      const unbestaetigt = qq === 'ortbestaetigen' && !truth.fake && !truth.whereSaid && !truth.tpl.answers.ortbestaetigen;
+      if ((qq === 'wo' || unbestaetigt) && !truth.fake) truth.whereSaid = true;
+      const pool = unbestaetigt
+        ? ADDRESS_NOT_YET_SAID
+        : truth.tpl.answers[qq] ??
+          (truth.fake && truth.tpl.answers.was ? truth.tpl.answers.was : fallbackAnswers(qq, truth.tpl, truth.facts?.role ?? 'angehoerig'));
       let text = this.fill(this.pick(pool), truth, call.phone);
       if (repeated && this.rng() < 0.6) text = `${this.pick(['Das hab ich doch schon gesagt!', 'Wie gesagt:', 'Nochmal:'])} ${text}`;
       parts.push(text);
