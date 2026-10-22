@@ -22,12 +22,15 @@ cmake -S "$WORK/src" -B "$WORK/build" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL
 cmake --build "$WORK/build" --config Release -j "$(sysctl -n hw.ncpu)"
 cmake --install "$WORK/build" >/dev/null
 
-# Programm, Daten und alle Bibliotheken (Symlinks aufgelöst) flach in einen Ordner
-cp "$WORK/install/piper" "$OUT/"
-cp -R "$WORK/install/espeak-ng-data" "$OUT/"
-for lib in "$WORK"/install/*.dylib; do
+# Programm, Daten und alle Bibliotheken (Symlinks aufgelöst) flach in einen Ordner.
+# Je nach CMake-Version landen die Bibliotheken nicht im Installationsordner, dann aus piper-phonemize nehmen.
+PI="$WORK/build/pi"
+cp "$WORK/build/piper" "$OUT/"
+if [ -d "$WORK/install/espeak-ng-data" ]; then cp -R "$WORK/install/espeak-ng-data" "$OUT/"; else cp -R "$PI/share/espeak-ng-data" "$OUT/"; fi
+for lib in $(find "$WORK/install" "$PI/lib" -maxdepth 1 -name '*.dylib' 2>/dev/null); do
   cp -L "$lib" "$OUT/$(basename "$lib")"
 done
+ls -la "$OUT"
 
 # Verweise auf Bibliotheken auf den eigenen Ordner umstellen (@loader_path), damit nichts außerhalb gesucht wird
 fix() {
