@@ -1144,7 +1144,8 @@ export function normalizeSpoken(text: string): string {
 // Reihenfolge zählt: spezifische Fragen vor allgemeinen
 const RULES: [QuestionId, RegExp][] = [
   ['tcpr', /reanimation|herzdruck|drücken sie|fest drücken|cpr|massage|hände auf die brust|brustmitte/],
-  ['ortbestaetigen', /wiederhole|stimmt (das|die adresse)|ist das richtig|habe ich (das )?richtig|korrekt/],
+  // "Ich wiederhole" ist die Rückbestätigung, "wiederholen Sie die Adresse" dagegen eine Frage nach dem Ort
+  ['ortbestaetigen', /ich wiederhole|wiederhole ich|wiederhole (die|ihre) adresse|stimmt (das|die adresse)|ist das richtig|habe ich (das )?richtig|korrekt/],
   ['rueckruf', /rückruf|zurückrufen|(ihre|eine|welche[rn]?|die) (telefon|handy)?nummer|erreichen wir sie|erreichbar|telefonnummer/],
   ['beruhigen', /ruhig|beruhig|keine angst|keine sorge|hilfe (ist|kommt) (unterwegs|organisiert)|tief durchatmen/],
   ['alter', /wie alt|alter |jahre alt|geburtsjahr|welches alter/],
@@ -1272,6 +1273,13 @@ export const DEFAULT_ANSWERS: Record<QuestionId, string[]> = {
   rueckruf: ['Unter dieser Nummer, {phone}.'],
   ortbestaetigen: ['Ja, genau.'],
 };
+
+/** Rückbestätigung, bevor der Anrufer überhaupt einen Ort genannt hat */
+export const ADDRESS_NOT_YET_SAID = [
+  'Welche Adresse? Ich hab doch noch gar nichts gesagt! {wo}',
+  'Nein, Moment: {wo}',
+  'Ich hab Ihnen noch keine Adresse gesagt. {wo}',
+];
 
 export const NOT_UNDERSTOOD = ['Wie bitte? Ich versteh Sie nicht.', 'Was meinen Sie?', 'Das weiß ich nicht.', 'Bitte, schicken Sie einfach jemanden!', 'Hä? Nochmal bitte.'];
 export const YES_NO = ['Ja, schon.', 'Nein, ich glaube nicht.', 'Das kann ich nicht sagen.', 'Ich glaub nicht, nein.'];

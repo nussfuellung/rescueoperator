@@ -30,7 +30,7 @@ const QUESTIONS: { id: QuestionId; label: string; key: string }[] = [
   { id: 'vorerkrankung', label: 'Vorerkrankungen?', key: 'r' },
   { id: 'zugang', label: 'Stockwerk / Zugang', key: 't' },
   { id: 'rueckruf', label: 'Rückrufnummer', key: 'z' },
-  { id: 'ortbestaetigen', label: 'Adresse wiederholen', key: '0' },
+  { id: 'ortbestaetigen', label: 'Adresse rückbestätigen', key: '0' },
 ];
 
 export function CallPanel({ ctx }: { ctx: GameCtx }) {
