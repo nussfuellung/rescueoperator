@@ -286,6 +286,15 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           Kachel-Server
           <input value={s.tileUrl} onChange={(e) => updateSettings({ tileUrl: e.target.value || DEFAULT_TILE_URL })} />
         </label>
+        <label>
+          Zoomgeschwindigkeit (Mausrad und Touchpad)
+          <select value={s.zoomSpeed} onChange={(e) => updateSettings({ zoomSpeed: Number(e.target.value) })}>
+            <option value={0.5}>Langsam</option>
+            <option value={1}>Normal</option>
+            <option value={2}>Schnell</option>
+            <option value={4}>Sehr schnell</option>
+          </select>
+        </label>
 
         <div className="row">
           <div className="spacer" />

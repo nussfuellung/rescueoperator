@@ -17,6 +17,8 @@ export interface Settings {
   micDeviceId: string;
   mapTiles: boolean;
   tileUrl: string;
+  /** Faktor für die Zoomgeschwindigkeit mit Mausrad und Touchpad, 1 = normal */
+  zoomSpeed: number;
   theme: Theme;
 }
 
@@ -34,6 +36,7 @@ const DEFAULTS: Settings = {
   micDeviceId: '',
   mapTiles: true,
   tileUrl: DEFAULT_TILE_URL,
+  zoomSpeed: 1,
   theme: 'dark',
 };
 
