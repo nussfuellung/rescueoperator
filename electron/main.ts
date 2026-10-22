@@ -7,6 +7,7 @@ import { recomputeHouseNumbers } from '../shared/geo';
 import { generateScenario } from '../shared/mapgen';
 import type { Scenario } from '../shared/types';
 import { GameServer, lanAddresses } from '../server/server';
+import { Piper } from '../server/tts';
 import { speakSystem, stopSystemSpeech, systemTtsAvailable } from './tts';
 import { updateSplash } from './updater';
 import { downloadModel, handleModelProtocol, installModelFromBytes, modelInfo, registerModelScheme, removeModel } from './stt';
@@ -159,6 +160,25 @@ ipcMain.handle('host:stop', async () => {
   return true;
 });
 ipcMain.handle('host:status', () => (host ? { port: host.port, addresses: lanAddresses() } : null));
+
+// Piper-Stimmen dieses Rechners, wenn kein eigener Host-Server sie liefert (Online-Sitzungen)
+let piper: Piper | null = null;
+let piperTest: Promise<boolean> | null = null;
+const lokalesPiper = async () => {
+  piper ??= new Piper([join(__dirname, '../renderer')]);
+  piperTest ??= piper.selfTest();
+  return (await piperTest) && piper.available ? piper : null;
+};
+ipcMain.handle('piper:info', async () => (await lokalesPiper())?.info() ?? null);
+ipcMain.handle('piper:synth', async (_e, text: string, stimme: string, tempo: number) => {
+  const p = await lokalesPiper();
+  if (!p || !text) return null;
+  try {
+    return new Uint8Array(await p.synth(String(text), String(stimme), Math.max(0.6, Math.min(1.6, Number(tempo) || 1))));
+  } catch {
+    return null;
+  }
+});
 
 ipcMain.handle('tts:available', () => systemTtsAvailable());
 ipcMain.handle('tts:speak', (_e, text: string, voice: number, rate: number) => speakSystem(text, voice, rate));

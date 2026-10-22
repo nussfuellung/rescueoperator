@@ -24,7 +24,7 @@ export function MobileScreen({ code, areas }: { code: string; areas: Tab[] }) {
   const retry = useRef(0);
 
   const connect = () =>
-    conn.connect(`ws://${location.host}`, 'Tablet', 'dispatcher', { link: code, lite: true }).then(
+    conn.connect(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`, 'Tablet', 'dispatcher', { link: code, lite: true }).then(
       () => (retry.current = 0),
       () => undefined,
     );

@@ -3,6 +3,9 @@ import { gzipSync, strToU8 } from 'fflate';
 import { ONLINE_PORT, type SitzungListe } from '../../shared/protocol';
 import type { Scenario } from '../../shared/types';
 
+/** Offizieller Online-Server, vorbelegt im Menü „Online spielen“ */
+export const STANDARD_SERVER = 'https://v35242.1blu.de';
+
 /** Dauerhafte Kennung dieser Installation: Der Server lässt je Kennung nur eine Sitzung zu */
 export function clientId(): string {
   const KEY = 'lst.clientId';
@@ -40,9 +43,24 @@ export async function ladeSitzungen(addr: string): Promise<SitzungListe> {
   return (await res.json()) as SitzungListe;
 }
 
+/** Leitstelle für die Sitzung: Kennung (SHA-256) und, falls der Server sie noch nicht hat, gepackt zum Hochladen */
+export async function szenarioFuerServer(addr: string, scn: Scenario): Promise<{ szenarioHash?: string; szenarioGz?: string }> {
+  const text = JSON.stringify(scn);
+  let hash: string | undefined;
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', strToU8(text));
+    hash = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    const res = await fetch(`${serverUrls(addr).http}/api/leitstellen/${hash}`, { method: 'HEAD', cache: 'no-store' });
+    if (res.ok) return { szenarioHash: hash };
+  } catch {
+    // Ohne Prüfung (z. B. kein crypto.subtle): einfach hochladen
+  }
+  return { szenarioHash: hash, szenarioGz: packeSzenario(text) };
+}
+
 /** Leitstelle für das Hochladen packen: gzip, dann Base64 */
-export function packeSzenario(scn: Scenario): string {
-  const gz = gzipSync(strToU8(JSON.stringify(scn)), { level: 6 });
+function packeSzenario(text: string): string {
+  const gz = gzipSync(strToU8(text), { level: 6 });
   let bin = '';
   for (let i = 0; i < gz.length; i += 0x8000) bin += String.fromCharCode(...gz.subarray(i, i + 0x8000));
   return btoa(bin);
