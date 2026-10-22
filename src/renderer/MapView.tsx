@@ -249,7 +249,12 @@ export function MapView(props: Props) {
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
       const before = toWorld(sx, sy);
-      const f = Math.exp(-e.deltaY * 0.0015);
+      // Mausrad liefert ca. 100 px pro Raste, Touchpads viele kleine Schritte; Pinch-Gesten kommen als Rad mit Strg
+      // und sehr kleinen Werten und brauchen deshalb eine deutlich höhere Empfindlichkeit.
+      let dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? canvas.clientHeight : 1);
+      if (e.ctrlKey) dy *= 8;
+      const zoom = Math.max(-0.7, Math.min(0.7, -dy * 0.0025 * getSettings().zoomSpeed));
+      const f = Math.exp(zoom);
       view.current.scale = Math.max(0.01, Math.min(3, view.current.scale * f));
       const after = toWorld(sx, sy);
       view.current.cx += before.x - after.x;
