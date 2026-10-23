@@ -190,7 +190,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                   const bytes = new Uint8Array(await f.arrayBuffer());
                   const tgz = /\.(tar\.gz|tgz)$/i.test(f.name) ? bytes : zipToModelTarGz(bytes);
                   if (browserModelUrl) URL.revokeObjectURL(browserModelUrl);
-                  browserModelUrl = URL.createObjectURL(new Blob([tgz], { type: 'application/gzip' }));
+                  browserModelUrl = URL.createObjectURL(new Blob([tgz as Uint8Array<ArrayBuffer>], { type: 'application/gzip' }));
                   setProgress('');
                   await loadModel(browserModelUrl);
                 } catch (er) {
