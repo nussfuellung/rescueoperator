@@ -135,7 +135,7 @@ Hat ein Rettungsmittel den Patienten versorgt, meldet es einen Patientenzuweisun
 
 Ab und zu meldet eine Besatzung ihren Patienten nicht über Funk, sondern per Telefon an (Anruf **RTW** in der Notrufabfrage). Nach dem Annehmen nennt sie PZC und Verdachtsdiagnose; die Zielklinik lässt sich direkt in der Anrufzeile oder in IVENA zuweisen, danach legt sie auf. Wer nicht abnimmt, bekommt die Anmeldung über Funk. Der Reiter **PZC-Liste** zeigt alle Rückmeldeindikationen (die ersten drei Ziffern) mit Gruppe und Fachbereich und lässt sich nach Code oder Begriff durchsuchen.
 
-Fachbereiche: Innere Medizin, Chirurgie, Unfallchirurgie, Kardiologie (HKL), Stroke Unit, Pädiatrie, Verbrennungen, Urologie, Gynäkologie, Geburtshilfe, HNO, Augenheilkunde und Psychiatrie. Die Musterleitstelle Würzburg hat dazu die Kliniken mit ihren Fachabteilungen nach den Qualitätsberichten 2023/2024, einschließlich Klinikum Main-Spessart und Bezirkskrankenhaus in Lohr (`scripts/karten/kliniken.ts`).
+Fachbereiche: Innere Medizin, Chirurgie, Unfallchirurgie, Kardiologie (HKL), Stroke Unit, Pädiatrie, Verbrennungen, Urologie, Gynäkologie, Geburtshilfe, HNO, Augenheilkunde und Psychiatrie. Die Musterleitstelle Würzburg hat dazu die Kliniken mit den Fachabteilungen, die sie auf ihren Webseiten angeben, einschließlich Klinikum Main-Spessart und Bezirkskrankenhaus in Lohr (`scripts/karten/kliniken.ts`). Schwerbrandverletzte gehen in die BG Unfallklinik Frankfurt oder ins Sana Klinikum Offenbach, die am westlichen Kartenrand auf der A 3 liegen. Hat keine Klinik einer Karte den benötigten Fachbereich, gilt die Erstversorgung in der Unfallchirurgie als richtig; IVENA weist darauf hin.
 
 ### Telefon und Funk auf Tablet oder Handy
 
