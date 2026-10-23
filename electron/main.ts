@@ -94,6 +94,7 @@ function createWindow() {
     minHeight: 750,
     backgroundColor: '#11161d',
     title: 'rescue.Operator',
+    icon: join(__dirname, '../renderer/icon.png'),
     autoHideMenuBar: true,
     webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
