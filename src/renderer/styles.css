@@ -2000,3 +2000,249 @@ ul.hinweise li {
   border-radius: 4px;
   padding: 4px 6px;
 }
+
+/* ---------- Online spielen: Server-Browser ---------- */
+.menu-card {
+  max-width: calc(100vw - 24px);
+}
+.online-kopf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 18px 0 12px;
+}
+.online-kopf h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.online-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  color: var(--text-soft);
+}
+.online-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.online-status.an i {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent);
+}
+.online-status.aus i {
+  background: var(--danger);
+}
+.online-status.pruefe i {
+  animation: online-puls 1s ease-in-out infinite alternate;
+}
+@keyframes online-puls {
+  to {
+    opacity: 0.25;
+  }
+}
+.segment {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--bg-deep);
+  border: 1px solid var(--line-soft);
+}
+.segment button {
+  flex: 1;
+  border: none;
+  background: none;
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.segment button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+.segment button.an,
+.segment button.an:hover:not(:disabled) {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.online-hinweis {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  color: var(--text);
+  font-size: 13px;
+}
+.sitzungen {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  max-height: 55vh;
+  overflow: auto;
+}
+.sitzung-karte {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--panel-alt);
+  border: 1px solid var(--line);
+  transition: border-color 0.15s;
+}
+.sitzung-karte:hover {
+  border-color: var(--line-strong);
+}
+.sitzung-karte button {
+  padding: 7px 16px;
+  border-radius: 7px;
+}
+.sitzung-titel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.pille {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.pille.laeuft {
+  background: var(--ok-bg);
+  border-color: var(--ok-line);
+  color: var(--ok-text);
+}
+.plaetze {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+.plaetze div {
+  display: flex;
+  gap: 3px;
+}
+.plaetze i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.plaetze i.belegt {
+  background: var(--primary);
+}
+.online-leer {
+  text-align: center;
+  padding: 26px 12px;
+}
+.online-leer p {
+  margin: 6px 0 14px;
+}
+.online-icon {
+  font-size: 34px;
+  margin-bottom: 6px;
+}
+button.gross {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 15px;
+  margin-top: 8px;
+}
+.online-code {
+  max-width: 340px;
+  margin: 18px auto 0;
+  text-align: center;
+}
+.menu-card input.code-feld {
+  text-align: center;
+  font: 600 28px/1.2 ui-monospace, Consolas, monospace;
+  letter-spacing: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  text-transform: uppercase;
+}
+.online-neu {
+  margin-top: 12px;
+}
+.online-neu .feld {
+  margin: 10px 0;
+}
+.feld-titel {
+  display: block;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.wahl-karten {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.wahl-karten button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 9px;
+}
+.wahl-karten button span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.wahl-karten button.an,
+.zahl-wahl button.an {
+  border-color: var(--primary);
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+.zahl-wahl {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 44px));
+  gap: 6px;
+}
+.zahl-wahl button {
+  height: 36px;
+  padding: 0;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 560px) {
+  .menu-card {
+    padding: 20px 16px;
+  }
+  .sitzung-karte {
+    flex-wrap: wrap;
+  }
+  .sitzung-karte .grow {
+    flex-basis: 100%;
+  }
+  .sitzung-karte button {
+    margin-left: auto;
+  }
+  .wahl-karten {
+    grid-template-columns: 1fr;
+  }
+}
