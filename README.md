@@ -20,7 +20,7 @@ Mitspieler starten dieselbe App, wählen **Schicht beitreten** und geben die Adr
 
 ### Online spielen
 
-Über **Online spielen** treffen sich Spieler auf einem Online-Server statt im LAN. Adresse des Servers eintragen, **Verbinden**, dann einer offenen Sitzung aus der Liste beitreten, einer privaten Sitzung mit **Beitrittscode** beitreten oder eine **neue Sitzung** erstellen (Leitstelle, offen oder privat, 1 bis 8 Spieler). Der Host kann Sichtbarkeit und Spielerzahl im Spiel über den 🌐-Knopf ändern. Jeder Spieler ist höchstens in einer Sitzung; verlässt der letzte Spieler eine Sitzung, wird sie geschlossen. Spiel und Server müssen dieselbe Hauptversion haben (z. B. beide 0.11). Der Online-Server selbst ist nicht Teil dieses Repos.
+Über **Online spielen** treffen sich Spieler auf dem offiziellen Online-Server statt im LAN. Das Spiel verbindet sich von selbst; man tritt einer offenen Sitzung aus der Liste beitreten, einer privaten Sitzung mit **Beitrittscode** beitreten oder eine **neue Sitzung** erstellen (Leitstelle, offen oder privat, 1 bis 8 Spieler). Der Host kann Sichtbarkeit und Spielerzahl im Spiel über den 🌐-Knopf ändern. Jeder Spieler ist höchstens in einer Sitzung; verlässt der letzte Spieler eine Sitzung, wird sie geschlossen. Spiel und Server müssen dieselbe Hauptversion haben (z. B. beide 0.11). Der Online-Server selbst ist nicht Teil dieses Repos.
 
 ## Aus dem Quellcode starten
 

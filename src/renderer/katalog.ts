@@ -10,17 +10,11 @@ import {
   type Sichtbarkeit,
 } from '../../shared/protocol';
 import type { Scenario } from '../../shared/types';
-import { STANDARD_SERVER, serverUrls } from './online';
+import { onlineServer, serverUrls } from './online';
 import { APP_VERSION } from './version';
 
-/** Zuletzt benutzter Online-Server (gemeinsam mit „Online spielen“) */
-export function katalogServer(): string {
-  try {
-    return localStorage.getItem('lst.online') || STANDARD_SERVER;
-  } catch {
-    return STANDARD_SERVER;
-  }
-}
+/** Der Katalog liegt auf dem Online-Server des Spiels */
+export const katalogServer = onlineServer;
 
 /** Geheimer Autorenschlüssel dieser Installation: weist auf dem Server nach, wem eine veröffentlichte Leitstelle gehört */
 export function autorSchluessel(): string {

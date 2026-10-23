@@ -16,14 +16,6 @@ function spielerName(): string {
   }
 }
 
-function merkeServer(addr: string) {
-  try {
-    localStorage.setItem('lst.online', addr.trim());
-  } catch {
-    /* egal */
-  }
-}
-
 const datum = (ms: number) => new Date(ms).toLocaleDateString('de-DE');
 
 /** Eigene Leitstellen auf dem Server, nach Kennung */
@@ -57,7 +49,7 @@ export function StatusBadge({ e }: { e?: KatalogEintrag }) {
  */
 export function VeroeffentlichenDialog(props: { scn: Scenario; eintrag?: KatalogEintrag; onClose: (changed: boolean) => void; onSaved?: (scn: Scenario) => void }) {
   const scn = props.scn;
-  const [addr, setAddr] = useState(katalogServer);
+  const addr = katalogServer();
   const [autor, setAutor] = useState(scn.autor || spielerName());
   const [beschreibung, setBeschreibung] = useState(scn.beschreibung ?? '');
   const [sicht, setSicht] = useState<Sichtbarkeit>(props.eintrag?.sichtbarkeit ?? 'offen');
@@ -73,7 +65,6 @@ export function VeroeffentlichenDialog(props: { scn: Scenario; eintrag?: Katalog
     setErr('');
     setOk('');
     try {
-      merkeServer(addr);
       await fn();
       setChanged(true);
     } catch (e) {
@@ -131,10 +122,6 @@ export function VeroeffentlichenDialog(props: { scn: Scenario; eintrag?: Katalog
           Status: <StatusBadge e={eintrag} />
           {eintrag && <span className="muted"> · zuletzt hochgeladen {datum(eintrag.aktualisiert)} · {eintrag.downloads}× heruntergeladen</span>}
         </p>
-        <label>
-          Online-Server
-          <input value={addr} onChange={(e) => setAddr(e.target.value)} />
-        </label>
         <label>
           Autor (wird im Katalog angezeigt)
           <input value={autor} maxLength={40} onChange={(e) => setAutor(e.target.value)} />
@@ -207,7 +194,7 @@ export function VeroeffentlichenDialog(props: { scn: Scenario; eintrag?: Katalog
 
 /** Öffentliche Leitstellen auf dem Online-Server durchsuchen und herunterladen */
 export function KatalogListe(props: { lokal: ScenarioInfo[]; onGeladen: () => void }) {
-  const [addr, setAddr] = useState(katalogServer);
+  const addr = katalogServer();
   const [liste, setListe] = useState<KatalogEintrag[] | null>(null);
   const [suche, setSuche] = useState('');
   const [err, setErr] = useState('');
@@ -220,7 +207,6 @@ export function KatalogListe(props: { lokal: ScenarioInfo[]; onGeladen: () => vo
     try {
       const l = await ladeKatalog(addr);
       setListe(l.leitstellen);
-      merkeServer(addr);
       void ladeEigene();
     } catch (e) {
       setListe(null);
@@ -240,8 +226,8 @@ export function KatalogListe(props: { lokal: ScenarioInfo[]; onGeladen: () => vo
   return (
     <div>
       <div className="row">
-        <input className="grow" value={addr} onChange={(e) => setAddr(e.target.value)} title="Online-Server" />
-        <button onClick={laden}>Laden</button>
+        <span className="grow muted small">Leitstellen auf dem Online-Server</span>
+        <button onClick={laden}>Aktualisieren</button>
       </div>
       {liste && (
         <input className="kat-suche" value={suche} onChange={(e) => setSuche(e.target.value)} placeholder="Suchen nach Leitstelle, Ort, Autor …" />

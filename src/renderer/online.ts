@@ -3,8 +3,14 @@ import { gzipSync, strToU8 } from 'fflate';
 import { ONLINE_PORT, type SitzungListe } from '../../shared/protocol';
 import type { Scenario } from '../../shared/types';
 
-/** Offizieller Online-Server, vorbelegt im Menü „Online spielen“ */
+/** Der offizielle Online-Server: Online-Sitzungen und Leitstellen-Katalog laufen fest über ihn */
 export const STANDARD_SERVER = 'https://v35242.1blu.de';
+
+/** Online-Server dieses Spiels. Die Web-App wird vom Online-Server selbst ausgeliefert und spricht mit ihm. */
+export function onlineServer(): string {
+  if (typeof location !== 'undefined' && /^https?:$/.test(location.protocol) && !/^(localhost|127\.)/.test(location.hostname)) return location.origin;
+  return STANDARD_SERVER;
+}
 
 /** Dauerhafte Kennung dieser Installation: Der Server lässt je Kennung nur eine Sitzung zu */
 export function clientId(): string {
