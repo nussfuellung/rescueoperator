@@ -26,11 +26,13 @@ describe('IVENA-Fachbereiche', () => {
     const scn = JSON.parse(gunzipSync(readFileSync(new URL('../assets/ils-wuerzburg.json.gz', import.meta.url))).toString()) as Scenario;
     const lohr = scn.hospitals.find((h) => h.name === 'Klinikum Main-Spessart Lohr');
     expect(lohr?.specialties).toEqual(expect.arrayContaining(['Kardiologie (HKL)', 'Stroke Unit', 'Urologie', 'Gynäkologie']));
-    for (const fach of ['Urologie', 'Gynäkologie', 'Geburtshilfe', 'HNO', 'Augenheilkunde', 'Psychiatrie'])
+    for (const fach of ['Urologie', 'Gynäkologie', 'Geburtshilfe', 'HNO', 'Psychiatrie'])
       expect(scn.hospitals.filter((h) => h.specialties.includes(fach)).length, fach).toBeGreaterThanOrEqual(2);
-    // Kein Brandverletztenzentrum im Bereich: Erstversorgung in der Unfallchirurgie
-    expect(scn.hospitals.some((h) => h.specialties.includes('Verbrennungen'))).toBe(false);
-    expect(zielFach('Verbrennungen', scn.hospitals)).toBe('Unfallchirurgie');
+    // Brandverletzte nach Frankfurt oder Offenbach; ohne Zentrum Erstversorgung in der Unfallchirurgie
+    expect(scn.hospitals.filter((h) => h.specialties.includes('Verbrennungen')).map((h) => h.id).sort()).toEqual(['h_bgu_frankfurt', 'h_offenbach']);
+    expect(zielFach('Verbrennungen', scn.hospitals)).toBe('Verbrennungen');
+    expect(zielFach('Verbrennungen', scn.hospitals.filter((h) => !h.specialties.includes('Verbrennungen')))).toBe('Unfallchirurgie');
+    expect(scn.hospitals.find((h) => h.id === 'h_kms_lohr')!.specialties).not.toContain('Augenheilkunde');
     expect(zielFach('Urologie', scn.hospitals)).toBe('Urologie');
   });
 });
