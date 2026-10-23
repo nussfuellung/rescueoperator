@@ -182,6 +182,38 @@ export interface Scenario {
   addresses?: Address[];
   /** Digitalfunk-Rufgruppen; fehlen sie, werden Standardgruppen erzeugt */
   tmoGroups?: TmoGroup[];
+  /** Ersteller, wird im Leitstellen-Katalog angezeigt */
+  autor?: string;
+  /** Kurzbeschreibung für den Leitstellen-Katalog */
+  beschreibung?: string;
+  /** Aus dem Leitstellen-Katalog heruntergeladen: Server, Kennung und Autor des Originals */
+  herkunft?: { server: string; id: string; autor: string };
+  /** Nachbarleitstellen, bei denen über die ESWL Rettungsmittel nach Typ angefordert werden können */
+  nachbarn?: NachbarLeitstelle[];
+}
+
+/** Nachbar-ILS für die ESWL (Einsatzübergreifende Schnittstelle Leitstelle): Rettungsmittel außerhalb des eigenen Bereichs */
+export interface NachbarLeitstelle {
+  id: string;
+  /** z. B. "ILS Schweinfurt" */
+  name: string;
+  /** Rettungsmittel mit Standort; Koordinaten dürfen außerhalb der Karte liegen */
+  fahrzeuge: NachbarFahrzeug[];
+  /** Anteil der Anforderungen (0 bis 1), die die Nachbar-ILS mangels freier Fahrzeuge ablehnt */
+  ablehnung: number;
+  /** Eigene RD-Rufgruppe, in der sich Fahrzeuge dieser ILS beim Ein- und Ausfahren melden */
+  tmo?: string;
+}
+
+export interface NachbarFahrzeug {
+  id: string;
+  callsign: string;
+  type: VehicleTypeId;
+  /** Wache oder Standort, z. B. "RW Schweinfurt" oder "Christoph 18, Ochsenfurt" */
+  wache: string;
+  x: number;
+  y: number;
+  dienst?: Dienstzeit[];
 }
 
 // ---------- Laufzeitzustand (Server -> Client) ----------
