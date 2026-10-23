@@ -12,7 +12,7 @@ import { RadioPanel } from './RadioPanel';
 import { CrewView } from './CrewView';
 import { PANEL_TITLES, Popout, type PanelId } from '../Popout';
 import { SettingsModal, useSttAutoload } from '../SettingsModal';
-import { getSettings } from '../settings';
+import { getSettings, updateSettings, useSettings } from '../settings';
 import { piperInfo, radioSpeech, say, stopSpeaking } from '../audio/tts';
 import { attachPttKeys, speechInput } from '../audio/stt';
 import { buildVocab } from '../../../shared/speechfix';
@@ -69,6 +69,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
   const net = useNet();
   const scn = net.scenario!;
   const state = net.state;
+  const settings = useSettings();
   const graph = useMemo(() => new RoadGraph(scn), [scn]);
   const [selectedIncident, setSelectedIncident] = useState<string | null>(null);
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
@@ -176,7 +177,20 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
           }}
           hitKinds={['unit', 'incident']}
           onClick={onMapClick}
+          filter={{ hideStatus2: settings.mapHideStatus2, hideBuildings: settings.mapHideBuildings }}
         />
+        <div className="map-filter">
+          <label title="Fahrzeuge im Status 2 auf der Karte ausblenden; ausgewählte Fahrzeuge bleiben sichtbar">
+            <input type="checkbox" checked={!settings.mapHideStatus2} onChange={(e) => updateSettings({ mapHideStatus2: !e.target.checked })} />
+            <span className="switch" />
+            Status 2
+          </label>
+          <label title="Wachen, Kliniken und Objekte auf der Karte ausblenden">
+            <input type="checkbox" checked={!settings.mapHideBuildings} onChange={(e) => updateSettings({ mapHideBuildings: !e.target.checked })} />
+            <span className="switch" />
+            Gebäude
+          </label>
+        </div>
         <div className="map-legend">Linksklick: auswählen bzw. Einsatzort setzen · Ziehen: verschieben · Mausrad: zoomen</div>
       </div>
     ),

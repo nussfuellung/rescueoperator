@@ -19,6 +19,10 @@ export interface Settings {
   tileUrl: string;
   /** Faktor für die Zoomgeschwindigkeit mit Mausrad und Touchpad, 1 = normal */
   zoomSpeed: number;
+  /** Schalter auf der Karte: Fahrzeuge im Status 2 ausblenden */
+  mapHideStatus2: boolean;
+  /** Schalter auf der Karte: Wachen, Kliniken und Objekte ausblenden */
+  mapHideBuildings: boolean;
   theme: Theme;
 }
 
@@ -37,6 +41,8 @@ const DEFAULTS: Settings = {
   mapTiles: true,
   tileUrl: DEFAULT_TILE_URL,
   zoomSpeed: 1,
+  mapHideStatus2: false,
+  mapHideBuildings: false,
   theme: 'dark',
 };
 

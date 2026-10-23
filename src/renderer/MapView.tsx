@@ -43,6 +43,22 @@ interface Props {
   onDrag?: (hit: Hit, p: Vec) => void;
   onDragEnd?: (hit: Hit) => void;
   hitKinds?: HitKind[];
+  filter?: MapFilter;
+}
+
+/** Ein- und Ausblenden von Kartenelementen über die Schalter auf der Karte */
+export interface MapFilter {
+  /** Fahrzeuge im Status 2 ausblenden (ausgewählte und markierte bleiben sichtbar) */
+  hideStatus2?: boolean;
+  /** Wachen, Kliniken und Objekte ausblenden */
+  hideBuildings?: boolean;
+}
+
+/** Wird das Fahrzeug durch den Kartenfilter ausgeblendet? */
+function filteredOut(u: UnitState, data: MapData | undefined, filter: MapFilter | undefined): boolean {
+  if (!filter?.hideStatus2 || u.status !== 2) return false;
+  if (data?.selectedUnitId === u.id || data?.highlightUnitIds?.includes(u.id)) return false;
+  return !(data?.ping?.unitId === u.id && Date.now() < data.ping.until);
 }
 
 const ROAD_STYLE: Record<RoadType, { casing: string; fill: string; width: number; minPx: number }> = {
@@ -182,13 +198,15 @@ export function MapView(props: Props) {
       if (allow('unit')) {
         for (const u of [...(p.data?.units ?? [])].reverse()) {
           if (u.task === 'station' && view.current.scale < (scn.stations.length > 40 ? 0.3 : 0.12)) continue;
+          if (filteredOut(u, p.data, p.filter)) continue;
           if (near(unitDrawPos(u, scn, p.data?.units ?? [], view.current.scale), 14)) return { kind: 'unit', id: u.id };
         }
       }
       if (allow('incident')) for (const i of p.data?.incidents ?? []) if (i.status !== 'abgeschlossen' && near(i, 14)) return { kind: 'incident', id: i.id };
-      if (allow('station')) for (const s of scn.stations) if (near(s)) return { kind: 'station', id: s.id };
-      if (allow('hospital')) for (const h of scn.hospitals) if (near(h)) return { kind: 'hospital', id: h.id };
-      if (allow('object')) for (const o of scn.objects) if (near(o, 9)) return { kind: 'object', id: o.id };
+      const buildings = !p.filter?.hideBuildings;
+      if (allow('station') && buildings) for (const s of scn.stations) if (near(s)) return { kind: 'station', id: s.id };
+      if (allow('hospital') && buildings) for (const h of scn.hospitals) if (near(h)) return { kind: 'hospital', id: h.id };
+      if (allow('object') && buildings) for (const o of scn.objects) if (near(o, 9)) return { kind: 'object', id: o.id };
       if (allow('node') && p.editor?.showNodes && view.current.scale > 0.1) for (const n of scn.nodes) if (near(n, 7)) return { kind: 'node', id: n.id };
       if (allow('town')) for (const t of scn.towns) if (near(t, 14)) return { kind: 'town', id: t.id };
       if (allow('road')) {
@@ -429,6 +447,8 @@ export function MapView(props: Props) {
           }
         }
 
+        if (p.filter?.hideBuildings) return;
+
         // Objekte
         for (const o of scn.objects) {
           const [x, y] = toScreen(o);
@@ -476,7 +496,7 @@ export function MapView(props: Props) {
       // Hintergrund, Straßen, Straßennamen und Wachen liegen in einer zwischengespeicherten Ebene. Beim Verschieben und
       // Zoomen wird diese Ebene nur verschoben bzw. skaliert und erst neu gezeichnet, wenn die Bewegung kurz ruht.
       const settings0 = getSettings();
-      const otherKey = [w, h, dpr, segVersion.current, labelsRef.current.length, settings0.mapTiles, settings0.tileUrl, p.editor?.selected?.id, scn.stations.length, scn.hospitals.length, scn.objects.length].join('|');
+      const otherKey = [w, h, dpr, segVersion.current, labelsRef.current.length, settings0.mapTiles, settings0.tileUrl, p.editor?.selected?.id, scn.stations.length, scn.hospitals.length, scn.objects.length, !!p.filter?.hideBuildings].join('|');
       const viewKey = `${v.cx}|${v.cy}|${v.scale}`;
       if (viewKey !== lastView.current.key) lastView.current = { key: viewKey, t: now };
       const moving = now - lastView.current.t < 160;
@@ -573,7 +593,7 @@ export function MapView(props: Props) {
 
       // Fahrwege: Rest der Route jedes fahrenden Fahrzeugs auf den Straßen
       for (const u of p.data?.units ?? []) {
-        if (!u.route?.length) continue;
+        if (!u.route?.length || filteredOut(u, p.data, p.filter)) continue;
         const sel = p.data?.selectedUnitId === u.id || p.data?.highlightUnitIds?.includes(u.id);
         ctx.strokeStyle = FMS_COLOR[u.status] ?? '#333';
         ctx.globalAlpha = sel ? 0.9 : 0.55;
@@ -620,6 +640,7 @@ export function MapView(props: Props) {
       const units = p.data?.units ?? [];
       for (const u of units) {
         if (u.task === 'station' && v.scale < (scn.stations.length > 40 ? 0.3 : 0.12)) continue;
+        if (filteredOut(u, p.data, p.filter)) continue;
         const pos = u.task === 'station' ? unitDrawPos(u, scn, units, v.scale) : shown.get(u.id) ?? u;
         const [x, y] = toScreen(pos);
         if (x < -60 || x > w + 60 || y < -20 || y > h + 20) continue;
