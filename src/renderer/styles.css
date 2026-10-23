@@ -1885,3 +1885,9 @@ button.attention { border-color: var(--accent); color: var(--accent); }
   align-items: center;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
 }
+
+/* ESWL: Anforderungen bei Nachbarleitstellen */
+.eswl-req { padding: 2px 6px; }
+.eswl-req.zugesagt { color: var(--ok); }
+.eswl-req.abgelehnt { color: var(--danger); }
+.eswl-group .station-name { font-style: italic; }

@@ -284,6 +284,8 @@ export interface UnitState {
   tmo?: string;
   /** Gebietsabsicherung: Standort, an dem das Fahrzeug bereitsteht */
   cover?: { name: string; x: number; y: number; stationId?: string };
+  /** Über die ESWL von einer Nachbar-ILS entsandt: gehört nicht zum eigenen Bereich und fährt danach heim */
+  fremd?: { nachbarId: string; ils: string; wache: string; imBereich: boolean };
 }
 
 export interface CallLine {
@@ -382,6 +384,21 @@ export interface IncidentState {
   tmo?: string;
   /** Polizei verständigt */
   polizei?: 'angefordert' | 'vor Ort';
+  /** Anforderungen bei Nachbarleitstellen über die ESWL */
+  eswl?: EswlAnforderung[];
+}
+
+export interface EswlAnforderung {
+  id: string;
+  nachbarId: string;
+  ils: string;
+  type: VehicleTypeId;
+  t: number;
+  status: 'angefragt' | 'zugesagt' | 'abgelehnt';
+  /** Entsandtes Fahrzeug bei Zusage */
+  callsign?: string;
+  /** Grund der Ablehnung oder voraussichtliche Anfahrt */
+  text?: string;
 }
 
 export interface RadioMessage {

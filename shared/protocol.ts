@@ -134,6 +134,8 @@ export type Action =
   | { a: 'groupCall'; group: string; text: string }
   | { a: 'crewTmo'; group: string }
   | { a: 'alarm'; incidentId: string; unitIds: string[] }
+  /** ESWL: Rettungsmittel eines Typs bei einer Nachbarleitstelle anfordern */
+  | { a: 'eswl'; incidentId: string; nachbarId: string; type: string }
   | { a: 'releaseUnit'; unitId: string }
   /** Gebietsabsicherung: Fahrzeuge an eine Wache oder einen Punkt auf der Karte verlegen */
   | { a: 'cover'; unitIds: string[]; stationId?: string; x?: number; y?: number; name?: string }

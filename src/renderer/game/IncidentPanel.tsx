@@ -60,7 +60,7 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
     const start = graph.nearestNode(inc);
     const { time } = graph.dijkstra(start, true);
     const free = state.units
-      .filter((u) => !u.incidentId && [1, 2].includes(u.baseStatus))
+      .filter((u) => !u.incidentId && !u.fremd && [1, 2].includes(u.baseStatus))
       .map((u) => {
         const n = graph.nearestNode(u);
         const t = types.get(u.type);
@@ -267,6 +267,8 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
         </>
       )}
 
+      {((scn.nachbarn ?? []).length > 0 || (inc.eswl ?? []).length > 0) && <EswlBox ctx={ctx} inc={inc} />}
+
       <details className="log">
         <summary>Einsatzprotokoll ({inc.log.length})</summary>
         {inc.log.map((l, i) => (
@@ -276,6 +278,52 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
         ))}
       </details>
     </div>
+  );
+}
+
+/** ESWL: Rettungsmittel nach Typ bei einer Nachbarleitstelle anfordern */
+function EswlBox({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
+  const { scn } = ctx;
+  const nachbarn = scn.nachbarn ?? [];
+  const [nbId, setNbId] = useState(nachbarn[0]?.id ?? '');
+  const nb = nachbarn.find((n) => n.id === nbId) ?? nachbarn[0];
+  const typen = nb ? [...new Set(nb.fahrzeuge.map((f) => f.type))] : [];
+  const [type, setType] = useState('');
+  const typ = typen.includes(type) ? type : typen[0] ?? '';
+  const label = (t: string) => scn.vehicleTypes.find((x) => x.id === t)?.label ?? t;
+  return (
+    <>
+      <div className="panel-subtitle">
+        ESWL <span className="muted small">Rettungsmittel bei einer Nachbarleitstelle anfordern</span>
+      </div>
+      {inc.status !== 'abgeschlossen' && nb && (
+        <div className="row">
+          <select className="grow" value={nb.id} onChange={(e) => setNbId(e.target.value)}>
+            {nachbarn.map((n) => (
+              <option key={n.id} value={n.id}>
+                {n.name}
+              </option>
+            ))}
+          </select>
+          <select value={typ} onChange={(e) => setType(e.target.value)}>
+            {typen.map((t) => (
+              <option key={t} value={t}>
+                {label(t)}
+              </option>
+            ))}
+          </select>
+          <button disabled={!typ} onClick={() => conn.send({ a: 'eswl', incidentId: inc.id, nachbarId: nb.id, type: typ })}>
+            Anfordern
+          </button>
+        </div>
+      )}
+      {(inc.eswl ?? []).map((r) => (
+        <div key={r.id} className={`small eswl-req ${r.status}`}>
+          <span className="muted">{formatClock(ctx.state.clockStart, r.t)}</span> {label(r.type)} bei {r.ils}:{' '}
+          {r.status === 'angefragt' ? 'angefragt, warte auf Antwort…' : r.status === 'zugesagt' ? `zugesagt, ${r.callsign}${r.text ? ` (${r.text})` : ''}` : `abgelehnt${r.text ? ` – ${r.text}` : ''}`}
+        </div>
+      ))}
+    </>
   );
 }
 

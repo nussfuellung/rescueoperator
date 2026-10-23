@@ -72,6 +72,7 @@ Die Rolle wird beim Start gewählt und kann jederzeit oben rechts gewechselt wer
 - Bei Status 1 melden sich die Fahrzeuge an der Einsatzstelle oder am Krankenhaus per Sprechfunk frei. Fahrzeuge mit Schichtplan melden sich bei Dienstbeginn per Sprechwunsch mit ihrem Dienstende an und bei Dienstschluss ab. Im Einsatz meldet sich niemand ab, das passiert erst nach der Rückkehr auf die Wache.
 - Nachforderungen selbst alarmieren. Unvollständige Kräfte arbeiten langsamer, nach 4 Minuten erinnert das Fahrzeug erneut.
 - Zielklinik nach benötigter Fachrichtung zuweisen (Stroke Unit, HKL, Unfallchirurgie, Pädiatrie …).
+- **ESWL**: Reicht der eigene Rettungsdienst nicht, im Einsatz unter „ESWL“ eine Nachbarleitstelle und einen Fahrzeugtyp wählen und anfordern. Die Nachbar-ILS antwortet nach etwa einer Minute: Sie entsendet ihr nächstes freies Fahrzeug des Typs oder lehnt ab, wenn keines verfügbar ist. Fremdfahrzeuge melden sich beim Einfahren in den eigenen Bereich in der RD-Rufgruppe an, beim Verlassen ab, und fahren nach dem Einsatz zurück zu ihrer Wache. Die ILS Würzburg kennt die Rettungsmittel der ILS Schweinfurt, Bayerischer Untermain, Ansbach und Main-Tauber sowie die Rettungshubschrauber Christoph 2, 20, 27, 28, 53, 65 und Christoph Nürnberg.
 - Falsch erfasster Einsatzort: Die Kräfte finden nichts, suchen einige Minuten und verlieren dabei Zeit.
 
 **Fahrzeugbesatzung**
