@@ -83,6 +83,7 @@ describe('Funk und Einsätze', () => {
     expect(game.radioReply(u, 'Wie lange braucht ihr noch?')).toMatch(/ohne Einsatz/);
   });
 
+  // 60 Notrufe erzeugen dauert allein gut 3 s, bei voller Testlast länger als die Standardgrenze von 5 s
   it('wiederholt Einsätze seltener und liefert meist eine AML', () => {
     const game = new Game(wue(), { seed: 3 });
     const ids: string[] = [];
@@ -101,5 +102,5 @@ describe('Funk und Einsätze', () => {
     expect(repeats).toBeLessThan(6);
     expect(new Set(ids).size).toBeGreaterThan(20);
     expect(aml / mobile).toBeGreaterThan(0.8);
-  });
+  }, 20000);
 });
