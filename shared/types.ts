@@ -182,6 +182,12 @@ export interface Scenario {
   addresses?: Address[];
   /** Digitalfunk-Rufgruppen; fehlen sie, werden Standardgruppen erzeugt */
   tmoGroups?: TmoGroup[];
+  /** Ersteller, wird im Leitstellen-Katalog angezeigt */
+  autor?: string;
+  /** Kurzbeschreibung für den Leitstellen-Katalog */
+  beschreibung?: string;
+  /** Aus dem Leitstellen-Katalog heruntergeladen: Server, Kennung und Autor des Originals */
+  herkunft?: { server: string; id: string; autor: string };
 }
 
 // ---------- Laufzeitzustand (Server -> Client) ----------

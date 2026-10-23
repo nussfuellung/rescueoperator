@@ -31,6 +31,68 @@ export interface SitzungListe {
   sitzungen: SitzungInfo[];
 }
 
+// ---------- Leitstellen-Katalog des Online-Servers ----------
+// Spieler veröffentlichen eigene Leitstellen für alle oder stellen sie wieder auf privat.
+// Besitz weist der geheime Autorenschlüssel nach (Kopfzeile KATALOG_SCHLUESSEL_HEADER), den nur die Installation kennt.
+//
+//   GET    /api/katalog         öffentliche Leitstellen (KatalogListe)
+//   GET    /api/katalog/meine   eigene Leitstellen samt privaten (Schlüssel nötig)
+//   GET    /api/katalog/:id     KatalogDownload; private nur mit Schlüssel des Autors
+//   PUT    /api/katalog/:id     anlegen oder ersetzen (KatalogHochladen), Antwort KatalogEintrag
+//   PATCH  /api/katalog/:id     { sichtbarkeit }, Antwort KatalogEintrag
+//   DELETE /api/katalog/:id     vom Server entfernen
+// Fehler kommen als { error: string } mit deutschem Text; 403, wenn die Kennung einem anderen Autor gehört.
+
+/** Kopfzeile mit dem Autorenschlüssel (zufällig, 64 Hex-Zeichen) */
+export const KATALOG_SCHLUESSEL_HEADER = 'x-autor-schluessel';
+/** Größte Leitstelle, die der Katalog annimmt (gepackt, vor Base64) */
+export const KATALOG_MAX_BYTES = 16 * 1024 * 1024;
+
+export interface KatalogEintrag {
+  /** Kennung der Leitstelle (Scenario.id) */
+  id: string;
+  ilsName: string;
+  name: string;
+  autor: string;
+  beschreibung: string;
+  sichtbarkeit: Sichtbarkeit;
+  orte: number;
+  wachen: number;
+  fahrzeuge: number;
+  kliniken: number;
+  /** aus OpenStreetMap erzeugt (mit Kartenkacheln) */
+  echteKarte: boolean;
+  /** Größe gepackt in Bytes */
+  groesse: number;
+  /** SHA-256 (hex) des Leitstellen-JSON, wie bei Sitzungen */
+  hash: string;
+  /** Zeitpunkte in ms seit 1970 */
+  veroeffentlicht: number;
+  aktualisiert: number;
+  downloads: number;
+  /** Spielversion, mit der hochgeladen wurde */
+  spielVersion: string;
+}
+
+export interface KatalogListe {
+  version: string;
+  leitstellen: KatalogEintrag[];
+}
+
+export interface KatalogHochladen {
+  /** Leitstelle als gzip-komprimiertes JSON in Base64 */
+  szenarioGz: string;
+  autor: string;
+  beschreibung: string;
+  sichtbarkeit: Sichtbarkeit;
+  spielVersion: string;
+}
+
+export interface KatalogDownload {
+  eintrag: KatalogEintrag;
+  szenarioGz: string;
+}
+
 export type Action =
   | { a: 'setRole'; role: Role; unitId?: string }
   | { a: 'start' }
