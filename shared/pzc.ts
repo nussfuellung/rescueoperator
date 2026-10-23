@@ -70,6 +70,16 @@ export function pzcFachbereich(code: string): string {
   return 'Innere Medizin';
 }
 
+/** Ersatz, wenn keine Klinik im Leitstellenbereich den Fachbereich hat (z. B. kein Brandverletztenzentrum):
+ *  Erstversorgung dort, Weiterverlegung über die Zentrale Anlaufstelle */
+const ERSATZ: Record<string, string> = { Verbrennungen: 'Unfallchirurgie' };
+
+/** Fachbereich, den die Zielklinik im Leitstellenbereich tatsächlich haben muss */
+export function zielFach(fach: string, hospitals: { specialties: string[] }[]): string {
+  if (hospitals.some((h) => h.specialties.includes(fach))) return fach;
+  return ERSATZ[fach] ?? 'Innere Medizin';
+}
+
 export interface PzcInfo {
   pzc: string;
   eintrag?: PzcEintrag;

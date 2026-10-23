@@ -25,7 +25,7 @@ import type {
 import { ensureTmo } from '../shared/fleet';
 import { inDienst } from '../shared/lstsim';
 import { HAEUFIGKEIT_STUNDEN, dateForSeason, seasonOf, tageszeitFaktor, type Haeufigkeit, type Season } from '../shared/jahreszeit';
-import { pzcFachbereich, pzcFuer, pzcSprech } from '../shared/pzc';
+import { pzcFachbereich, pzcFuer, pzcSprech, zielFach } from '../shared/pzc';
 import {
   BMA_TEMPLATE,
   FIRST_NAMES,
@@ -1349,7 +1349,7 @@ export class Game {
     const pat = truth?.patients.find((p) => p.unitId === u.id && !p.done);
     let trotz = false;
     if (pat && inc) {
-      const fach = pzcFachbereich(pat.pzc);
+      const fach = zielFach(pzcFachbereich(pat.pzc), this.scn.hospitals);
       const ab = this.abgemeldet(h.id, fach);
       const alternative = this.scn.hospitals.some((o) => o.id !== h.id && o.specialties.includes(fach) && !this.abgemeldet(o.id, fach));
       if (!h.specialties.includes(fach)) this.addScore(-10, `${inc.nr}: ${h.name} hat keine ${fach}`);

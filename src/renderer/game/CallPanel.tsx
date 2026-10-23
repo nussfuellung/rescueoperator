@@ -7,7 +7,7 @@ import { computeProposal } from '../../../shared/dispatch';
 import { aaoMitSchlagwort, findSchlagwort, formatSchlagwort, schlagwortByNr, searchSchlagworte } from '../../../shared/schlagworte';
 import { SchlagwortSelect } from './SchlagwortSelect';
 import { HospitalSelect } from './Ivena';
-import { decodePzc, pzcText } from '../../../shared/pzc';
+import { decodePzc, pzcText, zielFach } from '../../../shared/pzc';
 import type { CallState, IncidentState, QuestionId, Vec } from '../../../shared/types';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
@@ -145,7 +145,7 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
                 </div>
                 <div className="small">
                   PZC <code>{c.rtw!.pzc}</code> {pzcText(c.rtw!.pzc)}
-                  {d && <span className="muted"> · benötigt {d.fach}</span>}
+                  {d && <span className="muted"> · benötigt {zielFach(d.fach, ctx.scn.hospitals)}</span>}
                 </div>
                 <div className="row">
                   {u && u.task === 'awaitHospital' && !u.hospitalId && <HospitalSelect ctx={ctx} u={u} />}
