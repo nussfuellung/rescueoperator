@@ -1,7 +1,7 @@
 // Fahrzeugstatus-Tableau mit Bedienleiste für das ausgewählte Fahrzeug.
 import { HospitalSelect } from './Ivena';
 import { useEffect, useRef, useState } from 'react';
-import { FMS_COLOR, FMS_TEXT, formatDuration, shortCallsign } from '../../../shared/catalog';
+import { FMS_COLOR, FMS_TEXT, formatDuration, radioName, shortCallsign } from '../../../shared/catalog';
 import type { Station, UnitState } from '../../../shared/types';
 import { dienstText } from '../../../shared/lstsim';
 import { conn } from '../net';
@@ -24,7 +24,7 @@ const TASK_TEXT: Record<UnitState['task'], string> = {
 };
 
 /** Zur Gebietsabsicherung verlegbar: frei, ohne Einsatz und ohne Patient */
-const canCover = (u: UnitState) => !u.incidentId && !u.hasPatient && (u.baseStatus === 1 || u.baseStatus === 2);
+const canCover = (u: UnitState) => !u.incidentId && !u.hasPatient && !u.fremd && (u.baseStatus === 1 || u.baseStatus === 2);
 /** H – Fahren Sie Wache an: nur außerhalb der Wache und ohne Patient */
 const canSendHome = (u: UnitState) => !u.hasPatient && u.task !== 'returning' && (u.task !== 'station' || !!u.incidentId);
 
@@ -49,6 +49,28 @@ export function UnitBoard({ ctx }: { ctx: GameCtx }) {
     (st) =>
       (!group || st.tmo === group) &&
       (!ql || st.name.toLowerCase().includes(ql) || st.vehicles.some((v) => v.callsign.toLowerCase().includes(ql))),
+  );
+  const fremd = state.units.filter((u) => u.fremd && (!ql || u.callsign.toLowerCase().includes(ql) || u.fremd.ils.toLowerCase().includes(ql)));
+  const tile = (u: UnitState) => (
+    <button
+      key={u.id}
+      className={`tile ${u.status === 5 ? 'speak' : ''} ${u.id === ctx.selectedUnit ? 'selected' : ''} ${u.crewPlayerId ? 'manned' : ''} ${u.cover ? 'covering' : ''}`}
+      style={{ background: FMS_COLOR[u.status] }}
+      title={`${u.callsign} – ${FMS_TEXT[u.status]}${u.cover ? ` – Gebietsabsicherung ${u.cover.name}` : ''}${u.crewPlayerId ? ' (Spieler)' : ''}${u.fremd ? ` – ${u.fremd.ils}, ${u.fremd.wache}` : ''}`}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        ctx.setSelectedUnit(u.id);
+        setMenu({ unitId: u.id, x: e.clientX, y: e.clientY });
+      }}
+      onClick={() => {
+        ctx.setSelectedUnit(u.id);
+        if (u.incidentId) ctx.setSelectedIncident(u.incidentId);
+        ctx.focus(u);
+      }}
+    >
+      <span className="st">{u.status}</span>
+      <span>{u.fremd ? radioName(u.callsign) : shortCallsign(u.callsign)}</span>
+    </button>
   );
   return (
     <div className="panel unitboard">
@@ -93,35 +115,21 @@ export function UnitBoard({ ctx }: { ctx: GameCtx }) {
         </select>
       </div>
       <div className="stations">
+        {fremd.length > 0 && (
+          <div className="station-group eswl-group">
+            <div className="station-name" title="Über die ESWL von Nachbarleitstellen angeforderte Rettungsmittel">
+              ESWL – Fahrzeuge der Nachbarleitstellen
+            </div>
+            <div className="tiles">{fremd.map(tile)}</div>
+          </div>
+        )}
         {shown.map((st) => (
           <div key={st.id} className="station-group">
             <div className="station-name" title={st.name}>
               {st.name}
             </div>
             <div className="tiles">
-              {state.units
-                .filter((u) => u.stationId === st.id)
-                .map((u) => (
-                  <button
-                    key={u.id}
-                    className={`tile ${u.status === 5 ? 'speak' : ''} ${u.id === ctx.selectedUnit ? 'selected' : ''} ${u.crewPlayerId ? 'manned' : ''} ${u.cover ? 'covering' : ''}`}
-                    style={{ background: FMS_COLOR[u.status] }}
-                    title={`${u.callsign} – ${FMS_TEXT[u.status]}${u.cover ? ` – Gebietsabsicherung ${u.cover.name}` : ''}${u.crewPlayerId ? ' (Spieler)' : ''}`}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      ctx.setSelectedUnit(u.id);
-                      setMenu({ unitId: u.id, x: e.clientX, y: e.clientY });
-                    }}
-                    onClick={() => {
-                      ctx.setSelectedUnit(u.id);
-                      if (u.incidentId) ctx.setSelectedIncident(u.incidentId);
-                      ctx.focus(u);
-                    }}
-                  >
-                    <span className="st">{u.status}</span>
-                    <span>{shortCallsign(u.callsign)}</span>
-                  </button>
-                ))}
+              {state.units.filter((u) => u.stationId === st.id).map(tile)}
             </div>
           </div>
         ))}
@@ -315,6 +323,11 @@ function UnitControl({ ctx, u, onCover }: { ctx: GameCtx; u: UnitState; onCover:
             {u.cover && !inc ? ` · ${u.cover.name}` : ''}
           </div>
           {def?.dienst && <div className="small muted">Dienst: {dienstText(def.dienst)}</div>}
+          {u.fremd && (
+            <div className="small muted">
+              ESWL: {u.fremd.ils}, {u.fremd.wache} · {u.fremd.imBereich ? 'im eigenen Bereich' : 'außerhalb des Bereichs'}
+            </div>
+          )}
         </div>
         <button className="small-btn" onClick={() => ctx.setSelectedUnit(null)}>
           ✕

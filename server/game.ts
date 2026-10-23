@@ -17,7 +17,10 @@ import type {
   QuestionId,
   RadioMessage,
   Role,
+  NachbarFahrzeug,
+  NachbarLeitstelle,
   Scenario,
+  Station,
   UnitState,
   Vec,
   VehicleType,
@@ -198,6 +201,10 @@ export class Game {
   private hilfsSum = 0;
   private penalized = new Set<string>();
   private routeTimes = new Map<string, { times: number[]; t: number }>();
+  /** Heimatstandorte der über die ESWL entsandten Fahrzeuge (nicht in scn.stations) */
+  private fremdStations = new Map<string, Station>();
+  /** Standorte aller Nachbarfahrzeuge, grenzen den eigenen Bereich ab */
+  private nachbarBasen: Vec[] = [];
 
   constructor(scn: Scenario, opts: { seed?: number; events?: GameEvents; startDate?: Date } = {}) {
     this.scn = scn;
@@ -229,6 +236,7 @@ export class Game {
         });
       }
     }
+    this.nachbarBasen = (scn.nachbarn ?? []).flatMap((n) => n.fahrzeuge.map((f) => ({ x: f.x, y: f.y })));
     this.checkDienst();
     this.nextBmaAt = this.expDelay(scn.settings.bmaPerHour);
     if (scn.settings.callsPerHour <= 0) this.nextCallAt = Infinity;
@@ -273,7 +281,7 @@ export class Game {
     return this.types.get(u.type);
   }
   private station(u: UnitState) {
-    return this.scn.stations.find((s) => s.id === u.stationId)!;
+    return this.scn.stations.find((s) => s.id === u.stationId) ?? this.fremdStations.get(u.stationId)!;
   }
   private fill(text: string, t: Truth, phone = '') {
     const f = t.facts;
@@ -733,6 +741,8 @@ export class Game {
       }
       case 'alarm':
         return this.alarm(player, action.incidentId, action.unitIds);
+      case 'eswl':
+        return this.eswl(player, action);
       case 'releaseUnit':
         return this.releaseUnit(action.unitId, true);
       case 'cover':
@@ -1035,6 +1045,7 @@ export class Game {
       if (!u) continue;
       if (u.incidentId && u.incidentId !== inc.id) continue;
       if (u.incidentId === inc.id) continue;
+      if (u.fremd) continue;
       if (![1, 2].includes(u.baseStatus)) continue;
       u.incidentId = inc.id;
       u.cover = undefined;
@@ -1089,6 +1100,10 @@ export class Game {
         reason = `${shortCallsign(u.callsign)} ist im Einsatz`;
         continue;
       }
+      if (u.fremd) {
+        reason = `${u.callsign} gehört zur ${u.fremd.ils}`;
+        continue;
+      }
       if (![1, 2].includes(u.baseStatus)) {
         reason = `${shortCallsign(u.callsign)} ist nicht einsatzbereit`;
         continue;
@@ -1108,6 +1123,155 @@ export class Game {
     }
     if (!sent.length) return reason || 'Keine verfügbaren Fahrzeuge ausgewählt';
     this.events.toast?.(player.id, `Gebietsabsicherung ${target.name}: ${sent.join(', ')}`, 'info');
+  }
+
+  // ---------- ESWL: Rettungsmittel von Nachbarleitstellen ----------
+
+  /**
+   * Anforderung eines Rettungsmittels nach Typ bei einer Nachbar-ILS. Die Nachbarleitstelle antwortet nach
+   * einer Weile: Sie lehnt ab, wenn kein passendes Fahrzeug im Dienst und frei ist oder ihre eigene Lage es
+   * nicht zulässt (Ablehnungsquote), sonst entsendet sie das nächstgelegene Fahrzeug des Typs.
+   */
+  private eswl(player: Player, a: Extract<Action, { a: 'eswl' }>): string | void {
+    const inc = this.incident(a.incidentId);
+    if (!inc) return 'Einsatz nicht gefunden';
+    if (inc.status === 'abgeschlossen') return 'Einsatz ist abgeschlossen';
+    const nb = (this.scn.nachbarn ?? []).find((n) => n.id === a.nachbarId);
+    if (!nb) return 'Nachbarleitstelle nicht gefunden';
+    const label = this.types.get(a.type)?.label ?? a.type;
+    if (!nb.fahrzeuge.some((f) => f.type === a.type)) return `${nb.name} hat kein ${label}`;
+    const req: NonNullable<IncidentState['eswl']>[number] = {
+      id: `eswl${++this.seq.radio}`,
+      nachbarId: nb.id,
+      ils: nb.name,
+      type: a.type,
+      t: this.time,
+      status: 'angefragt',
+    };
+    (inc.eswl ??= []).push(req);
+    this.log(inc, `ESWL: ${label} bei ${nb.name} angefordert (${player.name})`);
+    this.after(this.rand(30, 90) * 1000, () => this.eswlAntwort(inc, nb, req));
+  }
+
+  private eswlAntwort(inc: IncidentState, nb: NachbarLeitstelle, req: NonNullable<IncidentState['eswl']>[number]) {
+    const label = this.types.get(req.type)?.label ?? req.type;
+    if (inc.status === 'abgeschlossen') {
+      req.status = 'abgelehnt';
+      req.text = 'Einsatz bereits beendet';
+      return;
+    }
+    const minute = this.gameMinute();
+    const frei = nb.fahrzeuge.filter(
+      (f) => f.type === req.type && !this.units.some((u) => u.id === this.fremdId(nb, f)) && inDienst(f.dienst, this.startDate, minute),
+    );
+    const ablehnen = !frei.length || this.rng() < Math.max(0, Math.min(1, nb.ablehnung ?? 0));
+    if (ablehnen) {
+      req.status = 'abgelehnt';
+      req.text = this.pick([`kein ${label} verfügbar`, `alle ${label} im Einsatz`, `kein ${label} frei, bitte anderweitig disponieren`]);
+      this.log(inc, `ESWL: ${nb.name} lehnt ab – ${req.text}`);
+      this.events.toast?.('*', `ESWL ${inc.nr}: ${nb.name} lehnt ${label} ab – ${req.text}`, 'warn');
+      return;
+    }
+    const f = frei.reduce((best, x) => (dist(x, inc) < dist(best, inc) ? x : best));
+    const u = this.fremdUnit(nb, f);
+    const air = this.typeOf(u)?.air;
+    const turnout = air ? this.rand(AIR_TURNOUT - 30, AIR_TURNOUT + 30) : this.rand(60, 120);
+    u.incidentId = inc.id;
+    u.task = 'alarmed';
+    u.timer = u.crewPlayerId ? undefined : this.time + turnout * 1000;
+    u.hint = `ESWL-Einsatz für die ${this.scn.ilsName}: ${inc.schlagwort ?? `${inc.stichwort} ${inc.label}`} – ${inc.address}. Beim Einfahren in den Bereich in der Rufgruppe der ${this.scn.ilsName} anmelden.`;
+    this.units.push(u);
+    inc.unitIds.push(u.id);
+    // grobe Anfahrt: Luftlinie, am Boden mit Umwegfaktor und etwa 80 km/h
+    const min = Math.max(1, Math.round((turnout + (air ? dist(f, inc) / AIR_SPEED : (dist(f, inc) * 1.3) / 22)) / 60));
+    req.status = 'zugesagt';
+    req.callsign = u.callsign;
+    req.text = `Anfahrt ca. ${min} min`;
+    this.log(inc, `ESWL: ${nb.name} entsendet ${u.callsign} (${label}) von ${f.wache}, Anfahrt ca. ${min} min`);
+    this.events.toast?.('*', `ESWL ${inc.nr}: ${nb.name} entsendet ${u.callsign}`, 'info');
+    if (!inc.alarmedAt) inc.alarmedAt = this.time;
+    if (inc.status === 'offen') inc.status = 'alarmiert';
+  }
+
+  private fremdId(nb: NachbarLeitstelle, f: NachbarFahrzeug) {
+    return `nb_${nb.id}_${f.id}`;
+  }
+
+  private fremdUnit(nb: NachbarLeitstelle, f: NachbarFahrzeug): UnitState {
+    const stationId = `nbst_${nb.id}_${f.id}`;
+    this.fremdStations.set(stationId, { id: stationId, name: f.wache, kind: 'rettungswache', career: true, x: f.x, y: f.y, vehicles: [] });
+    return {
+      id: this.fremdId(nb, f),
+      callsign: f.callsign,
+      type: f.type,
+      stationId,
+      status: 2,
+      baseStatus: 2,
+      task: 'station',
+      x: f.x,
+      y: f.y,
+      heading: 0,
+      routeIdx: 0,
+      fremd: { nachbarId: nb.id, ils: nb.name, wache: f.wache, imBereich: this.imBereich(f, false) },
+    };
+  }
+
+  /**
+   * Liegt ein Punkt im eigenen Leitstellenbereich? Eigener Bereich ist, was auf der Karte liegt und näher an
+   * einer eigenen Wache ist als an einem Standort der Nachbarn. Der Rand von 500 m verhindert ständiges
+   * An- und Abmelden auf der Grenze.
+   */
+  private imBereich(p: Vec, bisher: boolean): boolean {
+    if (p.x < 0 || p.y < 0 || p.x > this.scn.width || p.y > this.scn.height) return false;
+    let own = Infinity;
+    for (const s of this.scn.stations) own = Math.min(own, dist(s, p));
+    let fremd = Infinity;
+    for (const b of this.nachbarBasen) fremd = Math.min(fremd, dist(b, p));
+    return bisher ? own < fremd + 500 : own < fremd - 500;
+  }
+
+  /** RD-Rufgruppe, in der sich ein Fremdfahrzeug an einer Stelle anmeldet */
+  private eswlGruppe(u: UnitState): string | undefined {
+    const nb = (this.scn.nachbarn ?? []).find((n) => n.id === u.fremd?.nachbarId);
+    const groups = this.scn.tmoGroups ?? [];
+    if (nb?.tmo && groups.some((g) => g.id === nb.tmo)) return nb.tmo;
+    let best: Station | undefined;
+    for (const s of this.scn.stations) if (s.kind === 'rettungswache' && s.tmo && (!best || dist(s, u) < dist(best, u))) best = s;
+    return best?.tmo ?? groups.find((g) => g.use === 'RD')?.id;
+  }
+
+  /** Fremdfahrzeug fährt in den eigenen Bereich ein oder verlässt ihn: Meldung in der RD-Rufgruppe */
+  private checkBereich(u: UnitState) {
+    const f = u.fremd!;
+    const drin = this.imBereich(u, f.imBereich);
+    if (drin === f.imBereich) return;
+    f.imBereich = drin;
+    const air = this.typeOf(u)?.air;
+    const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
+    if (drin) {
+      const group = this.eswlGruppe(u);
+      u.tmo = group;
+      const st = this.fremdStations.get(u.stationId);
+      if (st) st.tmo = group;
+      if (u.crewPlayerId) {
+        u.hint = `Im Bereich der ${this.scn.ilsName}: in Rufgruppe ${this.tmoName(group)} anmelden.`;
+        return;
+      }
+      const ziel = inc ? `zum Einsatz ${inc.address}` : u.hasPatient ? 'mit Patient' : 'auf der Durchfahrt';
+      const text = `${this.scn.ilsName} von ${u.callsign}, ${air ? 'fliegen' : 'fahren'} in Ihren Bereich ein, ${ziel}, Status ${u.status}, kommen.`;
+      this.radioMsg(u.callsign, this.scn.ilsName, text, 'voice', group);
+      this.events.speech?.(text);
+      return;
+    }
+    const group = u.tmo;
+    u.tmo = undefined;
+    if (u.crewPlayerId) {
+      u.hint = `Bereich der ${this.scn.ilsName} verlassen: abmelden und zurück zur ${f.ils}.`;
+      return;
+    }
+    const text = `${this.scn.ilsName} von ${u.callsign}, verlassen Ihren Bereich, melden uns ab zur ${f.ils}, kommen.`;
+    this.radioMsg(u.callsign, this.scn.ilsName, text, 'voice', group);
+    this.events.speech?.(text);
   }
 
   /** FMS-Auftrag H: Fahren Sie Wache an. Beendet auch eine Gebietsabsicherung. */
@@ -1470,7 +1634,18 @@ export class Game {
     } else {
       u.route = r.points;
       // Fahrzeit je Punkt: auf der Autobahn schnell, in der Altstadt langsam
-      this.routeTimes.set(u.id, { times: r.times.map((t) => t / factor), t: 0 });
+      const times = [...r.times];
+      // Anfahrt von außerhalb der Karte (ESWL): Landstraße statt Schritttempo bis zum ersten Knoten bzw. ab dem letzten
+      const fern = 80 / 3.6;
+      const n = times.length;
+      const d0 = dist(r.points[0], r.points[1]);
+      if (n > 2 && d0 > 500) {
+        const delta = times[1] - d0 / fern;
+        for (let i = 1; i < n; i++) times[i] -= delta;
+      }
+      const d1 = dist(r.points[n - 2], r.points[n - 1]);
+      if (n > 2 && d1 > 500) times[n - 1] = times[n - 2] + d1 / fern;
+      this.routeTimes.set(u.id, { times: times.map((t) => t / factor), t: 0 });
     }
     const rt = this.routeTimes.get(u.id)!;
     u.eta = this.time + rt.times[rt.times.length - 1] * 1000;
@@ -2150,6 +2325,7 @@ export class Game {
       }
       if (u.route) {
         const arrived = this.move(u, dt);
+        if (u.fremd) this.checkBereich(u);
         if (arrived) {
           if (u.task === 'toScene') this.arrive(u);
           else if (u.task === 'toHospital') {
@@ -2158,6 +2334,7 @@ export class Game {
             if (u.crewPlayerId) u.hint = 'Patient übergeben? Dann Status 1 drücken.';
             else u.timer = this.time + this.rand(5, 10) * 60_000;
           } else if (u.task === 'toCover') this.arriveCover(u);
+          else if (u.task === 'returning' && u.fremd) u.task = 'station';
           else if (u.task === 'returning') {
             u.task = 'station';
             const st = this.station(u);
@@ -2179,6 +2356,17 @@ export class Game {
           this.addScore(-5, `Sprechwunsch von ${shortCallsign(u.callsign)} seit 3 min unbeantwortet`);
         }
       }
+    }
+
+    // Fremdfahrzeuge nach der Rückkehr an ihre Wache wieder an die Nachbar-ILS abgeben
+    if (this.units.some((u) => u.fremd && u.task === 'station')) {
+      for (const u of this.units.filter((x) => x.fremd && x.task === 'station')) {
+        const p = this.players.find((x) => x.unitId === u.id);
+        if (p) p.unitId = undefined;
+        this.fremdStations.delete(u.stationId);
+        this.routeTimes.delete(u.id);
+      }
+      this.units = this.units.filter((u) => !(u.fremd && u.task === 'station'));
     }
 
     for (const inc of this.incidents) {

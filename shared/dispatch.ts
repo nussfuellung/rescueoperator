@@ -47,12 +47,12 @@ export function computeProposal(
   const assigned = units.filter((u) => u.incidentId === inc.id);
   const left = coverage(aao, assigned, types);
   const start = graph.nearestNode(inc);
-  const candidates = units.filter((u) => !u.incidentId && [1, 2].includes(u.baseStatus));
+  const candidates = units.filter((u) => !u.incidentId && !u.fremd && [1, 2].includes(u.baseStatus));
   const nodeOf = new Map(candidates.map((u) => [u.id, graph.nearestNode(u)]));
   const { time } = graph.dijkstra(start, true, nodeOf.values());
   const stations = new Map(scn.stations.map((s) => [s.id, s]));
   const free = units
-    .filter((u) => !u.incidentId && [1, 2].includes(u.baseStatus))
+    .filter((u) => !u.incidentId && !u.fremd && [1, 2].includes(u.baseStatus))
     .map((u) => {
       const n = nodeOf.get(u.id) ?? graph.nearestNode(u);
       const factor = 1.2 * (types.get(u.type)?.speedFactor ?? 1);

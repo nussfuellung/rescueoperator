@@ -30,6 +30,10 @@ export class GameServer {
       seed,
       events: {
         speech: (text) => this.broadcast({ t: 'speech', text }),
+        toast: (playerId, text, level) => {
+          if (!playerId || playerId === '*') this.broadcast({ t: 'toast', text, level });
+          else for (const [ws, pid] of this.clients) if (pid === playerId) this.send(ws, { t: 'toast', text, level });
+        },
       },
     });
   }
