@@ -1,7 +1,7 @@
 // IVENA: Zuweisung von Patienten an Zielkliniken per PZC und Übersicht, welche Klinik welchen Fachbereich an- oder abgemeldet hat.
 import { useState } from 'react';
 import { SPECIALTIES, formatClock, radioName } from '../../../shared/catalog';
-import { DRINGLICHKEIT, PZC_LISTE, decodePzc, pzcFachbereich, pzcText } from '../../../shared/pzc';
+import { DRINGLICHKEIT, PZC_LISTE, decodePzc, pzcFachbereich, pzcText, zielFach } from '../../../shared/pzc';
 import type { Hospital, PublicState, UnitState } from '../../../shared/types';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
@@ -30,7 +30,8 @@ const abmeldung = (state: PublicState, h: Hospital, fach: string): Ab | undefine
 
 /** Kliniken für einen Patienten: geeignet und angemeldet zuerst, dann nach Entfernung */
 export function rankHospitals(ctx: GameCtx, u: UnitState) {
-  const fach = u.pzc ? decodePzc(u.pzc)?.fach : undefined;
+  const d = u.pzc ? decodePzc(u.pzc) : undefined;
+  const fach = d ? zielFach(d.fach, ctx.scn.hospitals) : undefined;
   return ctx.scn.hospitals
     .map((h) => {
       const has = !fach || h.specialties.includes(fach);
@@ -116,6 +117,12 @@ export function IvenaModal({ ctx, onClose }: { ctx: GameCtx; onClose: () => void
                         <span />
                         <span>
                           benötigter Fachbereich: <b>{d.fach}</b>
+                          {zielFach(d.fach, scn.hospitals) !== d.fach && (
+                            <span className="muted">
+                              {' '}
+                              (im Bereich nicht vorhanden: Erstversorgung {zielFach(d.fach, scn.hospitals)}, Weiterverlegung über die Zentrale Anlaufstelle)
+                            </span>
+                          )}
                         </span>
                       </div>
                     )}

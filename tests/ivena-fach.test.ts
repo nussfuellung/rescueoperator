@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { decodePzc, pzcFuer } from '../shared/pzc';
+import { decodePzc, pzcFuer, zielFach } from '../shared/pzc';
 import { generateScenario } from '../shared/mapgen';
 import { Game } from '../server/game';
 import type { CallState, Scenario, UnitState } from '../shared/types';
@@ -28,6 +28,10 @@ describe('IVENA-Fachbereiche', () => {
     expect(lohr?.specialties).toEqual(expect.arrayContaining(['Kardiologie (HKL)', 'Stroke Unit', 'Urologie', 'Gynäkologie']));
     for (const fach of ['Urologie', 'Gynäkologie', 'Geburtshilfe', 'HNO', 'Augenheilkunde', 'Psychiatrie'])
       expect(scn.hospitals.filter((h) => h.specialties.includes(fach)).length, fach).toBeGreaterThanOrEqual(2);
+    // Kein Brandverletztenzentrum im Bereich: Erstversorgung in der Unfallchirurgie
+    expect(scn.hospitals.some((h) => h.specialties.includes('Verbrennungen'))).toBe(false);
+    expect(zielFach('Verbrennungen', scn.hospitals)).toBe('Unfallchirurgie');
+    expect(zielFach('Urologie', scn.hospitals)).toBe('Urologie');
   });
 });
 
