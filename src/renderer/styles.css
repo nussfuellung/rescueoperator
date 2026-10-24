@@ -2303,3 +2303,7 @@ button.gross {
     grid-template-columns: 1fr;
   }
 }
+.tmo-tag.melder {
+  color: var(--alert-text);
+  border-color: var(--alert-text);
+}
