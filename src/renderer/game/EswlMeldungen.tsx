@@ -34,7 +34,7 @@ export function EswlMeldungen({ ctx }: { ctx: GameCtx }) {
         neu.push(
           r.status === 'zugesagt'
             ? { key, incidentId: inc.id, ok: true, titel: `ESWL zugesagt – ${r.ils}`, text: `${r.callsign} (${label}) kommt zu ${inc.nr}, ${inc.address}${r.text ? ` – ${r.text}` : ''}` }
-            : { key, incidentId: inc.id, ok: false, titel: `ESWL abgelehnt – ${r.ils}`, text: `Kein ${label} für ${inc.nr}, ${inc.address}${r.text ? ` – ${r.text}` : ''}. Bitte anderweitig disponieren.` },
+            : { key, incidentId: inc.id, ok: false, titel: `ESWL abgelehnt – ${r.ils}`, text: `Kein ${label} für ${inc.nr}, ${inc.address}${r.text ? ` – ${r.text}` : ''}${/disponieren/.test(r.text ?? '') ? '' : '. Bitte anderweitig disponieren.'}` },
         );
       }
     if (!neu.length) return;

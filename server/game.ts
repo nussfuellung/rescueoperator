@@ -1256,9 +1256,9 @@ export class Game {
         return;
       }
       const ziel = inc ? `zum Einsatz ${inc.address}` : u.hasPatient ? 'mit Patient' : 'auf der Durchfahrt';
-      const text = `${this.scn.ilsName} von ${u.callsign}, ${air ? 'fliegen' : 'fahren'} in Ihren Bereich ein, ${ziel}, Status ${u.status}, kommen.`;
+      const text = `${u.callsign}, ${air ? 'fliegen' : 'fahren'} in Ihren Bereich ein, ${ziel}, Status ${u.status}, kommen.`;
       this.radioMsg(u.callsign, this.scn.ilsName, text, 'voice', group);
-      this.events.speech?.(text);
+      this.events.speech?.(`${this.scn.ilsName} von ${text}`);
       return;
     }
     const group = u.tmo;
@@ -1267,9 +1267,9 @@ export class Game {
       u.hint = `Bereich der ${this.scn.ilsName} verlassen: abmelden und zurück zur ${f.ils}.`;
       return;
     }
-    const text = `${this.scn.ilsName} von ${u.callsign}, verlassen Ihren Bereich, melden uns ab zur ${f.ils}, kommen.`;
+    const text = `${u.callsign}, verlassen Ihren Bereich, melden uns ab zur ${f.ils}, kommen.`;
     this.radioMsg(u.callsign, this.scn.ilsName, text, 'voice', group);
-    this.events.speech?.(text);
+    this.events.speech?.(`${this.scn.ilsName} von ${text}`);
   }
 
   /** FMS-Auftrag H: Fahren Sie Wache an. Beendet auch eine Gebietsabsicherung. */
