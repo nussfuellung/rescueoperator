@@ -1776,6 +1776,26 @@ html:has(.popout-body),
 .mobile .panel-title .small {
   display: none;
 }
+.mobile-ptt {
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+.mobile-ptt-btn {
+  width: 100%;
+  min-height: 56px;
+  font-size: 16px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.mobile-ptt-btn.live,
+.mobile-ptt-btn.live:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
 .mobile-tabs {
   display: flex;
   border-top: 1px solid var(--line);

@@ -227,6 +227,21 @@ export interface Player {
   /** bei Rolle crew: besetztes Fahrzeug */
   unitId?: string;
   connected: boolean;
+  /** Gekoppeltes Tablet: Sprechtaste für das Mikrofon am Rechner und Tonausgabe */
+  geraet?: GeraetStatus;
+}
+
+export interface GeraetStatus {
+  /** Sprechtaste auf dem Tablet gedrückt: der Rechner hört über sein Mikrofon zu */
+  ptt?: boolean;
+  /** zählt jedes Drücken und Auffrischen, damit der Rechner eine hängende Taste erkennt */
+  pttSeq?: number;
+  /** auf dem Tablet gewähltes Fahrzeug: Funkspruch geht an dieses */
+  pttUnitId?: string;
+  /** Spracheingabe am Rechner ist geladen und bereit */
+  sttBereit?: boolean;
+  /** Fenster am Rechner ausgeblendet, Ton und Vorlesen laufen trotzdem dort */
+  tonAmPc?: boolean;
 }
 
 export type FmsStatus = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 0;
