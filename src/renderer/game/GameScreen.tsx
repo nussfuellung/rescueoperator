@@ -5,6 +5,7 @@ import type { PublicState, Role, Scenario, UnitState, Vec } from '../../../share
 import { conn, useNet } from '../net';
 import { MapView, type Hit } from '../MapView';
 import { alarmTone, beep, isMuted, ring, setMuted } from '../sound';
+import { EswlMeldungen } from './EswlMeldungen';
 import { CallPanel, IncidentFormPanel } from './CallPanel';
 import { IncidentPanel } from './IncidentPanel';
 import { UnitBoard } from './UnitBoard';
@@ -399,6 +400,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showIvena && <IvenaModal ctx={ctx} onClose={() => setShowIvena(false)} />}
       {showDevice && <DeviceModal hostInfo={props.hostInfo} remote={remote} setRemote={setRemote} onClose={() => setShowDevice(false)} />}
+      {me?.role !== 'crew' && <EswlMeldungen ctx={ctx} />}
       {toasts}
     </div>
   );
