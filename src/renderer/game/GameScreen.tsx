@@ -16,6 +16,7 @@ import { SettingsModal, useSttAutoload } from '../SettingsModal';
 import { getSettings, updateSettings, useSettings } from '../settings';
 import { piperInfo, radioSpeech, say, stopSpeaking } from '../audio/tts';
 import { attachPttKeys, speechInput } from '../audio/stt';
+import { useGeraetSprache } from './geraetSprache';
 import { buildVocab } from '../../../shared/speechfix';
 import { radioName } from '../../../shared/catalog';
 import { MicStatus } from '../audio/SpeechUi';
@@ -56,6 +57,7 @@ export interface GameCtx {
 }
 
 const POPPED_KEY = 'lst.popped';
+const TON_AM_PC_KEY = 'lst.geraetTonAmPc';
 const ALL_PANELS: PanelId[] = ['calls', 'form', 'map', 'incidents', 'radio', 'units'];
 
 function loadPopped(): PanelId[] {
@@ -87,10 +89,20 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
   const [formManual, setFormManual] = useState(false);
   const [formCallId, setFormCallId] = useState<string | null>(null);
   const [remote, setRemote] = useState<PanelId[]>([]);
+  // Fenster aufs Tablet ausgelagert, Ton und Vorlesen aber weiter am Rechner
+  const [tonPc, setTonPc] = useState(() => {
+    try {
+      return localStorage.getItem(TON_AM_PC_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const tonAmPc = tonPc && remote.length > 0;
   const [showDevice, setShowDevice] = useState(false);
   const [showIvena, setShowIvena] = useState(false);
 
-  useSounds(state, { calls: !remote.includes('calls'), radio: !remote.includes('radio') });
+  useSounds(state, { calls: tonAmPc || !remote.includes('calls'), radio: tonAmPc || !remote.includes('radio') });
+  useGeraetSprache(state, net.playerId, remote, tonAmPc);
   useSttAutoload();
   useEffect(() => attachPttKeys(window), []);
   // Wortschatz der Karte für die Nachkorrektur der Spracherkennung
@@ -105,7 +117,14 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
     ]);
     return () => speechInput.setVocabulary(undefined);
   }, [scn]);
-  useReadAloud(state, net.playerId, scn.ilsName, { radio: !remote.includes('radio'), caller: !remote.includes('calls') });
+  useReadAloud(state, net.playerId, scn.ilsName, { radio: tonAmPc || !remote.includes('radio'), caller: tonAmPc || !remote.includes('calls') });
+  useEffect(() => {
+    try {
+      localStorage.setItem(TON_AM_PC_KEY, tonPc ? '1' : '0');
+    } catch {
+      /* egal */
+    }
+  }, [tonPc]);
   useEffect(() => {
     try {
       localStorage.setItem(POPPED_KEY, JSON.stringify(popped));
@@ -399,7 +418,7 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
       {showScore && <ScoreModal state={state} onClose={() => setShowScore(false)} />}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showIvena && <IvenaModal ctx={ctx} onClose={() => setShowIvena(false)} />}
-      {showDevice && <DeviceModal hostInfo={props.hostInfo} remote={remote} setRemote={setRemote} onClose={() => setShowDevice(false)} />}
+      {showDevice && <DeviceModal hostInfo={props.hostInfo} remote={remote} setRemote={setRemote} tonPc={tonPc} setTonPc={setTonPc} onClose={() => setShowDevice(false)} />}
       {me?.role !== 'crew' && <EswlMeldungen ctx={ctx} />}
       {toasts}
     </div>
