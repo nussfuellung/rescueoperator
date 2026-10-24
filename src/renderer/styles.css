@@ -2323,3 +2323,138 @@ button.gross {
   color: var(--alert-text);
   border-color: var(--alert-text);
 }
+
+/* Einsatzmaske: Fahrzeuge zubuchen */
+.em-proposal .free-row.extra {
+  background: var(--selected);
+}
+.em-zb-tag {
+  font-size: 10px;
+  padding: 0 4px;
+  margin-left: 4px;
+  border-radius: 3px;
+  border: 1px solid var(--active-line);
+  color: var(--info-text);
+}
+.em-zb-btn {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+.modal.zubuchen {
+  width: 720px;
+  max-width: 94vw;
+  /* Feste Höhe, damit das Fenster beim Filtern nicht springt */
+  height: min(760px, 86vh);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  padding: 16px 20px;
+}
+.zb-head h2 {
+  margin: 0 0 2px;
+  font-size: 17px;
+}
+.zubuchen .row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.zubuchen .row input {
+  min-width: 0;
+}
+.zb-sicht {
+  display: flex;
+}
+.zb-sicht button {
+  border-radius: 0;
+  white-space: nowrap;
+}
+.zb-sicht button:first-child {
+  border-radius: 4px 0 0 4px;
+}
+.zb-sicht button:last-child {
+  border-radius: 0 4px 4px 0;
+  border-left: 0;
+}
+.zb-sicht button.on {
+  background: var(--active-bg);
+  border-color: var(--active-line);
+  color: var(--text);
+}
+.zb-list {
+  flex: 1;
+  min-height: 160px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.zb-empty {
+  padding: 10px;
+}
+.zb-row {
+  display: grid;
+  grid-template-columns: 18px minmax(110px, 1.3fr) minmax(70px, 1fr) minmax(80px, 1.2fr) 26px 34px 56px;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  padding: 3px 8px;
+  color: var(--text);
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+}
+.zb-group .zb-row {
+  grid-template-columns: 18px minmax(110px, 1.3fr) minmax(70px, 1fr) 26px 34px 56px;
+  padding-left: 18px;
+}
+.zb-row:hover {
+  background: var(--hover);
+}
+.zb-row.vorschlag {
+  background: var(--ok-bg);
+}
+.zb-row.on:not(.vorschlag) {
+  background: var(--selected);
+}
+.zb-row > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.zb-row .cs {
+  font-weight: 600;
+}
+.zb-row .st {
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+.zb-row .tag {
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid var(--ok-line);
+  color: var(--ok-text);
+  text-align: center;
+}
+.zb-row .eta {
+  text-align: right;
+  font-family: Consolas, monospace;
+}
+.zb-ghead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 8px;
+  background: var(--panel2);
+  border-bottom: 1px solid var(--line);
+}
+.zb-ghead .muted {
+  flex: 1;
+}
+.zb-foot {
+  padding-top: 4px;
+}
