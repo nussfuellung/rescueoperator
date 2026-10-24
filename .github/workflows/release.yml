@@ -27,9 +27,10 @@ jobs:
               release/*.exe.blockmap
               release/latest.yml
           - os: ubuntu-latest
-            build: npx electron-builder --linux AppImage --x64 --publish never
+            build: npx electron-builder --linux AppImage pacman --x64 --publish never
             files: |
               release/*.AppImage
+              release/*.pacman
               release/latest-linux.yml
           - os: macos-latest
             build: npx electron-builder --mac dir --x64 --arm64 --publish never && node scripts/mac-release.mjs
@@ -61,6 +62,9 @@ jobs:
             chmod +x vendor/piper/mac-$a/piper/piper
           done
           ls -R vendor/piper | head -20
+      - name: bsdtar für das pacman-Paket
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
       - run: ${{ matrix.build }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -70,8 +74,26 @@ jobs:
           path: ${{ matrix.files }}
           if-no-files-found: error
 
-  release:
+  # Installiert das pacman-Paket in einem frischen Arch Linux, wie auf CachyOS
+  pacman-test:
     needs: build
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: paket-ubuntu-latest
+          path: pakete
+      - run: pacman -Syu --noconfirm
+      - run: pacman -U --noconfirm pakete/*.pacman
+      - name: Spiel ist installiert und als Spiel eingetragen
+        run: |
+          test -x /usr/bin/rescue-operator
+          grep -x 'Categories=Game;Simulation;' /usr/share/applications/rescue-operator.desktop
+          if ldd /opt/rescue.Operator/rescue-operator | grep 'not found'; then exit 1; fi
+
+  release:
+    needs: [build, pacman-test]
     # Auf anderen Branches nur bauen und prüfen, kein Release anlegen
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
