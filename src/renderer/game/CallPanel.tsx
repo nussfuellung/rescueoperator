@@ -3,10 +3,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatDuration } from '../../../shared/catalog';
 import { geocode, nearestObject, nearestTown, reverseGeocode, searchObjects, streetDirectory } from '../../../shared/geo';
 import type { AddressHit, ObjectHit } from '../../../shared/geo';
-import { computeProposal } from '../../../shared/dispatch';
+import { computeProposal, freeUnitTimes } from '../../../shared/dispatch';
 import { aaoMitSchlagwort, findSchlagwort, formatSchlagwort, schlagwortByNr, searchSchlagworte } from '../../../shared/schlagworte';
 import { SchlagwortSelect } from './SchlagwortSelect';
 import { HospitalSelect } from './Ivena';
+import { ZubuchenDialog } from './ZubuchenDialog';
 import { decodePzc, pzcText, zielFach } from '../../../shared/pzc';
 import type { CallState, IncidentState, QuestionId, Vec } from '../../../shared/types';
 import { conn } from '../net';
@@ -315,6 +316,9 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
   const [note, setNote] = useState('');
   const [err, setErr] = useState('');
   const [unchecked, setUnchecked] = useState<Set<string>>(new Set());
+  // Zusätzlich zum Vorschlag zugebuchte Fahrzeuge
+  const [extra, setExtra] = useState<string[]>([]);
+  const [zubuchen, setZubuchen] = useState(false);
   const codes = useMemo(() => new Set(scn.stichworte.map((s) => s.code)), [scn]);
   const swHits = useMemo(() => searchSchlagworte(swQuery, codes), [swQuery, codes]);
   const objHits = useMemo(() => (objOpen ? searchObjects(scn, objekt) : []), [scn, objekt, objOpen]);
@@ -390,13 +394,19 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [call?.id, !!call?.aml]);
 
-  // Kartenklick setzt den Einsatzort, solange das Formular offen ist; Alt+A übernimmt die AML
+  // Kartenklick setzt den Einsatzort, solange das Formular offen ist; Alt+A übernimmt die AML, Alt+Z bucht Fahrzeuge zu
+  const posRef = useRef(pos);
+  posRef.current = pos;
   useEffect(() => {
     ctx.mapPickRef.current = (p) => applyPos(p, 'Kartenklick');
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey && (e.key === 'a' || e.key === 'A')) {
         e.preventDefault();
         takeAml();
+      }
+      if (e.altKey && (e.key === 'z' || e.key === 'Z') && posRef.current) {
+        e.preventDefault();
+        setZubuchen(true);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -457,7 +467,21 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
     return computeProposal(scn, graph, state.units, draft, aaoMitSchlagwort(sw.aao, schlagwort));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pos, stichwort, schlagwort, Math.floor(state.time / 10000)]);
-  const alarmIds = proposal.map((p) => p.unitId).filter((id) => !unchecked.has(id));
+  // Freie Fahrzeuge mit Fahrzeit, nur solange gebucht wird oder Zugebuchte angezeigt werden
+  const free = useMemo(() => {
+    if (!pos || (!zubuchen && !extra.length)) return [];
+    return freeUnitTimes(scn, graph, state.units, pos);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pos, zubuchen, extra.length > 0, Math.floor(state.time / 10000)]);
+  const proposalIds = new Set(proposal.map((p) => p.unitId));
+  // Zwischenzeitlich anderweitig gebundene Fahrzeuge fallen heraus
+  const extraRows = free.filter((x) => extra.includes(x.u.id) && !proposalIds.has(x.u.id));
+  const alarmIds = [...proposal.map((p) => p.unitId).filter((id) => !unchecked.has(id)), ...extraRows.map((x) => x.u.id)];
+  const applyZubuchen = (sel: Set<string>) => {
+    setUnchecked(new Set([...proposalIds].filter((id) => !sel.has(id))));
+    setExtra([...sel].filter((id) => !proposalIds.has(id)));
+    setZubuchen(false);
+  };
 
   const submit = (withAlarm: boolean) => {
     if (!pos) return setErr('Bitte Einsatzort festlegen (Adresse suchen, AML übernehmen oder in die Karte klicken).');
@@ -496,272 +520,301 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
   const groups = ['RD', 'B', 'THL', 'ABC', 'SONST'] as const;
   const unitsById = new Map(state.units.map((u) => [u.id, u]));
   return (
-    <form
-      className="incident-form em"
-      onSubmit={(e) => e.preventDefault()}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-          e.preventDefault();
-          submit(true);
-        }
-        // Im ausgelagerten Fenster kommt der Tastendruck nur hier an
-        if (e.altKey && (e.key === 'a' || e.key === 'A') && e.currentTarget.ownerDocument !== document) {
-          e.preventDefault();
-          takeAml();
-        }
-      }}
-    >
-      <div className="em-head">
-        <span className="em-title">Neuer Einsatz</span>
-        <span className="muted small">
-          {call ? (call.kind === 'bma' ? 'BMA-Auslösung' : call.kind === 'kvb' ? 'Übergabe KVB 116117' : `Notruf ${call.phone} · ${formatDuration(state.time - (call.answeredAt ?? call.ringStart))}`) : 'ohne Anruf'}
-        </span>
-      </div>
-
-      {call && call.kind === '112' && (
-        <div className={`em-locate ${call.aml ? 'has' : ''}`}>
-          {call.aml ? (
-            <>
-              <span className="em-badge aml">AML</span>
-              <span className="grow small">Handyortung ±{call.aml.acc} m</span>
-              <button type="button" className="small-btn" onClick={() => ctx.focus(call.aml!, Math.max(0.15, Math.min(1.5, 90 / call.aml!.acc)))}>
-                Zeigen
-              </button>
-              <button type="button" className="small-btn primary" onClick={takeAml} title="Alt+A">
-                Übernehmen
-              </button>
-            </>
-          ) : call.landline ? (
-            <>
-              <span className="em-badge fest">Festnetz</span>
-              <span className="grow small">Anschluss: {call.landline.address}</span>
-              <button type="button" className="small-btn primary" onClick={() => applyPos(call.landline!, 'Festnetzanschluss', call.landline!.address)}>
-                Übernehmen
-              </button>
-            </>
-          ) : (
-            <span className="muted small">Keine Ortung übermittelt, Einsatzort erfragen.</span>
-          )}
+    <>
+      <form
+        className="incident-form em"
+        onSubmit={(e) => e.preventDefault()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            submit(true);
+          }
+          // Im ausgelagerten Fenster kommt der Tastendruck nur hier an
+          if (e.altKey && (e.key === 'a' || e.key === 'A') && e.currentTarget.ownerDocument !== document) {
+            e.preventDefault();
+            takeAml();
+          }
+          if (e.altKey && (e.key === 'z' || e.key === 'Z') && pos) {
+            e.preventDefault();
+            setZubuchen(true);
+          }
+        }}
+      >
+        <div className="em-head">
+          <span className="em-title">Neuer Einsatz</span>
+          <span className="muted small">
+            {call ? (call.kind === 'bma' ? 'BMA-Auslösung' : call.kind === 'kvb' ? 'Übergabe KVB 116117' : `Notruf ${call.phone} · ${formatDuration(state.time - (call.answeredAt ?? call.ringStart))}`) : 'ohne Anruf'}
+          </span>
         </div>
-      )}
 
-      <fieldset>
-        <legend>Einsatzort</legend>
-        <div className="row">
-          <input
-            list="streets"
-            value={street}
-            onChange={(e) => setStreet(e.target.value)}
-            placeholder="Straße, Ort"
-            className="grow"
-            onKeyDown={(e) => e.key === 'Enter' && !e.ctrlKey && !e.metaKey && search()}
-          />
-          <input value={number} onChange={(e) => setNumber(e.target.value)} placeholder="Nr." className="num" onKeyDown={(e) => e.key === 'Enter' && !e.ctrlKey && !e.metaKey && search()} />
-          <button type="button" onClick={() => search()}>
-            Suchen
-          </button>
-        </div>
-        <datalist id="streets">
-          {streetOptions.map((s) => (
-            <option key={s.label} value={s.label} />
-          ))}
-        </datalist>
-        <div className="row">
-          <div className="em-obj-search grow">
+        {call && call.kind === '112' && (
+          <div className={`em-locate ${call.aml ? 'has' : ''}`}>
+            {call.aml ? (
+              <>
+                <span className="em-badge aml">AML</span>
+                <span className="grow small">Handyortung ±{call.aml.acc} m</span>
+                <button type="button" className="small-btn" onClick={() => ctx.focus(call.aml!, Math.max(0.15, Math.min(1.5, 90 / call.aml!.acc)))}>
+                  Zeigen
+                </button>
+                <button type="button" className="small-btn primary" onClick={takeAml} title="Alt+A">
+                  Übernehmen
+                </button>
+              </>
+            ) : call.landline ? (
+              <>
+                <span className="em-badge fest">Festnetz</span>
+                <span className="grow small">Anschluss: {call.landline.address}</span>
+                <button type="button" className="small-btn primary" onClick={() => applyPos(call.landline!, 'Festnetzanschluss', call.landline!.address)}>
+                  Übernehmen
+                </button>
+              </>
+            ) : (
+              <span className="muted small">Keine Ortung übermittelt, Einsatzort erfragen.</span>
+            )}
+          </div>
+        )}
+
+        <fieldset>
+          <legend>Einsatzort</legend>
+          <div className="row">
             <input
-              value={objekt}
-              onChange={(e) => {
-                setObjekt(e.target.value);
-                objAuto.current = !e.target.value.trim();
-                setObjOpen(true);
-                setObjSel(0);
-              }}
-              onBlur={() => setTimeout(() => setObjOpen(false), 150)}
-              onKeyDown={(e) => {
-                if (!objHits.length || e.ctrlKey || e.metaKey) return;
-                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-                  e.preventDefault();
-                  setObjSel((i) => (i + (e.key === 'ArrowDown' ? 1 : objHits.length - 1)) % objHits.length);
-                } else if (e.key === 'Enter') {
-                  e.preventDefault();
-                  pickObject(objHits[Math.min(objSel, objHits.length - 1)]);
-                } else if (e.key === 'Escape') {
-                  setObjOpen(false);
-                }
-              }}
-              placeholder="Objekt suchen, z. B. Seniorenheim, Grundschule…"
+              list="streets"
+              value={street}
+              onChange={(e) => setStreet(e.target.value)}
+              placeholder="Straße, Ort"
+              className="grow"
+              onKeyDown={(e) => e.key === 'Enter' && !e.ctrlKey && !e.metaKey && search()}
             />
-            {objHits.length > 0 && (
-              <div className="em-sw-hits em-obj-hits">
-                {objHits.map((h, i) => (
+            <input value={number} onChange={(e) => setNumber(e.target.value)} placeholder="Nr." className="num" onKeyDown={(e) => e.key === 'Enter' && !e.ctrlKey && !e.metaKey && search()} />
+            <button type="button" onClick={() => search()}>
+              Suchen
+            </button>
+          </div>
+          <datalist id="streets">
+            {streetOptions.map((s) => (
+              <option key={s.label} value={s.label} />
+            ))}
+          </datalist>
+          <div className="row">
+            <div className="em-obj-search grow">
+              <input
+                value={objekt}
+                onChange={(e) => {
+                  setObjekt(e.target.value);
+                  objAuto.current = !e.target.value.trim();
+                  setObjOpen(true);
+                  setObjSel(0);
+                }}
+                onBlur={() => setTimeout(() => setObjOpen(false), 150)}
+                onKeyDown={(e) => {
+                  if (!objHits.length || e.ctrlKey || e.metaKey) return;
+                  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setObjSel((i) => (i + (e.key === 'ArrowDown' ? 1 : objHits.length - 1)) % objHits.length);
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    pickObject(objHits[Math.min(objSel, objHits.length - 1)]);
+                  } else if (e.key === 'Escape') {
+                    setObjOpen(false);
+                  }
+                }}
+                placeholder="Objekt suchen, z. B. Seniorenheim, Grundschule…"
+              />
+              {objHits.length > 0 && (
+                <div className="em-sw-hits em-obj-hits">
+                  {objHits.map((h, i) => (
+                    <button
+                      type="button"
+                      key={h.obj.id}
+                      className={i === objSel ? 'sel' : ''}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => pickObject(h)}
+                    >
+                      {h.obj.name}
+                      <span className="muted">
+                        {' '}
+                        · {h.kind} · {[h.street, h.town].filter(Boolean).join(', ')}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="row">
+            <input value={zusatz} onChange={(e) => setZusatz(e.target.value)} placeholder="Zusatz: Stockwerk, Hinterhaus, Klingel…" className="grow" />
+          </div>
+          <div className={`em-pos small ${pos ? 'ok' : 'muted'}`}>
+            {pos ? (
+              <>
+                📍 {address}
+                <span className="muted"> · {posSource}</span>
+              </>
+            ) : (
+              'Kein Einsatzort: Adresse suchen, Ortung übernehmen oder in die Karte klicken'
+            )}
+          </div>
+          {area && (
+            <div className="em-area small muted">
+              {area.town && <>Gemeinde {area.town} · </>}
+              {area.fw && <>FW-Bereich {area.fw.name} · </>}
+              {area.rw && <>RD-Bereich {area.rw.name}</>}
+            </div>
+          )}
+          {area?.dup.map((i) => (
+            <div key={i.id} className="em-warn small">
+              ⚠ Offener Einsatz {i.nr} ({i.stichwort}) {Math.round(Math.hypot(i.x - pos!.x, i.y - pos!.y))} m entfernt: {i.address}
+            </div>
+          ))}
+        </fieldset>
+
+        <fieldset>
+          <legend>Einsatz</legend>
+          <div className="em-sw-search">
+            <input value={swQuery} onChange={(e) => setSwQuery(e.target.value)} placeholder="Schlagwort suchen, z. B. Atemnot, Ölspur, VU…" />
+            {swHits.length > 0 && (
+              <div className="em-sw-hits">
+                {swHits.map((h) => (
                   <button
                     type="button"
-                    key={h.obj.id}
-                    className={i === objSel ? 'sel' : ''}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => pickObject(h)}
+                    key={formatSchlagwort(h)}
+                    onClick={() => {
+                      setStichwort(h.code);
+                      setSchlagwort(formatSchlagwort(h));
+                      setSwQuery('');
+                    }}
                   >
-                    {h.obj.name}
-                    <span className="muted">
-                      {' '}
-                      · {h.kind} · {[h.street, h.town].filter(Boolean).join(', ')}
-                    </span>
+                    <b>{h.nr}</b> <b>{h.code}</b> #{h.kat}#{h.text}
+                    {h.rtw ? <span className="muted"> · +{h.rtw} RTW</span> : null}
                   </button>
                 ))}
               </div>
             )}
           </div>
-        </div>
-        <div className="row">
-          <input value={zusatz} onChange={(e) => setZusatz(e.target.value)} placeholder="Zusatz: Stockwerk, Hinterhaus, Klingel…" className="grow" />
-        </div>
-        <div className={`em-pos small ${pos ? 'ok' : 'muted'}`}>
-          {pos ? (
-            <>
-              📍 {address}
-              <span className="muted"> · {posSource}</span>
-            </>
-          ) : (
-            'Kein Einsatzort: Adresse suchen, Ortung übernehmen oder in die Karte klicken'
-          )}
-        </div>
-        {area && (
-          <div className="em-area small muted">
-            {area.town && <>Gemeinde {area.town} · </>}
-            {area.fw && <>FW-Bereich {area.fw.name} · </>}
-            {area.rw && <>RD-Bereich {area.rw.name}</>}
-          </div>
-        )}
-        {area?.dup.map((i) => (
-          <div key={i.id} className="em-warn small">
-            ⚠ Offener Einsatz {i.nr} ({i.stichwort}) {Math.round(Math.hypot(i.x - pos!.x, i.y - pos!.y))} m entfernt: {i.address}
-          </div>
-        ))}
-      </fieldset>
-
-      <fieldset>
-        <legend>Einsatz</legend>
-        <div className="em-sw-search">
-          <input value={swQuery} onChange={(e) => setSwQuery(e.target.value)} placeholder="Schlagwort suchen, z. B. Atemnot, Ölspur, VU…" />
-          {swHits.length > 0 && (
-            <div className="em-sw-hits">
-              {swHits.map((h) => (
-                <button
-                  type="button"
-                  key={formatSchlagwort(h)}
-                  onClick={() => {
-                    setStichwort(h.code);
-                    setSchlagwort(formatSchlagwort(h));
-                    setSwQuery('');
-                  }}
-                >
-                  <b>{h.nr}</b> <b>{h.code}</b> #{h.kat}#{h.text}
-                  {h.rtw ? <span className="muted"> · +{h.rtw} RTW</span> : null}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="row">
-          <select
-            value={stichwort}
-            onChange={(e) => {
-              setStichwort(e.target.value);
-              if (findSchlagwort(schlagwort)?.code !== e.target.value) setSchlagwort('');
-            }}
-            className="grow"
-          >
-            <option value="">– Einsatzstichwort –</option>
-            {groups.map((g) => (
-              <optgroup key={g} label={{ RD: 'Rettungsdienst', B: 'Brand', THL: 'Technische Hilfe', ABC: 'ABC / Gefahrstoffe', SONST: 'Sonstiges' }[g]}>
-                {scn.stichworte
-                  .filter((s) => s.category === g)
-                  .map((s) => (
-                    <option key={s.code} value={s.code}>
-                      {s.code} – {s.label}
-                    </option>
-                  ))}
-              </optgroup>
-            ))}
-          </select>
-          <label className="inline small">
-            <input type="checkbox" checked={sondersignal} onChange={(e) => setSondersignal(e.target.checked)} />
-            Sondersignal
-          </label>
-        </div>
-        {stichwort && <SchlagwortSelect stichwort={stichwort} value={schlagwort} onChange={setSchlagwort} />}
-        {schlagwort && (
-          <div className="em-schlagwort">
-            <code>{schlagwort}</code>
-            {findSchlagwort(schlagwort)?.rtw ? <span className="small muted"> Anzahl (RTW): {findSchlagwort(schlagwort)!.rtw}</span> : null}
-            <button type="button" className="small" title="Schlagwort entfernen" onClick={() => setSchlagwort('')}>
-              ×
-            </button>
-          </div>
-        )}
-        <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Meldebild / Hinweise für die Einsatzkräfte" rows={2} />
-      </fieldset>
-
-      <div className="em-two">
-        <fieldset>
-          <legend>Patient</legend>
           <div className="row">
+            <select
+              value={stichwort}
+              onChange={(e) => {
+                setStichwort(e.target.value);
+                if (findSchlagwort(schlagwort)?.code !== e.target.value) setSchlagwort('');
+              }}
+              className="grow"
+            >
+              <option value="">– Einsatzstichwort –</option>
+              {groups.map((g) => (
+                <optgroup key={g} label={{ RD: 'Rettungsdienst', B: 'Brand', THL: 'Technische Hilfe', ABC: 'ABC / Gefahrstoffe', SONST: 'Sonstiges' }[g]}>
+                  {scn.stichworte
+                    .filter((s) => s.category === g)
+                    .map((s) => (
+                      <option key={s.code} value={s.code}>
+                        {s.code} – {s.label}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </select>
             <label className="inline small">
-              Anzahl
-              <input type="number" min={0} max={50} value={patients} onChange={(e) => setPatients(Number(e.target.value))} className="num" />
+              <input type="checkbox" checked={sondersignal} onChange={(e) => setSondersignal(e.target.checked)} />
+              Sondersignal
             </label>
           </div>
-          <input value={patient} onChange={(e) => setPatient(e.target.value)} placeholder="Name, Alter, m/w" />
+          {stichwort && <SchlagwortSelect stichwort={stichwort} value={schlagwort} onChange={setSchlagwort} />}
+          {schlagwort && (
+            <div className="em-schlagwort">
+              <code>{schlagwort}</code>
+              {findSchlagwort(schlagwort)?.rtw ? <span className="small muted"> Anzahl (RTW): {findSchlagwort(schlagwort)!.rtw}</span> : null}
+              <button type="button" className="small" title="Schlagwort entfernen" onClick={() => setSchlagwort('')}>
+                ×
+              </button>
+            </div>
+          )}
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Meldebild / Hinweise für die Einsatzkräfte" rows={2} />
         </fieldset>
-        <fieldset>
-          <legend>Meldender</legend>
-          <input value={melder} onChange={(e) => setMelder(e.target.value)} placeholder="Name" />
-          <input value={rueckruf} onChange={(e) => setRueckruf(e.target.value)} placeholder="Rückrufnummer" />
-        </fieldset>
-      </div>
 
-      {proposal.length > 0 && (
-        <fieldset>
-          <legend>Alarmierungsvorschlag</legend>
-          <div className="em-proposal">
-            {proposal.map((p) => {
-              const u = unitsById.get(p.unitId);
-              if (!u) return null;
-              return (
-                <label key={p.unitId} className="free-row proposed">
-                  <input
-                    type="checkbox"
-                    checked={!unchecked.has(p.unitId)}
-                    onChange={() => {
-                      const n = new Set(unchecked);
-                      if (n.has(p.unitId)) n.delete(p.unitId);
-                      else n.add(p.unitId);
-                      setUnchecked(n);
-                    }}
-                  />
-                  <span className="cs">{u.callsign}</span>
-                  <span className="eta">{formatDuration(p.seconds * 1000)}</span>
+        <div className="em-two">
+          <fieldset>
+            <legend>Patient</legend>
+            <div className="row">
+              <label className="inline small">
+                Anzahl
+                <input type="number" min={0} max={50} value={patients} onChange={(e) => setPatients(Number(e.target.value))} className="num" />
+              </label>
+            </div>
+            <input value={patient} onChange={(e) => setPatient(e.target.value)} placeholder="Name, Alter, m/w" />
+          </fieldset>
+          <fieldset>
+            <legend>Meldender</legend>
+            <input value={melder} onChange={(e) => setMelder(e.target.value)} placeholder="Name" />
+            <input value={rueckruf} onChange={(e) => setRueckruf(e.target.value)} placeholder="Rückrufnummer" />
+          </fieldset>
+        </div>
+
+        {pos && (
+          <fieldset>
+            <legend>Alarmierungsvorschlag</legend>
+            <div className="em-proposal">
+              {proposal.map((p) => {
+                const u = unitsById.get(p.unitId);
+                if (!u) return null;
+                return (
+                  <label key={p.unitId} className="free-row proposed">
+                    <input
+                      type="checkbox"
+                      checked={!unchecked.has(p.unitId)}
+                      onChange={() => {
+                        const n = new Set(unchecked);
+                        if (n.has(p.unitId)) n.delete(p.unitId);
+                        else n.add(p.unitId);
+                        setUnchecked(n);
+                      }}
+                    />
+                    <span className="cs">{u.callsign}</span>
+                    <span className="eta">{formatDuration(p.seconds * 1000)}</span>
+                  </label>
+                );
+              })}
+              {extraRows.map((x) => (
+                <label key={x.u.id} className="free-row extra" title="Zugebucht">
+                  <input type="checkbox" checked onChange={() => setExtra(extra.filter((id) => id !== x.u.id))} />
+                  <span className="cs">
+                    {x.u.callsign} <span className="em-zb-tag">zugebucht</span>
+                  </span>
+                  <span className="eta">{formatDuration(x.seconds * 1000)}</span>
                 </label>
-              );
-            })}
-          </div>
-        </fieldset>
-      )}
-
-      {err && <div className="error small">{err}</div>}
-      <div className="row">
-        <button type="button" className="primary grow alarm-btn" onClick={() => submit(true)} title="Strg+Enter" disabled={!alarmIds.length}>
-          Anlegen und alarmieren ({alarmIds.length})
-        </button>
-        <button type="button" onClick={() => submit(false)}>
-          Nur anlegen
-        </button>
-        {!call && (
-          <button type="button" onClick={onDone}>
-            Abbrechen
-          </button>
+              ))}
+              {!proposal.length && !extraRows.length && <div className="muted small">{sw ? 'Kein freies Fahrzeug für die AAO gefunden.' : 'Einsatzstichwort wählen oder Fahrzeuge zubuchen.'}</div>}
+            </div>
+            <button type="button" className="small-btn em-zb-btn" onClick={() => setZubuchen(true)} title="Alt+Z">
+              + Fahrzeuge zubuchen…
+            </button>
+          </fieldset>
         )}
-      </div>
-    </form>
+
+        {err && <div className="error small">{err}</div>}
+        <div className="row">
+          <button type="button" className="primary grow alarm-btn" onClick={() => submit(true)} title="Strg+Enter" disabled={!alarmIds.length}>
+            Anlegen und alarmieren ({alarmIds.length})
+          </button>
+          <button type="button" onClick={() => submit(false)}>
+            Nur anlegen
+          </button>
+          {!call && (
+            <button type="button" onClick={onDone}>
+              Abbrechen
+            </button>
+          )}
+        </div>
+      </form>
+      {zubuchen && (
+        <ZubuchenDialog
+          scn={scn}
+          free={free}
+          proposalIds={proposalIds}
+          selected={new Set(alarmIds)}
+          onApply={applyZubuchen}
+          onClose={() => setZubuchen(false)}
+        />
+      )}
+    </>
   );
 }
