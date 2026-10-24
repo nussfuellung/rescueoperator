@@ -2330,8 +2330,10 @@ button.gross {
 /* ESWL: Antwort der Nachbarleitstelle als Benachrichtigung */
 .eswl-meldungen {
   position: fixed;
+  /* über der Karte, damit Einsatzliste und Funk frei bleiben */
   top: 56px;
-  right: 14px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   gap: 8px;
