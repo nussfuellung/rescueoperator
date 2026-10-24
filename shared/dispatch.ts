@@ -1,7 +1,7 @@
 // AAO-Logik: Abdeckung von Anforderungen und Alarmierungsvorschlag.
 import { AIR_SPEED, AIR_TURNOUT } from './catalog';
 import type { RoadGraph } from './geo';
-import type { IncidentState, Scenario, UnitState, VehicleType } from './types';
+import type { IncidentState, Scenario, UnitState, Vec, VehicleType } from './types';
 
 /**
  * Prüft, welche Anforderungen durch die Fahrzeuge nicht abgedeckt sind.
@@ -46,24 +46,7 @@ export function computeProposal(
   const types = new Map(scn.vehicleTypes.map((t) => [t.id, t]));
   const assigned = units.filter((u) => u.incidentId === inc.id);
   const left = coverage(aao, assigned, types);
-  const start = graph.nearestNode(inc);
-  const candidates = units.filter((u) => !u.incidentId && !u.fremd && [1, 2].includes(u.baseStatus));
-  const nodeOf = new Map(candidates.map((u) => [u.id, graph.nearestNode(u)]));
-  const { time } = graph.dijkstra(start, true, nodeOf.values());
-  const stations = new Map(scn.stations.map((s) => [s.id, s]));
-  const free = units
-    .filter((u) => !u.incidentId && !u.fremd && [1, 2].includes(u.baseStatus))
-    .map((u) => {
-      const n = nodeOf.get(u.id) ?? graph.nearestNode(u);
-      const factor = 1.2 * (types.get(u.type)?.speedFactor ?? 1);
-      const st = stations.get(u.stationId);
-      const career = st?.career || types.get(u.type)?.org === 'RD';
-      if (types.get(u.type)?.air) return { u, seconds: Math.hypot(u.x - inc.x, u.y - inc.y) / AIR_SPEED + (u.baseStatus === 2 ? AIR_TURNOUT : 8) };
-      const turnout = u.baseStatus === 2 ? (career ? 60 : 250) : 8;
-      return { u, seconds: (n >= 0 ? time[n] : Infinity) / factor + turnout };
-    })
-    .filter((x) => isFinite(x.seconds))
-    .sort((a, b) => a.seconds - b.seconds);
+  const free = freeUnitTimes(scn, graph, units, inc);
   const out: { unitId: string; seconds: number; need: string }[] = [];
   const taken = new Set<string>();
   // Exakte Typen zuerst, dann Ersatz
@@ -83,4 +66,26 @@ export function computeProposal(
     }
   }
   return out;
+}
+
+/** Ausrück- plus Fahrzeit aller freien Fahrzeuge zu einem Punkt, schnellste zuerst */
+export function freeUnitTimes(scn: Scenario, graph: RoadGraph, units: UnitState[], pos: Vec): { u: UnitState; seconds: number }[] {
+  const types = new Map(scn.vehicleTypes.map((t) => [t.id, t]));
+  const start = graph.nearestNode(pos);
+  const candidates = units.filter((u) => !u.incidentId && !u.fremd && [1, 2].includes(u.baseStatus));
+  const nodeOf = new Map(candidates.map((u) => [u.id, graph.nearestNode(u)]));
+  const { time } = graph.dijkstra(start, true, nodeOf.values());
+  const stations = new Map(scn.stations.map((s) => [s.id, s]));
+  return candidates
+    .map((u) => {
+      const n = nodeOf.get(u.id) ?? -1;
+      const factor = 1.2 * (types.get(u.type)?.speedFactor ?? 1);
+      const st = stations.get(u.stationId);
+      const career = st?.career || types.get(u.type)?.org === 'RD';
+      if (types.get(u.type)?.air) return { u, seconds: Math.hypot(u.x - pos.x, u.y - pos.y) / AIR_SPEED + (u.baseStatus === 2 ? AIR_TURNOUT : 8) };
+      const turnout = u.baseStatus === 2 ? (career ? 60 : 250) : 8;
+      return { u, seconds: (n >= 0 ? time[n] : Infinity) / factor + turnout };
+    })
+    .filter((x) => isFinite(x.seconds))
+    .sort((a, b) => a.seconds - b.seconds);
 }
