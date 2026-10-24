@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { useNet } from '../net';
+import { useSettings } from '../settings';
 import type { PanelId } from '../Popout';
 
 type Choice = 'beide' | 'telefon' | 'funk';
@@ -11,9 +12,12 @@ export function DeviceModal(props: {
   hostInfo: { port: number; addresses: string[] } | null;
   remote: PanelId[];
   setRemote: (p: PanelId[]) => void;
+  tonPc: boolean;
+  setTonPc: (v: boolean) => void;
   onClose: () => void;
 }) {
   const net = useNet();
+  const settings = useSettings();
   const [choice, setChoice] = useState<Choice>('beide');
   const [hide, setHide] = useState(props.remote.length > 0);
   const [qr, setQr] = useState('');
@@ -102,16 +106,21 @@ export function DeviceModal(props: {
                 </label>
               )}
               <p className="muted">
-                {online ? '' : 'Fragt Windows nach der Firewall, „Private Netzwerke“ erlauben. '}Spracheingabe gibt es auf dem Gerät nicht (der Browser erlaubt das Mikrofon
-                nur über HTTPS), die Sprachausgabe funktioniert.
+                {online ? '' : 'Fragt Windows nach der Firewall, „Private Netzwerke“ erlauben. '}Die Sprechtaste 🎤 auf dem Gerät schaltet die Spracheingabe hier am
+                Rechner ein: Gesprochen wird ins Mikrofon am Rechner, das Gerät ersetzt nur die Taste {settings.pttKey}.
+                {!settings.sttEnabled && ' Dafür die Spracheingabe in den Einstellungen einschalten.'}
               </p>
             </div>
           </div>
         )}
         <label className="inline">
           <input type="checkbox" checked={hide} onChange={(e) => setHide(e.target.checked)} />
-          {choice === 'funk' ? 'Funk' : choice === 'telefon' ? 'Telefon' : 'Telefon und Funk'} hier am Rechner ausblenden (Ton und Vorlesen laufen dann nur
-          auf dem Gerät)
+          {choice === 'funk' ? 'Funk' : choice === 'telefon' ? 'Telefon' : 'Telefon und Funk'} hier am Rechner ausblenden
+          {props.tonPc ? '' : ' (Ton und Vorlesen laufen dann nur auf dem Gerät)'}
+        </label>
+        <label className={`inline ${hide ? '' : 'muted'}`}>
+          <input type="checkbox" checked={props.tonPc} disabled={!hide} onChange={(e) => props.setTonPc(e.target.checked)} />
+          Ton und Sprachausgabe trotzdem hier am Rechner (Klingeln, Funk und Vorlesen kommen aus den Lautsprechern des Rechners, das Gerät bleibt stumm)
         </label>
         <div className="row">
           <div className="spacer" />

@@ -147,7 +147,9 @@ export type Action =
   | { a: 'radio'; unitId: string; text: string }
   | { a: 'crewStatus'; status: number }
   | { a: 'crewRadio'; text: string }
-  | { a: 'crewHospital'; hospitalId: string };
+  | { a: 'crewHospital'; hospitalId: string }
+  /** Gekoppeltes Tablet und Rechner stimmen Sprechtaste und Tonausgabe ab */
+  | { a: 'geraet'; ptt?: boolean; pttUnitId?: string | null; sttBereit?: boolean; tonAmPc?: boolean };
 
 export type ClientMsg =
   | {

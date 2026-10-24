@@ -792,6 +792,18 @@ export class Game {
         if (!u) return 'Kein Fahrzeug besetzt';
         return this.assignHospital(u.id, action.hospitalId, true);
       }
+      case 'geraet': {
+        const g = { ...player.geraet };
+        if (typeof action.ptt === 'boolean') {
+          g.ptt = action.ptt;
+          if (action.ptt) g.pttSeq = (g.pttSeq ?? 0) + 1;
+        }
+        if (action.pttUnitId !== undefined) g.pttUnitId = action.pttUnitId && this.unit(action.pttUnitId) ? action.pttUnitId : undefined;
+        if (typeof action.sttBereit === 'boolean') g.sttBereit = action.sttBereit;
+        if (typeof action.tonAmPc === 'boolean') g.tonAmPc = action.tonAmPc;
+        player.geraet = g;
+        return;
+      }
     }
   }
 
