@@ -1169,7 +1169,6 @@ export class Game {
       req.status = 'abgelehnt';
       req.text = this.pick([`kein ${label} verfügbar`, `alle ${label} im Einsatz`, `kein ${label} frei, bitte anderweitig disponieren`]);
       this.log(inc, `ESWL: ${nb.name} lehnt ab – ${req.text}`);
-      this.events.toast?.('*', `ESWL ${inc.nr}: ${nb.name} lehnt ${label} ab – ${req.text}`, 'warn');
       return;
     }
     const f = frei.reduce((best, x) => (dist(x, inc) < dist(best, inc) ? x : best));
@@ -1188,7 +1187,6 @@ export class Game {
     req.callsign = u.callsign;
     req.text = `Anfahrt ca. ${min} min`;
     this.log(inc, `ESWL: ${nb.name} entsendet ${u.callsign} (${label}) von ${f.wache}, Anfahrt ca. ${min} min`);
-    this.events.toast?.('*', `ESWL ${inc.nr}: ${nb.name} entsendet ${u.callsign}`, 'info');
     if (!inc.alarmedAt) inc.alarmedAt = this.time;
     if (inc.status === 'offen') inc.status = 'alarmiert';
   }

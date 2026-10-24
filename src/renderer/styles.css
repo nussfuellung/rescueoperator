@@ -2319,3 +2319,34 @@ button.gross {
     grid-template-columns: 1fr;
   }
 }
+
+/* ESWL: Antwort der Nachbarleitstelle als Benachrichtigung */
+.eswl-meldungen {
+  position: fixed;
+  top: 56px;
+  right: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 25;
+  width: min(380px, calc(100vw - 32px));
+}
+.eswl-meldung {
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-line);
+  border-left: 5px solid var(--ok);
+  border-radius: 6px;
+  padding: 8px 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+.eswl-meldung.abgelehnt {
+  border-left-color: var(--danger);
+}
+.eswl-meldung-titel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
