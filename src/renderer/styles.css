@@ -2319,6 +2319,10 @@ button.gross {
     grid-template-columns: 1fr;
   }
 }
+.tmo-tag.melder {
+  color: var(--alert-text);
+  border-color: var(--alert-text);
+}
 
 /* ESWL: Antwort der Nachbarleitstelle als Benachrichtigung */
 .eswl-meldungen {

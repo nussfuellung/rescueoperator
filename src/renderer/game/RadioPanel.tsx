@@ -112,7 +112,8 @@ export function RadioPanel({ ctx }: { ctx: GameCtx }) {
         {lines.map((m) => (
           <div key={m.id} className={`radio-line ${m.kind} ${m.from === scn.ilsName ? 'out' : 'in'}`}>
             <span className="muted">{formatClock(state.clockStart, m.t)}</span>{' '}
-            {m.group && <span className="tmo-tag">{groupName.get(m.group) ?? m.group}</span>}{' '}
+            {m.group && <span className="tmo-tag">{groupName.get(m.group) ?? m.group}</span>}
+            {m.kind === 'system' && <span className="tmo-tag melder" title="Alarmierung über Funkmeldeempfänger, nicht über Sprechfunk">Melder</span>}{' '}
             <b>{m.from === scn.ilsName ? 'ILS' : radioName(m.from)}</b>
             {m.to !== scn.ilsName && <> → {radioName(m.to)}</>}: {m.text}
           </div>

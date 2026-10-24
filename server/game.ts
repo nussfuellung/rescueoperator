@@ -266,8 +266,8 @@ export class Game {
     inc.log.push({ t: this.time, text });
   }
   private radioMsg(from: string, to: string, text: string, kind: RadioMessage['kind'], group?: string) {
-    // Sprechfunk läuft in der Rufgruppe des Fahrzeugs, FMS-Status per Kurzdatennachricht ohne Gruppe
-    if (!group && kind !== 'fms') group = this.units.find((u) => u.callsign === from || u.callsign === to)?.tmo;
+    // Sprechfunk läuft in der Rufgruppe des Fahrzeugs; FMS-Status (Kurzdatennachricht) und Alarmierung (Funkmelder) ohne Gruppe
+    if (!group && kind === 'voice') group = this.units.find((u) => u.callsign === from || u.callsign === to)?.tmo;
     this.radio.push({ id: ++this.seq.radio, t: this.time, from, to, text, kind, group });
     if (this.radio.length > 300) this.radio.splice(0, this.radio.length - 300);
   }
@@ -1119,7 +1119,7 @@ export class Game {
       u.hint = `Gebietsabsicherung: Fahren Sie ${target.name} an. Beim Ausrücken Status 3, dann Status 1 bis zum Standort und dort auf Status 1 bleiben.`;
       u.timer = u.crewPlayerId ? undefined : this.time + (atStation ? (career ? this.rand(60, 120) : this.rand(180, 330)) : this.rand(5, 12)) * 1000;
       sent.push(shortCallsign(u.callsign));
-      this.radioMsg(this.scn.ilsName, u.callsign, `Gebietsabsicherung: Verlegen Sie nach ${target.name} – ohne Sondersignal`, 'system');
+      this.radioMsg(this.scn.ilsName, u.callsign, `Alarmierung: Gebietsabsicherung – Verlegung nach ${target.name} – ohne Sondersignal`, 'system');
     }
     if (!sent.length) return reason || 'Keine verfügbaren Fahrzeuge ausgewählt';
     this.events.toast?.(player.id, `Gebietsabsicherung ${target.name}: ${sent.join(', ')}`, 'info');
