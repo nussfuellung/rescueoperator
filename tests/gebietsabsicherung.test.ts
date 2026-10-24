@@ -27,6 +27,10 @@ describe('Gebietsabsicherung', () => {
     const { game, p, u, target } = setup();
     expect(game.handle(p.id, { a: 'cover', unitIds: [u.id], stationId: target.id })).toBeUndefined();
     expect(u.cover?.stationId).toBe(target.id);
+    // Alarmierung über den Funkmelder, nicht im Sprechfunk der Rufgruppe
+    const alarm = game.radio.find((m) => m.to === u.callsign && /Gebietsabsicherung/.test(m.text))!;
+    expect(alarm.kind).toBe('system');
+    expect(alarm.group).toBeUndefined();
     const seen: number[] = [];
     for (let t = 0; t < 3_600_000 && u.task !== 'covering'; t += 1000) {
       game.tick(1000);
