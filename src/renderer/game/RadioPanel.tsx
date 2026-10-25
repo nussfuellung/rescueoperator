@@ -1,6 +1,6 @@
 // Funkverkehr: Sprechwunsch-Warteschlange und Funkprotokoll.
 import { HospitalSelect } from './Ivena';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { formatClock, formatDuration, radioName } from '../../../shared/catalog';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
@@ -11,6 +11,8 @@ export function RadioPanel({ ctx }: { ctx: GameCtx }) {
   const waitingHospital = state.units.filter((u) => u.task === 'awaitHospital' && !u.hospitalId && u.pzc && !(u.speak && !u.speak.answered));
   const log = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
+  // Neue Funksprüche, während der Nutzer bewusst nach oben gescrollt hat
+  const [unread, setUnread] = useState(false);
   const groups = scn.tmoGroups ?? [];
   // Mitgehörte Rufgruppen (leer = alle)
   const [muted, setMuted] = useState<string[]>(() => {
@@ -34,9 +36,31 @@ export function RadioPanel({ ctx }: { ctx: GameCtx }) {
   const groupName = new Map(groups.map((g) => [g.id, g.name]));
   const lines = state.radio.filter((m) => !m.group || !muted.includes(m.group));
 
+  const toBottom = () => {
+    const el = log.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  };
+
+  // Der Server schickt nur die letzten 120 Funksprüche, die Länge bleibt dann gleich.
+  // Deshalb am letzten Spruch festmachen, nicht an der Anzahl.
+  const lastId = lines[lines.length - 1]?.id;
+  useLayoutEffect(() => {
+    if (atBottom.current) toBottom();
+    else if (lastId !== undefined) setUnread(true);
+  }, [lastId]);
+
+  // Ändert sich die Höhe der Liste (Sprechwünsche, Fenstergröße, ausgelagertes Fenster),
+  // unten bleiben, wenn man vorher unten war
   useEffect(() => {
-    if (atBottom.current) log.current?.scrollTo(0, log.current.scrollHeight);
-  }, [lines.length]);
+    const el = log.current;
+    const RO = el?.ownerDocument.defaultView?.ResizeObserver;
+    if (!el || !RO) return;
+    const ro = new RO(() => {
+      if (atBottom.current) toBottom();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Taste J: ältesten Sprechwunsch annehmen
   const first = queue[0];
@@ -107,6 +131,7 @@ export function RadioPanel({ ctx }: { ctx: GameCtx }) {
         onScroll={(e) => {
           const el = e.currentTarget;
           atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+          if (atBottom.current) setUnread(false);
         }}
       >
         {lines.map((m) => (
@@ -119,6 +144,18 @@ export function RadioPanel({ ctx }: { ctx: GameCtx }) {
           </div>
         ))}
       </div>
+      {unread && (
+        <button
+          className="radio-unread small-btn"
+          onClick={() => {
+            atBottom.current = true;
+            setUnread(false);
+            toBottom();
+          }}
+        >
+          ↓ Neue Funksprüche
+        </button>
+      )}
       {groups.length > 0 && (
         <form
           className="row group-call"
