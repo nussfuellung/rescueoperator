@@ -2607,6 +2607,7 @@ button.gross {
 }
 .call-row.ringing.ktp b {
   color: var(--info-text);
+}
 .s8-tag {
   font-size: 10px;
   padding: 0 4px;
