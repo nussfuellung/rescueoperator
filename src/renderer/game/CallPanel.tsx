@@ -71,13 +71,14 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
       <div className="call-list">
         {ringing.length === 0 && !mine && <div className="muted small pad">Keine wartenden Anrufe.</div>}
         {ringing.map((c) => (
-          <div key={c.id} className={`call-row ringing ${c.kind}`}>
+          <div key={c.id} className={`call-row ringing ${c.kind}${c.polizei ? ' pol' : ''}`}>
             <div>
-              <b>{c.kind === 'bma' ? 'BMA' : c.kind === 'kvb' ? 'KVB' : c.kind === 'rtw' ? 'RTW' : '112'}</b>{' '}
+              <b>{c.kind === 'bma' ? 'BMA' : c.kind === 'kvb' ? 'KVB' : c.kind === 'rtw' ? 'RTW' : c.polizei ? 'POL' : '112'}</b>{' '}
               {c.kind === 'bma' ? c.bma?.text : c.kind === 'kvb' ? c.kvb?.text : c.kind === 'rtw' ? `${c.phone} · Patientenanmeldung` : c.phone}
               <div className="muted small">
                 klingelt seit {formatDuration(state.time - c.ringStart)}
                 {c.aml ? ' · AML-Ortung vorhanden' : ''}
+                {c.polizei ? ' · Streife vor Ort' : ''}
                 {c.transcript[0]?.from === 'system' && c.kind === '112' ? ' · Wiederholungsanruf' : ''}
               </div>
             </div>
@@ -309,9 +310,12 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
   const [swQuery, setSwQuery] = useState('');
   const [schlagwort, setSchlagwort] = useState('');
   const [sondersignal, setSondersignal] = useState(true);
+  // Polizei gleich mit dem ersten Alarm verständigen; ruft die Streife selbst an, ist sie schon vor Ort
+  const [polizei, setPolizei] = useState(false);
+  const polizeiVorOrt = !!call?.polizei;
   const [patients, setPatients] = useState(0);
   const [patient, setPatient] = useState('');
-  const [melder, setMelder] = useState('');
+  const [melder, setMelder] = useState(call?.polizei ? `Polizei, Streife ${call.polizei}` : '');
   const [rueckruf, setRueckruf] = useState(call && call.kind === '112' ? call.phone : '');
   const [note, setNote] = useState('');
   const [err, setErr] = useState('');
@@ -408,6 +412,10 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
         e.preventDefault();
         setZubuchen(true);
       }
+      if (e.altKey && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        setPolizei((x) => !x);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => {
@@ -502,6 +510,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
       rueckruf,
       patient,
       sondersignal,
+      polizei: polizei && !polizeiVorOrt,
       alarmUnitIds: withAlarm ? alarmIds : undefined,
     });
     // Neuen Einsatz auswählen, sobald er im Zustand auftaucht
@@ -538,6 +547,10 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
             e.preventDefault();
             setZubuchen(true);
           }
+          if (e.altKey && (e.key === 'p' || e.key === 'P') && e.currentTarget.ownerDocument !== document) {
+            e.preventDefault();
+            setPolizei((x) => !x);
+          }
         }}
       >
         <div className="em-head">
@@ -548,8 +561,13 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
         </div>
 
         {call && call.kind === '112' && (
-          <div className={`em-locate ${call.aml ? 'has' : ''}`}>
-            {call.aml ? (
+          <div className={`em-locate ${call.aml || call.polizei ? 'has' : ''}`}>
+            {call.polizei ? (
+              <>
+                <span className="em-badge pol">POL</span>
+                <span className="grow small">Streife {call.polizei} ist vor Ort und fordert den Rettungsdienst nach.</span>
+              </>
+            ) : call.aml ? (
               <>
                 <span className="em-badge aml">AML</span>
                 <span className="grow small">Handyortung ±{call.aml.acc} m</span>
@@ -783,6 +801,18 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
                 </label>
               ))}
               {!proposal.length && !extraRows.length && <div className="muted small">{sw ? 'Kein freies Fahrzeug für die AAO gefunden.' : 'Einsatzstichwort wählen oder Fahrzeuge zubuchen.'}</div>}
+              {polizeiVorOrt ? (
+                <div className="free-row pol" title="Die Polizei hat angerufen und ist bereits an der Einsatzstelle">
+                  <span className="polizei-tag">Polizei vor Ort</span>
+                  <span className="muted small">Streife {call!.polizei}</span>
+                </div>
+              ) : (
+                <label className="free-row pol" title="Polizei (110) gleich mit dem Anlegen verständigen · Alt+P">
+                  <input type="checkbox" checked={polizei} onChange={(e) => setPolizei(e.target.checked)} />
+                  <span className="cs">🚓 Polizei verständigen</span>
+                  <span className="eta muted">110</span>
+                </label>
+              )}
             </div>
             <button type="button" className="small-btn em-zb-btn" onClick={() => setZubuchen(true)} title="Alt+Z">
               + Fahrzeuge zubuchen…
