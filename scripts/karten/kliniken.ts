@@ -30,13 +30,16 @@ const FACH: Record<string, string[]> = {
   'Klinik Kitzinger Land': ['Innere Medizin', 'Chirurgie', 'Unfallchirurgie', 'Gynäkologie', 'Geburtshilfe'],
 };
 
-/** Neue Häuser: Position aus Koordinaten oder, wenn angegeben, aus der Mitte der Straße in der Karte */
+/** Neue Häuser: Position aus Koordinaten oder, wenn angegeben, aus der Mitte der Straße in der Karte;
+ *  mit beidem der Straßenknoten nächst den Koordinaten (Straßennamen gibt es in mehreren Orten) */
 const NEU: { id: string; name: string; lat?: number; lon?: number; street?: string; specialties: string[] }[] = [
   {
     id: 'h_kms_lohr',
     name: 'Klinikum Main-Spessart Lohr',
-    lat: 49.99326,
-    lon: 9.59166,
+    // Grafen-von-Rieneck-Straße 5, 97816 Lohr, westlich des Mains (vorher 49.99326/9.59166, das lag in Sendelbach)
+    lat: 49.99541,
+    lon: 9.5719,
+    street: 'Grafen-von-Rieneck-Straße',
     // klinikum-msp.de: HKL rund um die Uhr, zertifizierte Stroke Unit, Urologie als Belegabteilung, keine Geburtshilfe genannt;
     // Augenheilkunde nur Belegarzt, nimmt keine Notfälle
     specialties: ['Innere Medizin', 'Chirurgie', 'Unfallchirurgie', 'Kardiologie (HKL)', 'Stroke Unit', 'Urologie', 'Gynäkologie'],
@@ -59,7 +62,9 @@ const nearestNode = (p: { x: number; y: number }, nodes = scn.nodes) =>
 for (const n of NEU) {
   scn.hospitals = scn.hospitals.filter((h) => h.id !== n.id);
   const strasse = n.street ? scn.roads.filter((r) => r.name === n.street).flatMap((r) => [byId.get(r.a)!, byId.get(r.b)!]) : [];
-  const p = strasse.length
+  const p = strasse.length && n.lat !== undefined
+    ? nearestNode(latLonToLocal(scn.geo!, { lat: n.lat, lon: n.lon! }), strasse)
+    : strasse.length
     ? nearestNode({ x: strasse.reduce((s, q) => s + q.x, 0) / strasse.length, y: strasse.reduce((s, q) => s + q.y, 0) / strasse.length }, strasse)
     : nearestNode(latLonToLocal(scn.geo!, { lat: n.lat!, lon: n.lon! }));
   const h: Hospital = { id: n.id, name: n.name, x: Math.round(p.x), y: Math.round(p.y), specialties: n.specialties };
