@@ -139,3 +139,88 @@ describe('Terminfahrten', () => {
     }
   });
 });
+
+describe('Terminfahrten absagen und verschieben', () => {
+  const anlegen = (game: Game, pid: string, tplId: string, alarm = false) => {
+    const call = game.spawnCall(tplId)!;
+    game.handle(pid, { a: 'answerCall', callId: call.id });
+    const truth = truthOf(game, call.id);
+    game.handle(pid, {
+      a: 'createIncident',
+      callId: call.id,
+      stichwort: 'RD KTP',
+      address: truth.address,
+      x: truth.pos.x,
+      y: truth.pos.y,
+      note: '',
+      patients: 1,
+      termin: truth.termin,
+    });
+    game.handle(pid, { a: 'endCall', callId: call.id });
+    const inc = game.incidents[game.incidents.length - 1];
+    if (alarm) game.handle(pid, { a: 'alarm', incidentId: inc.id, unitIds: game.proposal(inc.id).map((x) => x.unitId) });
+    return inc;
+  };
+
+  it('Absage über die 19222: Stornieren gibt Punkte, alarmierte Fahrzeuge werden frei', () => {
+    const { game, p } = setup(11);
+    const inc = anlegen(game, p.id, 'ktp_termin_dialyse', true);
+    expect(inc.unitIds.length).toBeGreaterThan(0);
+    const unitId = inc.unitIds[0];
+    const call = game.terminAenderung(inc.id, 'absage')!;
+    expect(call.leitung).toBe('19222');
+    game.handle(p.id, { a: 'answerCall', callId: call.id });
+    run(game, 3000);
+    const said = call.transcript.filter((l) => l.from === 'caller').map((l) => l.text).join(' ');
+    expect(said).toMatch(/abgesagt/);
+    expect(said).toMatch(/\d\d:\d\d Uhr/);
+    expect(said).not.toMatch(/[{}]/);
+    const vorher = game.score.points;
+    game.handle(p.id, { a: 'endCall', callId: call.id });
+    // Kein Abzug fürs Beenden ohne Einsatz
+    expect(game.score.points).toBe(vorher);
+    game.handle(p.id, { a: 'closeIncident', incidentId: inc.id });
+    expect(inc.status).toBe('abgeschlossen');
+    expect(inc.log.some((l) => l.text === 'Terminfahrt storniert')).toBe(true);
+    expect(game.score.events[0].text).toMatch(/Abgesagte Terminfahrt storniert/);
+    expect(game.units.find((u) => u.id === unitId)!.incidentId).toBeUndefined();
+  });
+
+  it('Absage nicht umgesetzt: Leerfahrt ohne Transport', () => {
+    const { game, p } = setup(12);
+    const inc = anlegen(game, p.id, 'ktp_termin_ct');
+    game.terminAenderung(inc.id, 'absage');
+    game.handle(p.id, { a: 'alarm', incidentId: inc.id, unitIds: game.proposal(inc.id).map((x) => x.unitId) });
+    run(game, 30 * 60_000);
+    expect(game.score.events.some((e) => /Leerfahrt/.test(e.text))).toBe(true);
+    expect(game.units.some((u) => u.hasPatient)).toBe(false);
+  });
+
+  it('Verschiebung: neue Uhrzeit eintragen gibt Punkte, der Patient ist erst dann fertig', () => {
+    const { game, p } = setup(13);
+    const inc = anlegen(game, p.id, 'ktp_termin_dialyse');
+    const alt = inc.termin!;
+    const call = game.terminAenderung(inc.id, 'verschieben')!;
+    game.handle(p.id, { a: 'answerCall', callId: call.id });
+    game.handle(p.id, { a: 'ask', callId: call.id, question: 'termin' });
+    run(game, 6000);
+    const neu = (game as unknown as { incTruth: Map<string, { aenderung?: { neu?: number } }> }).incTruth.get(inc.id)!.aenderung!.neu!;
+    expect(neu).toBeGreaterThan(alt);
+    const said = call.transcript.filter((l) => l.from === 'caller').map((l) => l.text).join(' ');
+    expect(said).toContain('verschieben');
+    game.handle(p.id, { a: 'updateIncident', incidentId: inc.id, termin: neu });
+    expect(game.score.events[0].text).toMatch(/Neue Abholzeit/);
+    // Wird trotzdem zur alten Zeit alarmiert, wartet der KTW
+    game.handle(p.id, { a: 'alarm', incidentId: inc.id, unitIds: game.proposal(inc.id).map((x) => x.unitId) });
+    run(game, 25 * 60_000);
+    expect(inc.log.some((l) => /abholbereit/.test(l.text))).toBe(true);
+  });
+
+  it('meldet sich nicht mehr, wenn der KTW schon vor Ort ist', () => {
+    const { game, p } = setup(14);
+    const inc = anlegen(game, p.id, 'ktp_termin_ct', true);
+    run(game, 25 * 60_000);
+    expect(inc.firstArrival).toBeDefined();
+    expect(game.terminAenderung(inc.id)).toBeNull();
+  });
+});
