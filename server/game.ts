@@ -447,8 +447,8 @@ export class Game {
     // Die Streife vor Ort nennt den Einsatzort genau, ohne Zögern
     let streife: string | undefined;
     if (tpl.polizeiVorOrt) {
-      const ort = nearestTown(this.scn.towns, loc.pos)?.name ?? 'Stadt';
-      streife = `${ort} ${Math.floor(this.rand(11, 19.99))}/${Math.floor(this.rand(1, 4.99))}`;
+      // Funkrufname der Polizei im Bereich: immer „Main“ mit Nummer, z. B. Main 15/4
+      streife = `Main ${Math.floor(this.rand(11, 19.99))}/${Math.floor(this.rand(1, 4.99))}`;
       if (tpl.where !== 'ausserorts' && tpl.where !== 'autobahn') loc = { ...loc, spoken: `Einsatzort ist ${loc.address}.` };
     }
     // Fahrzeugtypen, die im Szenario nicht existieren, ignorieren
