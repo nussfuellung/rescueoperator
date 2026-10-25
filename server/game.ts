@@ -34,7 +34,11 @@ import { pzcFachbereich, pzcFuer, pzcSprech, zielFach } from '../shared/pzc';
 import {
   BMA_TEMPLATE,
   FIRST_NAMES,
+  KVB_ERKLAERUNG,
+  KVB_QUITTUNG,
+  KVB_REAKTION,
   KVB_UEBERGABE,
+  KVB_UEBERLEITUNG,
   FLOORS,
   LAST_NAMES,
   NOT_UNDERSTOOD,
@@ -302,6 +306,7 @@ export class Game {
       .replace(/\{Er\}/g, m ? 'Er' : 'Sie')
       .replace(/\{er\}/g, m ? 'er' : 'sie')
       .replace(/\{ihn\}/g, m ? 'ihn' : 'sie')
+      .replace(/\{ihm\}/g, m ? 'ihm' : 'ihr')
       .replace(/\{objekt\}/g, t.objekt ?? 'Heim')
       .replace(/\{phone\}/g, phone);
   }
@@ -633,16 +638,37 @@ export class Game {
     if (!call || call.state !== 'active' || call.kind !== '112') return 'Kein aktives Notrufgespräch';
     if (call.takerId !== player.id) return 'Das Gespräch führt ein anderer Calltaker';
     if (call.incidentId) return 'Zu diesem Anruf gibt es bereits einen Einsatz';
+    if (call.toKvb) return 'Der Anruf wird bereits an die KVB weiterverbunden';
     const truth = this.callTruth.get(call.id)!;
-    call.transcript.push({ from: 'calltaker', text: 'Ich verbinde Sie mit dem ärztlichen Bereitschaftsdienst unter 116117, bitte bleiben Sie dran.', t: this.time });
-    call.transcript.push({ from: 'system', text: 'An die KVB (116117) weiterverbunden.', t: this.time });
-    call.state = 'ended';
-    call.endedAt = this.time;
-    call.typing = false;
     call.toKvb = true;
     if (truth.tpl.kvb) this.addScore(10, 'Anrufer richtig an den ärztlichen Bereitschaftsdienst vermittelt');
     else if (truth.fake) this.addScore(-5, 'Fehlanruf an die KVB weiterverbunden');
     else this.addScore(-30, `Notfall an die KVB weiterverbunden (richtig wäre ${truth.stichwort})`);
+    // Erklären, Reaktion des Anrufers, Weitervermittlung mit Rückfallhinweis, Quittung, Übergabe
+    const wer = truth.facts?.role === 'selbst' ? 'selbst' : 'andere';
+    call.transcript.push({ from: 'calltaker', text: this.fill(this.pick(KVB_ERKLAERUNG[wer]), truth), t: this.time });
+    const d1 = this.rand(1800, 2600);
+    this.callerSays(call, this.pick(truth.tpl.kvb ? KVB_REAKTION.passend : truth.fake ? KVB_REAKTION.fehl : KVB_REAKTION.notfall), d1);
+    this.after(d1 + 2500, () => {
+      if (call.state !== 'active') return;
+      call.transcript.push({ from: 'calltaker', text: this.fill(this.pick(KVB_UEBERLEITUNG[wer]), truth), t: this.time });
+      const d2 = this.rand(1500, 2200);
+      this.callerSays(call, this.pick(KVB_QUITTUNG), d2);
+      this.after(d2 + 1500, () => {
+        if (call.state !== 'active') return;
+        call.transcript.push({ from: 'system', text: 'Weiterleitung zur 116117 … Ansage und Wartemusik der KVB-Vermittlungszentrale.', t: this.time });
+        this.after(2500, () => {
+          if (call.state === 'active') this.kvbUebergeben(call);
+        });
+      });
+    });
+  }
+
+  private kvbUebergeben(call: CallState) {
+    call.transcript.push({ from: 'system', text: 'Gespräch an den ärztlichen Bereitschaftsdienst (116117) übergeben.', t: this.time });
+    call.state = 'ended';
+    call.endedAt = this.time;
+    call.typing = false;
   }
 
   private requestPolice(player: Player, incidentId: string): string | void {
@@ -825,6 +851,9 @@ export class Game {
     const call = this.calls.find((c) => c.id === callId);
     if (!call) return 'Anruf nicht gefunden';
     if (call.state !== 'ringing') return 'Anruf wurde bereits angenommen';
+    // Eine laufende Weitervermittlung an die KVB wird beim nächsten Notruf direkt übergeben
+    if (call.kind === '112')
+      for (const c of this.calls) if (c.state === 'active' && c.takerId === player.id && c.toKvb) this.kvbUebergeben(c);
     if (this.calls.some((c) => c.state === 'active' && c.takerId === player.id && c.kind === '112') && call.kind === '112')
       return 'Du führst bereits ein Gespräch';
     call.state = 'active';
@@ -885,6 +914,7 @@ export class Game {
     if (!call || call.state !== 'active') return 'Kein aktives Gespräch';
     if (call.takerId !== player.id) return 'Das Gespräch führt ein anderer Calltaker';
     if (call.kind !== '112') return;
+    if (call.toKvb) return 'Der Anruf wird gerade an die KVB weiterverbunden';
     const truth = this.callTruth.get(call.id)!;
     const q: QuestionId | null = question === 'frei' ? null : question;
     const said = freeText ? freeText.slice(0, 300) : q ? questionText(q) : '';
@@ -944,6 +974,8 @@ export class Game {
         });
       return;
     }
+    // Weitervermittlung an die KVB läuft noch: ist bereits bewertet
+    if (call.toKvb) return;
     const truth = this.callTruth.get(call.id)!;
     if (!call.incidentId) {
       const lage = truth.main ?? truth;
@@ -968,6 +1000,7 @@ export class Game {
       if (!call) return 'Anruf nicht gefunden';
       if (call.incidentId) return 'Zu diesem Anruf gibt es bereits einen Einsatz';
       if (call.kind === 'rtw') return 'Patientenanmeldung: Zielklinik über IVENA zuweisen';
+      if (call.toKvb) return 'Der Anruf wurde an die KVB weiterverbunden';
       truth = this.callTruth.get(call.id);
     }
     const inc: IncidentState = {

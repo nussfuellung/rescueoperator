@@ -1285,6 +1285,48 @@ export const ADDRESS_NOT_YET_SAID = [
   'Ich hab Ihnen noch keine Adresse gesagt. {wo}',
 ];
 
+/** Weitervermittlung an den ärztlichen Bereitschaftsdienst (116117): Gesprächsbausteine nach Anruferrolle */
+export const KVB_ERKLAERUNG = {
+  selbst: [
+    'Nach dem, was Sie schildern, ist das kein lebensbedrohlicher Notfall. Dafür ist der ärztliche Bereitschaftsdienst unter 116117 zuständig, wenn die Hausarztpraxis geschlossen hat.',
+    'Das klingt nicht nach einem Fall für den Rettungsdienst. Außerhalb der Sprechzeiten hilft Ihnen der ärztliche Bereitschaftsdienst der KVB weiter, die 116117.',
+  ],
+  andere: [
+    'Nach Ihrer Schilderung ist das kein lebensbedrohlicher Notfall. Dafür ist der ärztliche Bereitschaftsdienst unter 116117 zuständig, wenn die Hausarztpraxis geschlossen hat.',
+    'Das klingt nicht nach einem Fall für den Rettungsdienst. Außerhalb der Sprechzeiten hilft Ihnen der ärztliche Bereitschaftsdienst der KVB weiter, die 116117.',
+  ],
+};
+
+export const KVB_REAKTION = {
+  /** Richtig vermittelt: Anrufer ist einverstanden oder fragt nach */
+  passend: [
+    'Ach so, okay. Ich wusste nicht, wen ich sonst anrufen soll.',
+    'Okay... und kommt da dann jemand, oder muss ich irgendwo hin?',
+    'Gut, danke. Wie lange dauert das denn da ungefähr?',
+    'Ah, die 116117, stimmt. Da hätte ich auch selber drauf kommen können.',
+  ],
+  /** Eigentlich ein Notfall: Anrufer protestiert */
+  notfall: [
+    'Bereitschaftsdienst? Aber das ist doch ein Notfall!',
+    'Können Sie nicht doch jemanden schicken? Es ist wirklich schlimm!',
+    'Und wenn das bis dahin zu spät ist?',
+  ],
+  fehl: ['Äh... okay?', '(Schweigen)', 'Was? Wieso denn?'],
+};
+
+export const KVB_UEBERLEITUNG = {
+  selbst: [
+    'Ich verbinde Sie jetzt direkt weiter. Die Kollegen dort klären mit Ihnen, ob Sie in eine Bereitschaftspraxis gehen können oder ein Arzt zu Ihnen kommt. Wenn es schlimmer wird, etwa Atemnot, Schmerzen in der Brust oder hohes Fieber mit Verwirrtheit, rufen Sie sofort wieder die 112 an.',
+    'Ich stelle Sie jetzt durch, bitte legen Sie nicht auf. Dort wird entschieden, ob Sie in die Bereitschaftspraxis kommen oder ein Hausbesuch nötig ist. Sollte es Ihnen deutlich schlechter gehen, wählen Sie bitte wieder die 112.',
+  ],
+  andere: [
+    'Ich verbinde Sie jetzt direkt weiter. Die Kollegen dort klären mit Ihnen, ob Sie in eine Bereitschaftspraxis kommen können oder ein Arzt zu Ihnen nach Hause kommt. Wenn es schlimmer wird, etwa Atemnot, Schmerzen in der Brust oder {er} nicht mehr richtig ansprechbar ist, rufen Sie sofort wieder die 112 an.',
+    'Ich stelle Sie jetzt durch, bitte legen Sie nicht auf. Dort wird entschieden, ob Sie in die Bereitschaftspraxis kommen oder ein Hausbesuch nötig ist. Wenn es {ihm} deutlich schlechter geht, wählen Sie bitte wieder die 112.',
+  ],
+};
+
+export const KVB_QUITTUNG = ['Okay, danke schön.', 'Alles klar, ich bleib dran.', 'Ja, gut. Danke.', 'Okay... ja. Danke.'];
+
 export const NOT_UNDERSTOOD = ['Wie bitte? Ich versteh Sie nicht.', 'Was meinen Sie?', 'Das weiß ich nicht.', 'Bitte, schicken Sie einfach jemanden!', 'Hä? Nochmal bitte.'];
 export const YES_NO = ['Ja, schon.', 'Nein, ich glaube nicht.', 'Das kann ich nicht sagen.', 'Ich glaub nicht, nein.'];
 export const FLOORS = ['Erdgeschoss', 'erster Stock', 'zweiter Stock', 'dritter Stock', 'Dachgeschoss', 'erster Stock links', 'zweiter Stock rechts'];

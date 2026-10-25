@@ -281,7 +281,8 @@ function Conversation({ ctx, call }: { ctx: GameCtx; call: CallState }) {
         <button type="submit">Fragen</button>
       </form>
       <MicButton targetId={`call-${call.id}`} label="Frage sprechen" />
-      {!call.incidentId && (
+      {call.toKvb && <div className="muted small">Wird an den ärztlichen Bereitschaftsdienst (116117) weiterverbunden…</div>}
+      {!call.incidentId && !call.toKvb && (
         <button onClick={() => conn.send({ a: 'transferKvb', callId: call.id })} title="Kein Notfall: an den ärztlichen Bereitschaftsdienst weiterverbinden">
           An KVB 116117
         </button>
