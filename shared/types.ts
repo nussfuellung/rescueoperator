@@ -327,7 +327,8 @@ export type QuestionId =
   | 'vorerkrankung'
   | 'zugang'
   | 'rueckruf'
-  | 'ortbestaetigen';
+  | 'ortbestaetigen'
+  | 'verabschieden';
 
 export interface CallState {
   id: string;
