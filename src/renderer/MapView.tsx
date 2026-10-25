@@ -614,7 +614,10 @@ export function MapView(props: Props) {
         const [x, y] = toScreen(i);
         const sel = p.data?.selectedIncidentId === i.id;
         const r = sel ? 13 : 10;
-        if (i.status === 'offen') {
+        // Terminfahrt ohne Fahrzeug: blass und ohne Blinken, bis die Erinnerung kommt
+        const geplant = i.termin !== undefined && i.status === 'offen' && !i.unitIds.length;
+        if (geplant && !i.terminMeldung) ctx.globalAlpha = 0.5;
+        if (i.status === 'offen' && (!geplant || i.terminMeldung)) {
           ctx.fillStyle = `rgba(208,0,0,${0.15 + pulse * 0.25})`;
           ctx.beginPath();
           ctx.arc(x, y, r + 10, 0, Math.PI * 2);
@@ -633,7 +636,8 @@ export function MapView(props: Props) {
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 10px sans-serif';
         ctx.fillText('!', x, y + 2);
-        label(ctx, `${i.stichwort}`, x, y + r + 10, '#6a040f', true);
+        label(ctx, geplant ? `${i.stichwort} · Termin` : `${i.stichwort}`, x, y + r + 10, '#6a040f', true);
+        ctx.globalAlpha = 1;
       }
 
       // Fahrzeuge

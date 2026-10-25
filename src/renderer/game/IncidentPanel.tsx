@@ -7,10 +7,13 @@ import { computeProposal } from '../../../shared/dispatch';
 import type { IncidentState, UnitState } from '../../../shared/types';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
+import { TerminListe, TerminZeile, istGeplant } from './TerminListe';
 
 export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
   const { state } = ctx;
-  const list = [...state.incidents].sort((a, b) => {
+  // Noch nicht disponierte Terminfahrten stehen getrennt in der Terminliste
+  const geplant = state.incidents.filter(istGeplant).length;
+  const list = [...state.incidents].filter((i) => !istGeplant(i)).sort((a, b) => {
     const order = { offen: 0, alarmiert: 1, laufend: 2, abgeschlossen: 3 };
     return order[a.status] - order[b.status] || b.createdAt - a.createdAt;
   });
@@ -32,11 +35,13 @@ export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
   return (
     <div className="panel incidents">
       <div className="panel-title">
-        Einsätze ({state.incidents.filter((i) => i.status !== 'abgeschlossen').length} aktiv
+        Einsätze ({state.incidents.filter((i) => i.status !== 'abgeschlossen' && !istGeplant(i)).length} aktiv
+        {geplant > 0 ? `, ${geplant} ${geplant === 1 ? 'Terminfahrt' : 'Terminfahrten'}` : ''}
         {covers.length > 0 ? `, ${covers.length} ${covers.length === 1 ? 'Gebietsabsicherung' : 'Gebietsabsicherungen'}` : ''})
       </div>
       <div className="incident-list">
-        {list.length === 0 && !covers.length && <div className="muted small pad">Keine Einsätze.</div>}
+        <TerminListe ctx={ctx} />
+        {list.length === 0 && !covers.length && !geplant && <div className="muted small pad">Keine Einsätze.</div>}
         {covers.map((c) => (
           <div
             key={c.key}
@@ -177,6 +182,7 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
           {inc.sondersignal === false && <span className="warn">ohne Sondersignal</span>}
         </div>
       )}
+      <TerminZeile ctx={ctx} inc={inc} />
       {inc.schlagwort && <code className="em-schlagwort">{inc.schlagwort}</code>}
       <div className="row">
         <select

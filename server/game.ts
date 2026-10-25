@@ -121,6 +121,12 @@ interface Truth {
   incidentId?: string;
   /** Weiterer Anrufer zu einer bereits gemeldeten Lage (Großschadenslage): die ursprüngliche Lage */
   main?: Truth;
+  /** Terminfahrt: bestellte Abholzeit (Spielzeit) */
+  termin?: number;
+  /** Terminfahrt: Transportziel, das der Anrufer nennt */
+  ziel?: string;
+  /** Fahrzeug war vor der Abholzeit da, Wartezeit ist eingerechnet */
+  wartet?: boolean;
 }
 
 const MISSED_AFTER_MS = 90_000;
@@ -134,6 +140,10 @@ const SPEAK_PENALTY_MS = 180_000;
 /** Großschadenslagen frühestens nach so viel Spielzeit, Unwetter frühestens nach 15 Minuten */
 const GSL_MIN_MS = 45 * 60_000;
 const UNWETTER_MIN_MS = 15 * 60_000;
+/** Erinnerung an eine Terminfahrt so lange vor der Abholzeit */
+const TERMIN_VORLAUF_MS = 30 * 60_000;
+/** Terminfahrt gilt als pünktlich bis so lange nach der Abholzeit */
+const TERMIN_TOLERANZ_MS = 10 * 60_000;
 
 export interface GameEvents {
   speech?: (text: string) => void;
@@ -301,7 +311,15 @@ export class Game {
       .replace(/\{er\}/g, m ? 'er' : 'sie')
       .replace(/\{ihn\}/g, m ? 'ihn' : 'sie')
       .replace(/\{objekt\}/g, t.objekt ?? 'Heim')
+      .replace(/\{termin\}/g, t.termin !== undefined ? `${this.uhrzeit(t.termin)} Uhr` : 'gleich')
+      .replace(/\{ziel\}/g, t.ziel ?? 'Krankenhaus')
       .replace(/\{phone\}/g, phone);
+  }
+  /** Uhrzeit (HH:MM) zu einer Spielzeit */
+  private uhrzeit(t: number) {
+    const m = Math.floor(this.clockStart + t / 60000);
+    const h = Math.floor((((m % 1440) + 1440) % 1440) / 60);
+    return `${String(h).padStart(2, '0')}:${String(((m % 60) + 60) % 60).padStart(2, '0')}`;
   }
 
   // ---------- Spieler ----------
@@ -333,6 +351,13 @@ export class Game {
       return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
     };
     const objs = this.scn.objects.filter((o) => !tpl.objectKinds || tpl.objectKinds.includes(o.kind));
+    if (tpl.where === 'klinik' && this.scn.hospitals.length) {
+      // Abholung auf Station: Verlegung oder Entlassung
+      const h = this.pick(this.scn.hospitals);
+      const hit = reverseGeocode(this.scn, h);
+      const address = hit && hit.distance < 300 ? hit.text : nearestTown(this.scn.towns, h)?.name ?? '';
+      return { pos: { x: h.x, y: h.y }, address: `${h.name}, ${address}`, spoken: `Im ${h.name}, ${address}.`, objekt: h.name };
+    }
     if (tpl.where === 'objekt' && objs.length) {
       const obj = this.pick(objs);
       const hit = reverseGeocode(this.scn, obj);
@@ -410,7 +435,24 @@ export class Game {
     };
     // Fahrzeugtypen, die im Szenario nicht existieren, ignorieren
     for (const k of Object.keys(needs)) if (!this.units.some((u) => this.typeOf(u)?.fills.includes(k))) delete needs[k];
+    // Terminfahrt: Abholzeit auf die Viertelstunde, Ziel passend zum Patienten (bzw. das Heim bei der Heimfahrt)
+    let termin: number | undefined;
+    let ziel: string | undefined;
+    if (tpl.termin) {
+      const min = this.clockStart + (this.time + this.rand(tpl.termin[0], tpl.termin[1]) * 60_000) / 60000;
+      termin = (Math.ceil(min / 15) * 15 - this.clockStart) * 60000;
+      const fach = tpl.patients?.[0] ? zielFach(tpl.patients[0].specialty, this.scn.hospitals) : undefined;
+      if (fach) {
+        const passend = this.scn.hospitals.filter((h) => h.specialties.includes(fach) && h.name !== loc!.objekt);
+        ziel = (passend.length ? this.pick(passend) : this.scn.hospitals.find((h) => h.name !== loc!.objekt))?.name;
+      } else {
+        const heime = this.scn.objects.filter((o) => o.kind === 'seniorenheim');
+        ziel = heime.length ? this.pick(heime).name : 'Pflegeheim';
+      }
+    }
     return {
+      termin,
+      ziel,
       tpl,
       stichwort: tpl.stichwort,
       pos: loc.pos,
@@ -451,7 +493,11 @@ export class Game {
     const lage = this.wetterAktiv();
     const wetterPool = lage && this.rng() < wetterAnteil(lage.art, lage.stufe) ? wetterVorlagen(lage.art) : [];
     const pool: LageTemplate[] = wetterPool.length ? wetterPool : [...TEMPLATES, ...SAISON_TEMPLATES.filter((t) => t.seasons?.includes(season))];
-    const usable = pool.filter((t) => t.where !== 'objekt' || this.scn.objects.some((o) => !t.objectKinds || t.objectKinds.includes(o.kind)));
+    const usable = pool.filter(
+      (t) =>
+        (t.where !== 'objekt' || this.scn.objects.some((o) => !t.objectKinds || t.objectKinds.includes(o.kind))) &&
+        (t.where !== 'klinik' || this.scn.hospitals.length >= 2),
+    );
     // Kürzlich gespielte Vorlagen seltener, damit sich Einsätze nicht ständig wiederholen
     const w = (t: IncidentTemplate) => {
       // Jahreszeit; Krankentransporte fahren fast nur tagsüber
@@ -477,8 +523,10 @@ export class Game {
   }
 
   private ring(truth: Truth, again = false): CallState {
+    // Krankentransporte bestellt man über die 19222, meist vom Festnetz der Einrichtung; AML gibt es nur beim Notruf
+    const ktp = truth.stichwort.startsWith('RD KTP');
     // Heute kommen die meisten Notrufe vom Handy; moderne Smartphones senden fast immer eine AML-Ortung
-    const mobile = this.rng() < 0.8;
+    const mobile = this.rng() < (ktp ? (truth.tpl.where === 'wohnung' ? 0.4 : 0.1) : 0.8);
     const phone = mobile
       ? `0${this.pick(['151', '160', '170', '176'])} ${Math.floor(this.rand(1e6, 9e6))}`
       : `0${Math.floor(this.rand(8000, 9999))} ${Math.floor(this.rand(1000, 99999))}`;
@@ -490,15 +538,16 @@ export class Game {
       ringStart: this.time,
       transcript: again ? [{ from: 'system', text: 'Anrufer ruft erneut an (vorheriger Anruf nicht angenommen).', t: this.time }] : [],
       asked: [],
+      leitung: ktp ? '19222' : undefined,
     };
-    if (mobile && this.rng() < (truth.fake ? 0.6 : 0.92)) {
+    if (mobile && !ktp && this.rng() < (truth.fake ? 0.6 : 0.92)) {
       const acc = Math.round(this.rand(30, 400));
       const ang = this.rand(0, Math.PI * 2);
       const off = this.rand(0, acc * 0.7);
       call.aml = { x: truth.pos.x + Math.cos(ang) * off, y: truth.pos.y + Math.sin(ang) * off, acc };
     }
     // Festnetz: Anschlussadresse aus dem Teilnehmerverzeichnis (meist der Notfallort)
-    if (!mobile && !truth.fake && truth.tpl.where === 'wohnung' && this.rng() < 0.85) {
+    if (!mobile && !truth.fake && (truth.tpl.where === 'wohnung' || ktp) && this.rng() < 0.85) {
       call.landline = { x: truth.pos.x, y: truth.pos.y, address: truth.address };
     }
     truth.callStart ??= this.time;
@@ -706,6 +755,17 @@ export class Game {
           if (inc.schlagwort) this.log(inc, `Schlagwort: ${inc.schlagwort}`);
         }
         if (action.note !== undefined) inc.note = action.note;
+        if (action.termin !== undefined) {
+          if (action.termin === null) {
+            if (inc.termin !== undefined) this.log(inc, 'Termin aufgehoben');
+            inc.termin = undefined;
+          } else {
+            if (!isFinite(action.termin) || action.termin < this.time - TERMIN_VORLAUF_MS || action.termin > this.time + 24 * 3600_000) return 'Ungültige Abholzeit';
+            if (action.termin !== inc.termin) this.log(inc, `Termin geändert: Abholung ${this.uhrzeit(action.termin)} Uhr`);
+            inc.termin = action.termin;
+          }
+          inc.terminMeldung = undefined;
+        }
         if (action.tmo !== undefined && action.tmo !== inc.tmo) {
           const g = this.tmoName(action.tmo);
           inc.tmo = action.tmo || undefined;
@@ -843,7 +903,10 @@ export class Game {
     this.addScore(Math.max(0, Math.round(15 - waited / 4)), `Notruf nach ${Math.round(waited)} s angenommen`);
     call.transcript.push({
       from: 'calltaker',
-      text: 'Notruf Feuerwehr und Rettungsdienst. Wo genau ist der Notfallort?',
+      text:
+        call.leitung === '19222'
+          ? `Integrierte Leitstelle ${this.scn.ilsName.replace(/^(ILS|Leitstelle)\s*/, '')}, Krankentransport, grüß Gott. Von wo soll der Patient abgeholt werden?`
+          : 'Notruf Feuerwehr und Rettungsdienst. Wo genau ist der Notfallort?',
       t: this.time,
     });
     call.asked.push('wo');
@@ -936,6 +999,8 @@ export class Game {
     const sw = this.scn.stichworte.find((s) => s.code === a.stichwort);
     if (!sw) return 'Unbekanntes Stichwort';
     if (!isFinite(a.x) || !isFinite(a.y)) return 'Kein Einsatzort gewählt';
+    if (a.termin !== undefined && (!isFinite(a.termin) || a.termin < this.time - TERMIN_VORLAUF_MS || a.termin > this.time + 24 * 3600_000))
+      return 'Ungültige Abholzeit';
     let truth: Truth | undefined;
     let call: CallState | undefined;
     if (a.callId) {
@@ -968,8 +1033,10 @@ export class Game {
       rueckruf: (a.rueckruf ?? call?.phone)?.slice(0, 40) || undefined,
       patient: a.patient?.slice(0, 120) || undefined,
       sondersignal: a.sondersignal ?? true,
+      termin: a.termin,
     };
     this.log(inc, `Einsatz angelegt von ${player.name}: ${inc.schlagwort ?? `${sw.code} ${sw.label}`}`);
+    if (inc.termin !== undefined) this.log(inc, `Terminfahrt: Abholung ${this.uhrzeit(inc.termin)} Uhr`);
     this.incidents.push(inc);
     this.score.incidentsCreated++;
     if (call) call.incidentId = inc.id;
@@ -1010,6 +1077,14 @@ export class Game {
           this.addScore(10, `${inc.nr}: Einsatzort korrekt erfasst`);
         } else {
           this.addScore(-10, `${inc.nr}: Einsatzort ${Math.round(d)} m daneben`);
+        }
+        // Wertung Abholzeit
+        if (truth.termin !== undefined) {
+          if (inc.termin === undefined) this.addScore(-10, `${inc.nr}: Bestellte Abholzeit ${this.uhrzeit(truth.termin)} Uhr nicht als Termin erfasst`);
+          else if (Math.abs(inc.termin - truth.termin) <= 5 * 60_000) this.addScore(10, `${inc.nr}: Abholzeit korrekt erfasst`);
+          else this.addScore(-5, `${inc.nr}: Abholzeit ${this.uhrzeit(inc.termin)} Uhr statt ${this.uhrzeit(truth.termin)} Uhr`);
+        } else if (inc.termin !== undefined && !truth.stichwort.startsWith('RD KTP')) {
+          this.addScore(-15, `${inc.nr}: Notfall als Terminfahrt angelegt`);
         }
       }
       this.incTruth.set(inc.id, truth);
@@ -1871,6 +1946,21 @@ export class Game {
     if (!u.crewPlayerId) this.setStatus(u, 4);
     else u.hint = 'Am Einsatzort angekommen: Status 4 drücken und Lage melden.';
     const truth = this.incTruth.get(inc.id)!;
+    if (!inc.firstArrival && inc.termin !== undefined) {
+      // Terminfahrt: Pünktlichkeit statt Hilfsfrist; zu früh heißt warten, bis der Patient fertig ist
+      inc.firstArrival = this.time;
+      inc.status = 'laufend';
+      const spaet = this.time - inc.termin;
+      if (spaet <= TERMIN_TOLERANZ_MS) this.addScore(15, `${inc.nr}: Terminfahrt pünktlich zur Abholung ${this.uhrzeit(inc.termin)} Uhr`);
+      else this.addScore(-5, `${inc.nr}: Terminfahrt ${Math.round(spaet / 60000)} min nach der Abholzeit eingetroffen`);
+    }
+    // Bestellter Patient ist erst zur Abholzeit fertig
+    const bereit = truth.termin ?? inc.termin;
+    if (bereit !== undefined && truth.progress === undefined && !truth.wartet && this.time < bereit - 5 * 60_000) {
+      truth.wartet = true;
+      truth.workMs += bereit - this.time;
+      this.log(inc, `${shortCallsign(u.callsign)} zu früh: Patient erst um ${this.uhrzeit(bereit)} Uhr abholbereit`);
+    }
     if (!inc.firstArrival) {
       inc.firstArrival = this.time;
       inc.status = 'laufend';
@@ -2237,6 +2327,23 @@ export class Game {
     else if (manual && truth && truth.stichwort && truth.tpl !== BMA_TEMPLATE) this.addScore(-15, `${inc.nr}: Einsatz vorzeitig geschlossen`);
   }
 
+  /** Terminfahrten: Erinnerung 30 Minuten vor der Abholzeit und bei Fälligkeit, solange noch nicht disponiert */
+  private checkTermine() {
+    for (const inc of this.incidents) {
+      if (inc.termin === undefined || inc.status === 'abgeschlossen' || inc.unitIds.length || inc.firstArrival) continue;
+      const stufe = this.time >= inc.termin ? 'faellig' : this.time >= inc.termin - TERMIN_VORLAUF_MS ? 'vorlauf' : undefined;
+      if (!stufe || stufe === inc.terminMeldung) continue;
+      inc.terminMeldung = stufe;
+      const uhr = this.uhrzeit(inc.termin);
+      const text =
+        stufe === 'faellig'
+          ? `Terminfahrt ${inc.nr} jetzt fällig (${uhr} Uhr): ${inc.address}`
+          : `Terminfahrt ${inc.nr} in ${Math.max(1, Math.round((inc.termin - this.time) / 60000))} min (${uhr} Uhr): ${inc.address}`;
+      this.log(inc, stufe === 'faellig' ? 'Abholzeit erreicht, noch kein Fahrzeug disponiert' : 'Erinnerung: Abholung in 30 Minuten');
+      for (const p of this.players) if (p.role !== 'crew') this.events.toast?.(p.id, text, stufe === 'faellig' ? 'warn' : 'info');
+    }
+  }
+
   /** Minute seit Mitternacht des Starttages */
   private gameMinute() {
     return Math.floor(this.clockStart + this.time / 60000);
@@ -2442,6 +2549,8 @@ export class Game {
     this.time += dt;
     this.checkDienst();
     this.checkIvena();
+
+    this.checkTermine();
 
     // geplante Ereignisse
     if (this.scheduled.length) {

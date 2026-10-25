@@ -2,8 +2,10 @@
 import type { MapObject, QuestionId, VehicleTypeId } from '../shared/types';
 import { ABEK_VORLAGEN } from './vorlagen-abek';
 import { FACH_VORLAGEN } from './vorlagen-fach';
+import { TERMIN_VORLAGEN } from './vorlagen-termin';
 
-export type LocationKind = 'wohnung' | 'strasse' | 'ausserorts' | 'objekt' | 'autobahn' | 'keine';
+/** klinik: Abholung in einem Krankenhaus (Verlegung, Entlassung) */
+export type LocationKind = 'wohnung' | 'strasse' | 'ausserorts' | 'objekt' | 'autobahn' | 'klinik' | 'keine';
 
 export interface IncidentTemplate {
   id: string;
@@ -34,6 +36,8 @@ export interface IncidentTemplate {
   /** Alter des Patienten (Standard 55–89) */
   age?: [number, number];
   sex?: 'm' | 'w';
+  /** Terminfahrt über die 19222: gewünschte Abholzeit so viele Minuten nach dem Anruf (von, bis) */
+  termin?: [number, number];
 }
 
 export type CallerRole = 'selbst' | 'angehoerig' | 'passant' | 'personal';
@@ -1078,6 +1082,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   ...ABEK_VORLAGEN,
   ...FACH_VORLAGEN,
+  ...TERMIN_VORLAGEN,
 ];
 
 /** Meldebilder, mit denen die KVB (116117) einen Einsatz an die ILS übergibt */
@@ -1123,6 +1128,9 @@ const QUESTION_TEXT: Record<QuestionId, string> = {
   zugang: 'In welchem Stock, und wie kommen die Einsatzkräfte zu Ihnen?',
   rueckruf: 'Unter welcher Nummer erreichen wir Sie, falls die Verbindung abbricht?',
   ortbestaetigen: 'Ich wiederhole die Adresse: Stimmt das so?',
+  termin: 'Für wann brauchen Sie den Transport, um wie viel Uhr soll abgeholt werden?',
+  ziel: 'Wohin soll der Transport gehen?',
+  transportart: 'Liegend, sitzend oder mit Tragestuhl?',
 };
 
 export function questionText(q: QuestionId): string {
@@ -1146,6 +1154,10 @@ const RULES: [QuestionId, RegExp][] = [
   ['tcpr', /reanimation|herzdruck|drücken sie|fest drücken|cpr|massage|hände auf die brust|brustmitte/],
   // "Ich wiederhole" ist die Rückbestätigung, "wiederholen Sie die Adresse" dagegen eine Frage nach dem Ort
   ['ortbestaetigen', /ich wiederhole|wiederhole ich|wiederhole (die|ihre) adresse|stimmt (das|die adresse)|ist das richtig|habe ich (das )?richtig|korrekt/],
+  // Krankentransport: Abholzeit, Ziel und Transportart vor "seit wann", "wo" und "Einweisung" (Zugang)
+  ['termin', /um wie ?viel uhr|uhrzeit|termin|für wann|bis wann|ab wann|abholzeit|wann (soll|sollen|muss|müssen|wollen|brauchen|bräuchten|möchten|darf|dürfen|ist (er|sie) fertig)|wann genau|wann abholen|abholen wann/],
+  ['transportart', /liegend|sitzend|tragestuhl|rollstuhl|gehfähig|transportart/],
+  ['ziel', /wohin|transportziel|zielort|zielklinik|wo soll (es|er|sie|der transport)( denn)? hin|in welche[sm]? (klinik|krankenhaus)|welche[sm]? (klinik|krankenhaus)|wo geht es hin/],
   ['rueckruf', /rückruf|zurückrufen|(ihre|eine|welche[rn]?|die) (telefon|handy)?nummer|erreichen wir sie|erreichbar|telefonnummer/],
   ['beruhigen', /ruhig|beruhig|keine angst|keine sorge|hilfe (ist|kommt) (unterwegs|organisiert)|tief durchatmen/],
   ['alter', /wie alt|alter |jahre alt|geburtsjahr|welches alter/],
@@ -1252,6 +1264,11 @@ export function fallbackAnswers(q: QuestionId, tpl: IncidentTemplate, role: Call
   if (q === 'rueckruf') return ['Ja, unter {phone}.', 'Das ist meine Nummer, {phone}.', 'Hier unter dieser Nummer, {phone}.'];
   if (q === 'ortbestaetigen') return ['Ja, genau.', 'Ja, richtig. Bitte beeilen Sie sich!', 'Ja, stimmt.'];
   if (q === 'atmung' || q === 'bewusstsein') return RELATIVE[q]!;
+  if (tpl.stichwort.startsWith('RD KTP')) {
+    if (q === 'termin') return ['So bald wie möglich, {er} ist fertig.', 'Am besten gleich, sobald jemand frei ist.'];
+    if (q === 'ziel') return ['Ins Krankenhaus, wo halt Platz ist.', 'In die Klinik, die Einweisung haben wir.'];
+    if (q === 'transportart') return ['Liegend bitte.', 'Sitzend geht, mit Tragestuhl.'];
+  }
   return DEFAULT_ANSWERS[q];
 }
 
@@ -1272,6 +1289,9 @@ export const DEFAULT_ANSWERS: Record<QuestionId, string[]> = {
   zugang: ['Sie sehen uns, wir warten draußen.'],
   rueckruf: ['Unter dieser Nummer, {phone}.'],
   ortbestaetigen: ['Ja, genau.'],
+  termin: ['Wann? Jetzt sofort natürlich!', 'Sofort, bitte!'],
+  ziel: ['Das wissen Sie doch besser, Hauptsache schnell!', 'Keine Ahnung, ins nächste Krankenhaus halt.'],
+  transportart: ['Das weiß ich doch nicht, schicken Sie einfach jemanden!', 'Keine Ahnung.'],
 };
 
 /** Rückbestätigung, bevor der Anrufer überhaupt einen Ort genannt hat */

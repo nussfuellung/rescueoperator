@@ -1,6 +1,6 @@
 // Notrufabfrage: Anrufliste, Gesprächsführung und Einsatzformular.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { formatDuration } from '../../../shared/catalog';
+import { formatDuration, formatHhmm, formatMinuten, terminAusUhrzeit } from '../../../shared/catalog';
 import { geocode, nearestObject, nearestTown, reverseGeocode, searchObjects, streetDirectory } from '../../../shared/geo';
 import type { AddressHit, ObjectHit } from '../../../shared/geo';
 import { computeProposal, freeUnitTimes } from '../../../shared/dispatch';
@@ -32,6 +32,13 @@ const QUESTIONS: { id: QuestionId; label: string; key: string }[] = [
   { id: 'zugang', label: 'Stockwerk / Zugang', key: 't' },
   { id: 'rueckruf', label: 'Rückrufnummer', key: 'z' },
   { id: 'ortbestaetigen', label: 'Adresse rückbestätigen', key: '0' },
+];
+
+/** Zusätzliche Fragen bei Anrufen auf der Krankentransport-Leitung 19222 */
+const KTP_QUESTIONS: { id: QuestionId; label: string; key: string }[] = [
+  { id: 'termin', label: 'Abholzeit?', key: 'u' },
+  { id: 'ziel', label: 'Ziel?', key: 'i' },
+  { id: 'transportart', label: 'Liegend / sitzend?', key: 'o' },
 ];
 
 export function CallPanel({ ctx }: { ctx: GameCtx }) {
@@ -71,9 +78,9 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
       <div className="call-list">
         {ringing.length === 0 && !mine && <div className="muted small pad">Keine wartenden Anrufe.</div>}
         {ringing.map((c) => (
-          <div key={c.id} className={`call-row ringing ${c.kind}`}>
+          <div key={c.id} className={`call-row ringing ${c.kind} ${c.leitung === '19222' ? 'ktp' : ''}`}>
             <div>
-              <b>{c.kind === 'bma' ? 'BMA' : c.kind === 'kvb' ? 'KVB' : c.kind === 'rtw' ? 'RTW' : '112'}</b>{' '}
+              <b>{c.kind === 'bma' ? 'BMA' : c.kind === 'kvb' ? 'KVB' : c.kind === 'rtw' ? 'RTW' : c.leitung === '19222' ? '19222 KTP' : '112'}</b>{' '}
               {c.kind === 'bma' ? c.bma?.text : c.kind === 'kvb' ? c.kvb?.text : c.kind === 'rtw' ? `${c.phone} · Patientenanmeldung` : c.phone}
               <div className="muted small">
                 klingelt seit {formatDuration(state.time - c.ringStart)}
@@ -208,6 +215,7 @@ export function IncidentFormPanel({ ctx }: { ctx: GameCtx }) {
 
 function Conversation({ ctx, call }: { ctx: GameCtx; call: CallState }) {
   const [text, setText] = useState('');
+  const questions = call.leitung === '19222' ? [...QUESTIONS, ...KTP_QUESTIONS] : QUESTIONS;
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     box.current?.scrollTo(0, box.current.scrollHeight);
@@ -217,7 +225,7 @@ function Conversation({ ctx, call }: { ctx: GameCtx; call: CallState }) {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      const q = QUESTIONS.find((x) => x.key === e.key);
+      const q = questions.find((x) => x.key === e.key);
       if (q && e.altKey) conn.send({ a: 'ask', callId: call.id, question: q.id });
     };
     const win = box.current?.ownerDocument.defaultView ?? window;
@@ -232,7 +240,7 @@ function Conversation({ ctx, call }: { ctx: GameCtx; call: CallState }) {
     <div className="conversation">
       <div className="conv-head">
         <span>
-          Gespräch mit <b>{call.phone}</b> · {formatDuration(ctx.state.time - (call.answeredAt ?? call.ringStart))}
+          {call.leitung === '19222' && <span className="em-badge ktp">19222</span>} Gespräch mit <b>{call.phone}</b> · {formatDuration(ctx.state.time - (call.answeredAt ?? call.ringStart))}
         </span>
         {call.aml && (
           <button className="small-btn" onClick={() => ctx.focus(call.aml!, Math.max(0.15, Math.min(1.5, 90 / call.aml!.acc)))}>
@@ -254,7 +262,7 @@ function Conversation({ ctx, call }: { ctx: GameCtx; call: CallState }) {
         </div>
       )}
       <div className="questions">
-        {QUESTIONS.map((q) => (
+        {questions.map((q) => (
           <button
             key={q.id}
             className={call.asked.includes(q.id) ? 'asked' : ''}
@@ -314,6 +322,8 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
   const [melder, setMelder] = useState('');
   const [rueckruf, setRueckruf] = useState(call && call.kind === '112' ? call.phone : '');
   const [note, setNote] = useState('');
+  // Terminfahrt: Abholzeit "HH:MM" (leer = sofort)
+  const [termin, setTermin] = useState('');
   const [err, setErr] = useState('');
   const [unchecked, setUnchecked] = useState<Set<string>>(new Set());
   // Zusätzlich zum Vorschlag zugebuchte Fahrzeuge
@@ -483,9 +493,12 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
     setZubuchen(false);
   };
 
+  const ktp = stichwort.startsWith('RD KTP') || call?.leitung === '19222';
+  const terminZeit = ktp && termin ? terminAusUhrzeit(state.clockStart, state.time, termin) : undefined;
   const submit = (withAlarm: boolean) => {
     if (!pos) return setErr('Bitte Einsatzort festlegen (Adresse suchen, AML übernehmen oder in die Karte klicken).');
     if (!stichwort) return setErr('Bitte ein Einsatzstichwort wählen.');
+    if (ktp && termin && terminZeit === undefined) return setErr('Abholzeit als Uhrzeit eingeben, z. B. 14:30.');
     conn.send({
       a: 'createIncident',
       callId: call?.id,
@@ -503,6 +516,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
       patient,
       sondersignal,
       alarmUnitIds: withAlarm ? alarmIds : undefined,
+      termin: terminZeit,
     });
     // Neuen Einsatz auswählen, sobald er im Zustand auftaucht
     const before = new Set(ctx.state.incidents.map((i) => i.id));
@@ -527,7 +541,8 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
-            submit(true);
+            // Terminfahrt wird erst später disponiert
+            submit(terminZeit === undefined);
           }
           // Im ausgelagerten Fenster kommt der Tastendruck nur hier an
           if (e.altKey && (e.key === 'a' || e.key === 'A') && e.currentTarget.ownerDocument !== document) {
@@ -682,6 +697,7 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
                       setStichwort(h.code);
                       setSchlagwort(formatSchlagwort(h));
                       setSwQuery('');
+                      if (h.code.startsWith('RD KTP')) setSondersignal(false);
                     }}
                   >
                     <b>{h.nr}</b> <b>{h.code}</b> #{h.kat}#{h.text}
@@ -697,6 +713,8 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
               onChange={(e) => {
                 setStichwort(e.target.value);
                 if (findSchlagwort(schlagwort)?.code !== e.target.value) setSchlagwort('');
+                // Krankentransporte fahren ohne Sondersignal
+                if (e.target.value.startsWith('RD KTP')) setSondersignal(false);
               }}
               className="grow"
             >
@@ -728,7 +746,35 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
               </button>
             </div>
           )}
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Meldebild / Hinweise für die Einsatzkräfte" rows={2} />
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={ktp ? 'Transportziel, liegend / sitzend, Hinweise für die Besatzung' : 'Meldebild / Hinweise für die Einsatzkräfte'}
+            rows={2}
+          />
+          {ktp && (
+            <div className="em-termin">
+              <label className="inline small">
+                🕑 Abholung um
+                <input type="time" value={termin} onChange={(e) => setTermin(e.target.value)} title="Leer lassen für einen Transport sofort" />
+              </label>
+              {terminZeit !== undefined ? (
+                <span className="small muted">
+                  {terminZeit - state.time >= 0
+                    ? `in ${formatMinuten(terminZeit - state.time)}${Math.floor((state.clockStart + terminZeit / 60000) / 1440) > Math.floor((state.clockStart + state.time / 60000) / 1440) ? ', morgen' : ''}`
+                    : 'schon fällig'}{' '}
+                  · Erinnerung 30 min vorher
+                </span>
+              ) : (
+                <span className="small muted">leer = sofort</span>
+              )}
+              {termin && (
+                <button type="button" className="small" title="Termin entfernen" onClick={() => setTermin('')}>
+                  ×
+                </button>
+              )}
+            </div>
+          )}
         </fieldset>
 
         <div className="em-two">
@@ -792,12 +838,25 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
 
         {err && <div className="error small">{err}</div>}
         <div className="row">
-          <button type="button" className="primary grow alarm-btn" onClick={() => submit(true)} title="Strg+Enter" disabled={!alarmIds.length}>
-            Anlegen und alarmieren ({alarmIds.length})
-          </button>
-          <button type="button" onClick={() => submit(false)}>
-            Nur anlegen
-          </button>
+          {terminZeit !== undefined ? (
+            <>
+              <button type="button" className="primary grow" onClick={() => submit(false)} title="Strg+Enter">
+                Terminfahrt {formatHhmm(state.clockStart, terminZeit)} anlegen
+              </button>
+              <button type="button" onClick={() => submit(true)} disabled={!alarmIds.length}>
+                Sofort alarmieren ({alarmIds.length})
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="primary grow alarm-btn" onClick={() => submit(true)} title="Strg+Enter" disabled={!alarmIds.length}>
+                Anlegen und alarmieren ({alarmIds.length})
+              </button>
+              <button type="button" onClick={() => submit(false)}>
+                Nur anlegen
+              </button>
+            </>
+          )}
           {!call && (
             <button type="button" onClick={onDone}>
               Abbrechen

@@ -104,6 +104,11 @@ export function pzcText(pzc: string): string {
 
 /** PZC zu einer Patientenbeschreibung des Simulators (erste passende Regel) */
 const REGELN: [RegExp, string, 1 | 2 | 3][] = [
+  // Geplante Transporte (Terminfahrten) vor den Krankheitsbildern, "Herzkatheter" sonst als Urologie
+  [/geplante[nmr]? herzkatheter/i, '603', 3],
+  [/geplante[nmr]? ct\b/i, '604', 3],
+  [/geplante[nmrs]? mrt\b/i, '605', 3],
+  [/ambulante[nmr]? (termin|kontrolle|untersuchung)/i, '601', 3],
   [/reanimation|rosc/i, '132', 1],
   [/schlaganfall|stroke/i, '421', 1],
   [/stemi|herzinfarkt/i, '332', 1],

@@ -618,6 +618,7 @@ export function useSounds(state?: PublicState, only: { calls?: boolean; radio?: 
   onlyRef.current = only;
   const seenSpeak = useRef(new Set<string>());
   const seenBma = useRef(new Set<string>());
+  const seenTermin = useRef(new Set<string>());
   useEffect(() => {
     const t = setInterval(() => {
       const s = ref.current;
@@ -635,6 +636,15 @@ export function useSounds(state?: PublicState, only: { calls?: boolean; radio?: 
           seenSpeak.current.add(k);
           if (onlyRef.current.radio) beep();
         }
+      }
+    }
+    // Erinnerung an Terminfahrten (30 min vorher und bei Fälligkeit)
+    for (const i of state.incidents) {
+      if (!i.terminMeldung) continue;
+      const k = `${i.id}:${i.terminMeldung}:${i.termin}`;
+      if (!seenTermin.current.has(k)) {
+        seenTermin.current.add(k);
+        if (onlyRef.current.radio) beep();
       }
     }
     for (const c of state.calls) {

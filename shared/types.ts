@@ -327,13 +327,21 @@ export type QuestionId =
   | 'vorerkrankung'
   | 'zugang'
   | 'rueckruf'
-  | 'ortbestaetigen';
+  | 'ortbestaetigen'
+  /** Krankentransport: gewünschte Abholzeit */
+  | 'termin'
+  /** Krankentransport: Transportziel */
+  | 'ziel'
+  /** Krankentransport: liegend, sitzend, Tragestuhl */
+  | 'transportart';
 
 export interface CallState {
   id: string;
   phone: string;
   /** 112, BMA, Übergabe der KVB (116117) oder Patientenanmeldung eines Rettungsmittels per Telefon */
   kind: '112' | 'bma' | 'kvb' | 'rtw';
+  /** Eingang über die Krankentransport-Rufnummer 19222 statt über den Notruf 112 */
+  leitung?: '19222';
   state: 'ringing' | 'active' | 'ended';
   takerId?: string;
   ringStart: number;
@@ -403,6 +411,10 @@ export interface IncidentState {
   polizei?: 'angefordert' | 'vor Ort';
   /** Anforderungen bei Nachbarleitstellen über die ESWL */
   eswl?: EswlAnforderung[];
+  /** Terminfahrt (geplanter Krankentransport): Abholzeit als Spielzeit */
+  termin?: number;
+  /** Erinnerung zur Terminfahrt: 30 Minuten vorher bzw. Termin erreicht */
+  terminMeldung?: 'vorlauf' | 'faellig';
 }
 
 export interface EswlAnforderung {

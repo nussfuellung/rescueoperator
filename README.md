@@ -64,6 +64,7 @@ Die Rolle wird beim Start gewählt und kann jederzeit oben rechts gewechselt wer
 - Stichwort wählen (RD 1, RD 2, B 3, THL 3 …), Meldebild eintragen, **Einsatz anlegen**. Bei Herz-Kreislauf-Stillstand gibt es Punkte für die Telefonreanimation.
 - Fehlanrufe (Hosentasche, Bereitschaftsdienst-Frage) ohne Einsatz beenden.
 - BMA-Auslösungen kommen ohne Anrufer mit Objekt und Adresse herein.
+- Krankentransporte kommen über die **19222** (in der Anrufliste als „19222 KTP“). Pflegeheime, Kliniken und Patienten bestellen dort auch **Terminfahrten** für eine bestimmte Uhrzeit (Dialyse, CT, Herzkatheter, Ambulanztermin, Heimfahrt). Zusätzliche Fragen: Abholzeit, Ziel, liegend oder sitzend. Bei Stichwort RD KTP hat die Einsatzmaske das Feld **Abholung um**; mit Uhrzeit wird der Einsatz als Terminfahrt angelegt statt sofort alarmiert. Eine Abholzeit, die schon mehr als 30 Minuten vorbei ist, gilt als morgen.
 
 **Disponent**
 - Einsatz in der Liste rechts wählen. Der AAO-Vorschlag ist vorausgewählt und nach Fahrzeit sortiert; weitere Fahrzeuge lassen sich dazu wählen. **Alarmieren**.
@@ -73,6 +74,7 @@ Die Rolle wird beim Start gewählt und kann jederzeit oben rechts gewechselt wer
 - Nachforderungen selbst alarmieren. Unvollständige Kräfte arbeiten langsamer, nach 4 Minuten erinnert das Fahrzeug erneut.
 - Zielklinik nach benötigter Fachrichtung zuweisen (Stroke Unit, HKL, Unfallchirurgie, Pädiatrie …).
 - **ESWL**: Reicht der eigene Rettungsdienst nicht, im Einsatz unter „ESWL“ eine Nachbarleitstelle und einen Fahrzeugtyp wählen und anfordern. Die Nachbar-ILS antwortet nach etwa einer Minute: Sie entsendet ihr nächstes freies Fahrzeug des Typs oder lehnt ab, wenn keines verfügbar ist. Fremdfahrzeuge melden sich beim Einfahren in den eigenen Bereich in der RD-Rufgruppe an, beim Verlassen ab, und fahren nach dem Einsatz zurück zu ihrer Wache. Die ILS Würzburg kennt die Rettungsmittel der ILS Schweinfurt, Bayerischer Untermain, Ansbach und Main-Tauber sowie die Rettungshubschrauber Christoph 2, 20, 27, 28, 53, 65 und Christoph Nürnberg.
+- **Terminfahrten** stehen oben in der Einsatzliste, nach Abholzeit sortiert. 30 Minuten vor der Abholzeit und bei Fälligkeit kommt eine Erinnerung mit Signalton an alle Leitstellenplätze, solange noch kein Fahrzeug disponiert ist. Die Abholzeit lässt sich in den Einsatzdetails ändern. Gewertet wird die Pünktlichkeit statt der Hilfsfrist; ein zu früh eintreffender KTW wartet, bis der Patient fertig ist.
 - Falsch erfasster Einsatzort: Die Kräfte finden nichts, suchen einige Minuten und verlieren dabei Zeit.
 
 **Fahrzeugbesatzung**
