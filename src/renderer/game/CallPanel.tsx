@@ -8,6 +8,7 @@ import { aaoMitSchlagwort, findSchlagwort, formatSchlagwort, schlagwortByNr, sea
 import { SchlagwortSelect } from './SchlagwortSelect';
 import { HospitalSelect } from './Ivena';
 import { ZubuchenDialog } from './ZubuchenDialog';
+import { S8Tag } from './S8Tag';
 import { decodePzc, pzcText, zielFach } from '../../../shared/pzc';
 import type { CallState, IncidentState, QuestionId, Vec } from '../../../shared/types';
 import { conn } from '../net';
@@ -290,7 +291,8 @@ function Conversation({ ctx, call }: { ctx: GameCtx; call: CallState }) {
         <button type="submit">Fragen</button>
       </form>
       <MicButton targetId={`call-${call.id}`} label="Frage sprechen" />
-      {!call.incidentId && (
+      {call.toKvb && <div className="muted small">Wird an den ärztlichen Bereitschaftsdienst (116117) weiterverbunden…</div>}
+      {!call.incidentId && !call.toKvb && (
         <button onClick={() => conn.send({ a: 'transferKvb', callId: call.id })} title="Kein Notfall: an den ärztlichen Bereitschaftsdienst weiterverbinden">
           An KVB 116117
         </button>
@@ -485,13 +487,13 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
   const proposal = useMemo(() => {
     if (!pos || !sw) return [];
     const draft = { id: '_entwurf', x: pos.x, y: pos.y } as IncidentState;
-    return computeProposal(scn, graph, state.units, draft, aaoMitSchlagwort(sw.aao, schlagwort));
+    return computeProposal(scn, graph, state.units, draft, aaoMitSchlagwort(sw.aao, schlagwort), state.time);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pos, stichwort, schlagwort, Math.floor(state.time / 10000)]);
   // Freie Fahrzeuge mit Fahrzeit, nur solange gebucht wird oder Zugebuchte angezeigt werden
   const free = useMemo(() => {
     if (!pos || (!zubuchen && !extra.length)) return [];
-    return freeUnitTimes(scn, graph, state.units, pos);
+    return freeUnitTimes(scn, graph, state.units, pos, state.time);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pos, zubuchen, extra.length > 0, Math.floor(state.time / 10000)]);
   const proposalIds = new Set(proposal.map((p) => p.unitId));
@@ -835,7 +837,9 @@ function IncidentForm({ ctx, call, onDone }: { ctx: GameCtx; call?: CallState; o
                         setUnchecked(n);
                       }}
                     />
-                    <span className="cs">{u.callsign}</span>
+                    <span className="cs">
+                      {u.callsign} {p.s8 && <S8Tag />}
+                    </span>
                     <span className="eta">{formatDuration(p.seconds * 1000)}</span>
                   </label>
                 );

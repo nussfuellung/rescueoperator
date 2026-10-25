@@ -2607,4 +2607,12 @@ button.gross {
 }
 .call-row.ringing.ktp b {
   color: var(--info-text);
+.s8-tag {
+  font-size: 10px;
+  padding: 0 4px;
+  margin-left: 4px;
+  border-radius: 3px;
+  border: 1px solid var(--warn-line, currentColor);
+  color: var(--warn-text, inherit);
+  white-space: nowrap;
 }

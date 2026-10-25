@@ -63,7 +63,7 @@ describe('Antworten der Besatzungen', () => {
     const u = game.units.find((x) => x.type === 'RTW' && x.status === 2)!;
     const kopf = `${u.callsign} von Leitstelle Würzburg, `;
     const faelle: [string, RegExp][] = [
-      ['', /hört|kommen/],
+      ['', /hört|^Hier/],
       ['wo befinden sie sich', /Wache/],
       ['wo stehen sie gerade', /Wache/],
       ['wie ist ihr standort', /Wache/],
@@ -83,6 +83,8 @@ describe('Antworten der Besatzungen', () => {
       ['was gibt es denn noch so neues', /wiederholen|melden uns/],
     ];
     for (const [s, re] of faelle) {
+      // Antworten ohne "kommen" am Ende, das sagt im Funk keiner mehr
+      expect(game.radioReply(u, `${kopf}${s}, kommen.`), s).not.toMatch(/kommen\.?$/i);
       expect(game.radioReply(u, `${kopf}${s}, kommen.`), s).toMatch(re);
       expect(game.radioReply(u, gesprochen(`${kopf.toLowerCase().replace(/[,/]/g, ' ').replace('71 1', 'einundsiebzig eins')}${s} kommen`)), `gesprochen: ${s}`).toMatch(re);
     }
