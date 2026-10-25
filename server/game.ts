@@ -65,7 +65,7 @@ import {
   type LageTemplate,
   type WetterLage,
 } from './lagen';
-import { rollVerlauf, type Verlauf } from './verlauf';
+import { lageZumStand, rollVerlauf, type NotarztStand, type Verlauf } from './verlauf';
 
 interface PatientTruth {
   specialty: string;
@@ -1907,6 +1907,7 @@ export class Game {
   /** Erkundung abgeschlossen: Lage steht fest, Lagemeldung und ggf. Nachforderung bzw. Abbestellung */
   private feststellung(inc: IncidentState, truth: Truth, u: UnitState) {
     truth.erkundet = true;
+    truth.lage = lageZumStand(truth.verlauf, truth.lage, this.notarztStand(inc), inc.polizei === 'vor Ort' ? 'vorOrt' : inc.polizei ? 'angefordert' : 'ohne');
     inc.lage = truth.lage;
     this.log(inc, `Lage: ${truth.lage}`);
     if (truth.verlauf?.erhoehung) this.log(inc, `Feuerwehr erhöht auf ${truth.verlauf.erhoehung}`);
@@ -1950,6 +1951,13 @@ export class Game {
           if (v) this.requestSpeak(v, 'nachforderung', 'Die Polizei ist noch nicht vor Ort. Bitte Polizei verständigen.');
         });
     });
+  }
+
+  /** Ob ein Notarzt (NEF, RTH) an der Einsatzstelle ist oder zumindest alarmiert */
+  private notarztStand(inc: IncidentState): NotarztStand {
+    const doc = inc.unitIds.map((id) => this.unit(id)).filter((x): x is UnitState => !!x && !!this.typeOf(x)?.fills.includes('NEF'));
+    if (doc.some((x) => x.task === 'onScene' || x.task === 'awaitHospital')) return 'vorOrt';
+    return doc.some((x) => x.task === 'alarmed' || x.task === 'toScene') ? 'unterwegs' : 'ohne';
   }
 
   /** Alarmierte Fahrzeuge, die laut tatsächlicher Lage nicht gebraucht werden */

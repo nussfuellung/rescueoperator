@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateScenario } from '../shared/mapgen';
 import { mulberry32 } from '../shared/mapgen';
 import { Game } from '../server/game';
-import { rollVerlauf } from '../server/verlauf';
+import { lageZumStand, rollVerlauf } from '../server/verlauf';
 
 const all = () => true;
 const roll = (seed: number, input: Parameters<typeof rollVerlauf>[0]) => rollVerlauf(input, mulberry32(seed), all);
@@ -41,6 +41,34 @@ describe('Einsatzverläufe', () => {
       roll(i + 5, { tplId: 'rd_krampf', stichwort: 'RD 2', where: 'wohnung', lage: 'Krampfanfall.', needs: { RTW: 1, NEF: 1 }, patients: 1 }),
     );
     expect(rd2.some((v) => v.abbestellen.includes('NEF'))).toBe(true);
+  });
+
+  it('meldet nur, was zum Stand an der Einsatzstelle passt', () => {
+    const cpr = { tplId: 'rd_cpr', stichwort: 'RD 2', where: 'wohnung', lage: 'Reanimation läuft.', needs: { RTW: 1, NEF: 1 }, patients: 1 };
+    const tot = Array.from({ length: 200 }, (_, i) => roll(i + 11, cpr)).filter((v) => v.keinTransport);
+    expect(tot.length).toBeGreaterThan(10);
+    for (const v of tot) {
+      expect(v.needs.NEF).toBe(1);
+      expect(lageZumStand(v, v.lage, 'vorOrt', 'ohne')).toMatch(/durch den Notarzt abgebrochen/);
+      for (const stand of ['unterwegs', 'ohne'] as const) {
+        const lage = lageZumStand(v, v.lage, stand, 'ohne');
+        expect(lage).not.toMatch(/durch den Notarzt/);
+        expect(lage).toMatch(/Notarzt zur Todesfeststellung/);
+      }
+    }
+    const stabil = Array.from({ length: 200 }, (_, i) =>
+      roll(i + 5, { tplId: 'rd_krampf', stichwort: 'RD 2', where: 'wohnung', lage: 'Krampfanfall.', needs: { RTW: 1, NEF: 1 }, patients: 1 }),
+    ).filter((v) => v.abbestellen.includes('NEF'));
+    expect(stabil.length).toBeGreaterThan(0);
+    for (const v of stabil) {
+      expect(lageZumStand(v, v.lage, 'unterwegs', 'ohne')).toMatch(/NEF kann abbestellt werden/);
+      expect(lageZumStand(v, v.lage, 'ohne', 'ohne')).not.toMatch(/NEF/);
+    }
+    expect(lageZumStand(undefined, 'Hitzschlag, Transport mit Notarzt.', 'ohne', 'ohne')).toBe('Hitzschlag, Notarzt erforderlich, Transport in Notarztbegleitung.');
+    expect(lageZumStand(undefined, 'Hitzschlag, Transport mit Notarzt.', 'unterwegs', 'ohne')).toBe('Hitzschlag, Transport mit Notarzt.');
+    expect(lageZumStand(undefined, 'Stichverletzung, Polizei vor Ort.', 'vorOrt', 'ohne')).toBe('Stichverletzung, Polizei erforderlich.');
+    expect(lageZumStand(undefined, 'Stichverletzung, Polizei vor Ort.', 'vorOrt', 'angefordert')).toBe('Stichverletzung, Polizei wird erwartet.');
+    expect(lageZumStand(undefined, 'Stichverletzung, Polizei vor Ort.', 'vorOrt', 'vorOrt')).toBe('Stichverletzung, Polizei vor Ort.');
   });
 
   it('meldet die BMA-Lage erst nach der Erkundung', () => {

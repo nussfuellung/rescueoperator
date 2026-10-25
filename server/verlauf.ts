@@ -50,6 +50,27 @@ export interface Verlauf {
   /** Feuerwehr erhöht das Stichwort */
   erhoehung?: string;
   entwicklung?: Entwicklung;
+  /** Feststellung abhängig davon, ob ein Notarzt vor Ort ist (ersetzt lage bei der Lagemeldung) */
+  notarztLage?: Record<NotarztStand, string>;
+}
+
+/** Notarzt an der Einsatzstelle: eingetroffen, alarmiert und unterwegs, oder gar nicht alarmiert */
+export type NotarztStand = 'vorOrt' | 'unterwegs' | 'ohne';
+export type PolizeiStand = 'vorOrt' | 'angefordert' | 'ohne';
+
+/**
+ * Lagemeldung zum tatsächlichen Stand an der Einsatzstelle passend machen:
+ * Eine Lage darf nur Kräfte als anwesend nennen, die auch da sind
+ * (kein Abbruch der Reanimation „durch den Notarzt“ ohne Notarzt, keine „Polizei vor Ort“ ohne Polizei).
+ */
+export function lageZumStand(v: Verlauf | undefined, lage: string, notarzt: NotarztStand, polizei: PolizeiStand): string {
+  let out = v?.notarztLage?.[notarzt] ?? lage;
+  if (notarzt === 'ohne') out = out.replace(/Transport mit Notarzt/g, 'Notarzt erforderlich, Transport in Notarztbegleitung');
+  if (polizei !== 'vorOrt')
+    out = out
+      .replace(/Polizei vor Ort/g, polizei === 'angefordert' ? 'Polizei wird erwartet' : 'Polizei erforderlich')
+      .replace(/Polizei nimmt Anzeige auf/g, polizei === 'angefordert' ? 'Polizei zur Anzeigenaufnahme wird erwartet' : 'Polizei zur Anzeigenaufnahme erforderlich');
+  return out;
 }
 
 type Rng = () => number;
@@ -434,7 +455,18 @@ function rd(v: Verlauf, input: VerlaufInput, rng: Rng, nachfordern: (e: Record<s
     ausgang.push({
       w: 45,
       apply: (x) => {
-        x.lage = 'Reanimation nach 30 Minuten ohne ROSC durch den Notarzt abgebrochen, Patient verstorben, Polizei zur Leichensache und KIT verständigen.';
+        // Den Abbruch einer Reanimation und die Todesfeststellung kann nur ein Arzt vornehmen
+        const notarzt = !!x.needs.NEF || nachfordern({ NEF: 1 });
+        const nachsorge = 'Polizei zur Leichensache und KIT verständigen.';
+        const ohneArzt = `Bei Eintreffen sichere Todeszeichen, Reanimation nicht fortgeführt, Patient verstorben. ${
+          notarzt ? 'Notarzt zur Todesfeststellung erforderlich' : 'Todesfeststellung durch den ärztlichen Bereitschaftsdienst erforderlich'
+        }, ${nachsorge}`;
+        x.lage = ohneArzt;
+        x.notarztLage = {
+          vorOrt: `Reanimation nach 30 Minuten ohne ROSC durch den Notarzt abgebrochen, Patient verstorben, ${nachsorge}`,
+          unterwegs: ohneArzt,
+          ohne: ohneArzt,
+        };
         x.keinTransport = true;
         x.workFactor = 1.1;
       },
@@ -444,7 +476,13 @@ function rd(v: Verlauf, input: VerlaufInput, rng: Rng, nachfordern: (e: Record<s
     ausgang.push({
       w: 18,
       apply: (x) => {
-        x.lage += ' Patient stabil, Notarzt nicht erforderlich, NEF kann abbestellt werden.';
+        const lage = x.lage;
+        x.lage += ' Patient stabil, Notarzt nicht erforderlich.';
+        x.notarztLage = {
+          vorOrt: `${lage} Patient stabil, Notarzt nicht erforderlich, Transport ohne Notarztbegleitung.`,
+          unterwegs: `${lage} Patient stabil, Notarzt nicht erforderlich, NEF kann abbestellt werden.`,
+          ohne: x.lage,
+        };
         delete x.needs.NEF;
       },
     });
@@ -479,7 +517,7 @@ function rd(v: Verlauf, input: VerlaufInput, rng: Rng, nachfordern: (e: Record<s
   if (sw === 'RD 1' && input.patients && !v.keinTransport && !v.needs.NEF && rng() < 0.08)
     v.entwicklung = {
       at: 0.3 + rng() * 0.3,
-      text: 'Zustand des Patienten verschlechtert sich, Patient zunehmend kreislaufinstabil, wir fordern Notarzt nach.',
+      text: 'Zustand des Patienten verschlechtert sich, Patient zunehmend kreislaufinstabil, Notarzt erforderlich.',
       needs: { NEF: 1 },
       workFactor: 1.2,
     };
