@@ -248,6 +248,12 @@ function CoverDialog({ ctx, unitId, onClose }: { ctx: GameCtx; unitId: string; o
     .map((st) => ({ st, km: Math.hypot(st.x - u.x, st.y - u.y) / 1000, leer: verwaist(st), cov: covered(st) }))
     .sort((a, b) => Number(b.leer) - Number(a.leer) || a.km - b.km)
     .slice(0, 60);
+  // Bereitstellungsräume aus dem Editor stehen über den Wachen
+  const org = scn.vehicleTypes.find((t) => t.id === u.type)?.org;
+  const raeume = (scn.bereitstellungsraeume ?? [])
+    .filter((b) => (all || !b.org || b.org === org) && (!ql || b.name.toLowerCase().includes(ql)))
+    .map((b) => ({ b, km: Math.hypot(b.x - u.x, b.y - u.y) / 1000, cov: state.units.filter((o) => o.cover?.raumId === b.id).map((o) => shortCallsign(o.callsign)) }))
+    .sort((a, b) => a.km - b.km);
   if (picking)
     return (
       <div className="cover-picking">
@@ -266,13 +272,30 @@ function CoverDialog({ ctx, unitId, onClose }: { ctx: GameCtx; unitId: string; o
           zurückgeschickt oder zu einem Einsatz alarmiert wird. Angezeigt werden Wachen mit eigenem {typeLabel} (sonst „alle Wachen“), verwaiste stehen oben.
         </p>
         <div className="row">
-          <input className="grow" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Wache suchen…" />
+          <input className="grow" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Wache oder Bereitstellungsraum suchen…" />
           <label className="small">
             <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> alle Wachen
           </label>
           {!ctx.mobile && <button onClick={() => setPicking(true)}>Punkt auf Karte…</button>}
         </div>
         <div className="cover-stations">
+          {raeume.length > 0 && <div className="cover-head small muted">Bereitstellungsräume</div>}
+          {raeume.map(({ b, km, cov }) => (
+            <button
+              key={b.id}
+              className="cover-station"
+              onClick={() => {
+                conn.send({ a: 'cover', unitIds: [u.id], raumId: b.id });
+                onClose();
+              }}
+            >
+              <span className="tag br">BR</span>
+              <span className="grow">{b.name}</span>
+              {cov.length > 0 && <span className="tag">abgesichert: {cov.join(', ')}</span>}
+              <span className="muted">{km.toFixed(1)} km</span>
+            </button>
+          ))}
+          {raeume.length > 0 && <div className="cover-head small muted">Wachen</div>}
           {list.map(({ st, km, leer, cov }) => (
             <button
               key={st.id}

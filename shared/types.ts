@@ -122,6 +122,16 @@ export interface MapObject {
   bma: boolean;
 }
 
+/** Bereitstellungsraum: fester Standort für die Gebietsabsicherung, z. B. Autobahnparkplatz oder Gerätehaus */
+export interface Bereitstellungsraum {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  /** Für welche Fahrzeuge der Raum gedacht ist; fehlt = alle */
+  org?: 'RD' | 'FW';
+}
+
 export interface Stichwort {
   code: string;
   label: string;
@@ -180,6 +190,8 @@ export interface Scenario {
   geo?: GeoRef;
   /** Nur bei echten Karten: echte Hausnummern */
   addresses?: Address[];
+  /** Bereitstellungsräume für die Gebietsabsicherung */
+  bereitstellungsraeume?: Bereitstellungsraum[];
   /** Digitalfunk-Rufgruppen; fehlen sie, werden Standardgruppen erzeugt */
   tmoGroups?: TmoGroup[];
   /** Ersteller, wird im Leitstellen-Katalog angezeigt */
@@ -300,7 +312,7 @@ export interface UnitState {
   /** Aktuell geschaltete TMO-Rufgruppe */
   tmo?: string;
   /** Gebietsabsicherung: Standort, an dem das Fahrzeug bereitsteht */
-  cover?: { name: string; x: number; y: number; stationId?: string; /** Spielzeit der Verlegung */ since?: number };
+  cover?: { name: string; x: number; y: number; stationId?: string; /** Spielzeit der Verlegung */ since?: number; raumId?: string };
   /** Notarztbegleitung: Notarzt fährt im Transportfahrzeug mit dieser id mit, das Fahrzeug folgt zur Klinik */
   begleitet?: string;
   /** Über die ESWL von einer Nachbar-ILS entsandt: gehört nicht zum eigenen Bereich und fährt danach heim */

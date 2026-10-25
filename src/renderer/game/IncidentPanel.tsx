@@ -48,7 +48,7 @@ export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
     const m = new Map<string, { key: string; name: string; x: number; y: number; since: number; units: UnitState[] }>();
     for (const u of state.units) {
       if (!u.cover || u.incidentId) continue;
-      const key = u.cover.stationId ?? `${Math.round(u.cover.x)},${Math.round(u.cover.y)}`;
+      const key = u.cover.stationId ?? u.cover.raumId ?? `${Math.round(u.cover.x)},${Math.round(u.cover.y)}`;
       const c = m.get(key) ?? { key, name: u.cover.name, x: u.cover.x, y: u.cover.y, since: u.cover.since ?? state.time, units: [] };
       c.since = Math.min(c.since, u.cover.since ?? state.time);
       c.units.push(u);
