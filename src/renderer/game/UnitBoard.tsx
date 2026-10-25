@@ -56,7 +56,7 @@ export function UnitBoard({ ctx }: { ctx: GameCtx }) {
       key={u.id}
       className={`tile ${u.status === 5 ? 'speak' : ''} ${u.id === ctx.selectedUnit ? 'selected' : ''} ${u.crewPlayerId ? 'manned' : ''} ${u.cover ? 'covering' : ''}`}
       style={{ background: FMS_COLOR[u.status] }}
-      title={`${u.callsign} – ${FMS_TEXT[u.status]}${u.cover ? ` – Gebietsabsicherung ${u.cover.name}` : ''}${u.crewPlayerId ? ' (Spieler)' : ''}${u.fremd ? ` – ${u.fremd.ils}, ${u.fremd.wache}` : ''}`}
+      title={`${u.callsign} – ${FMS_TEXT[u.status]}${u.cover ? ` – Gebietsabsicherung ${u.cover.name}` : ''}${u.desinfektion ? ' – Desinfektion nach Infektionstransport' : ''}${u.crewPlayerId ? ' (Spieler)' : ''}${u.fremd ? ` – ${u.fremd.ils}, ${u.fremd.wache}` : ''}`}
       onContextMenu={(e) => {
         e.preventDefault();
         ctx.setSelectedUnit(u.id);
@@ -321,6 +321,8 @@ function UnitControl({ ctx, u, onCover }: { ctx: GameCtx; u: UnitState; onCover:
             {u.eta ? ` · ETA ${formatDuration(u.eta - state.time)}` : ''}
             {inc ? ` · ${inc.nr} ${inc.stichwort} ${inc.address}` : ''}
             {u.cover && !inc ? ` · ${u.cover.name}` : ''}
+            {u.infektion ? ' · Infektionstransport' : ''}
+            {u.desinfektion ? ` · Desinfektion${u.desinfektion.bis !== undefined ? `, noch ${formatDuration(u.desinfektion.bis - state.time)}` : ' (Anfahrt Wache)'}` : ''}
           </div>
           {def?.dienst && <div className="small muted">Dienst: {dienstText(def.dienst)}</div>}
           {u.fremd && (

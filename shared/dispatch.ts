@@ -43,7 +43,8 @@ export const UEBERGABE_DEFAULT_S = 180;
 
 /** Fahrzeug in der Klinik (Status 8), das nach der Übergabe neu alarmiert werden kann */
 export function inUebergabe(u: UnitState): boolean {
-  return u.task === 'atHospital' && u.status !== 6 && !u.fremd;
+  // Nach einem Infektionstransport muss das Fahrzeug erst desinfiziert werden
+  return u.task === 'atHospital' && u.status !== 6 && !u.fremd && !u.infektion;
 }
 
 /** Sekunden, bis ein Fahrzeug in Status 8 die Übergabe abgeschlossen hat und losfahren kann */
