@@ -97,6 +97,17 @@ export function TerminZeile({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) 
           ändern
         </button>
       )}
+      {offen && (
+        <button
+          className="small-btn danger"
+          title="Abgesagte Terminfahrt stornieren; bereits alarmierte Fahrzeuge werden frei"
+          onClick={() => {
+            if (confirm(`Terminfahrt ${inc.nr} stornieren?${inc.unitIds.length ? ' Alarmierte Fahrzeuge werden frei.' : ''}`)) conn.send({ a: 'closeIncident', incidentId: inc.id });
+          }}
+        >
+          stornieren
+        </button>
+      )}
     </div>
   );
 }
