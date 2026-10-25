@@ -584,6 +584,14 @@ table.lib td.right button {
 .incident-row.abgeschlossen {
   opacity: 0.5;
 }
+.panel-title .hide-done {
+  font-weight: normal;
+  white-space: nowrap;
+}
+.panel-title .hide-done.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .incident-row .inc-sw {
   display: flex;
   flex-direction: column;
