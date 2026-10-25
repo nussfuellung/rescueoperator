@@ -1126,7 +1126,7 @@ export class Game {
       }
       const atStation = u.task === 'station' || (u.task === 'alarmed' && u.status === 2);
       const career = this.station(u).career || this.typeOf(u)?.org === 'RD';
-      u.cover = target;
+      u.cover = { ...target, since: this.time };
       u.task = 'alarmed';
       u.hint = `Gebietsabsicherung: Fahren Sie ${target.name} an. Beim Ausrücken Status 3, dann Status 1 bis zum Standort und dort auf Status 1 bleiben.`;
       u.timer = u.crewPlayerId ? undefined : this.time + (atStation ? (career ? this.rand(60, 120) : this.rand(180, 330)) : this.rand(5, 12)) * 1000;
