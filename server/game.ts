@@ -135,6 +135,10 @@ interface Truth {
   ziel?: string;
   /** Fahrzeug war vor der Abholzeit da, Wartezeit ist eingerechnet */
   wartet?: boolean;
+  /** Rückruf zu einer bestellten Terminfahrt (gehört zu main): Absage oder neue Abholzeit */
+  bezug?: { art: 'absage' | 'verschieben'; neu?: number };
+  /** Terminfahrt wurde vom Anrufer abgesagt bzw. verschoben; umgesetzt = Disponent hat es eingetragen */
+  aenderung?: { art: 'absage' | 'verschieben'; neu?: number; umgesetzt?: boolean };
 }
 
 const MISSED_AFTER_MS = 90_000;
@@ -152,6 +156,8 @@ const UNWETTER_MIN_MS = 15 * 60_000;
 const TERMIN_VORLAUF_MS = 30 * 60_000;
 /** Terminfahrt gilt als pünktlich bis so lange nach der Abholzeit */
 const TERMIN_TOLERANZ_MS = 10 * 60_000;
+/** Anteil der Terminfahrten, die der Anrufer später absagt oder verschiebt */
+const TERMIN_AENDERUNG_ANTEIL = 0.25;
 
 export interface GameEvents {
   speech?: (text: string) => void;
@@ -831,6 +837,11 @@ export class Game {
             if (!isFinite(action.termin) || action.termin < this.time - TERMIN_VORLAUF_MS || action.termin > this.time + 24 * 3600_000) return 'Ungültige Abholzeit';
             if (action.termin !== inc.termin) this.log(inc, `Termin geändert: Abholung ${this.uhrzeit(action.termin)} Uhr`);
             inc.termin = action.termin;
+            const ae = this.incTruth.get(inc.id)?.aenderung;
+            if (ae?.art === 'verschieben' && !ae.umgesetzt && Math.abs(action.termin - ae.neu!) <= 5 * 60_000) {
+              ae.umgesetzt = true;
+              this.addScore(10, `${inc.nr}: Neue Abholzeit ${this.uhrzeit(ae.neu!)} Uhr eingetragen`);
+            }
           }
           inc.terminMeldung = undefined;
         }
@@ -1076,6 +1087,8 @@ export class Game {
     // Weitervermittlung an die KVB läuft noch: ist bereits bewertet
     if (call.toKvb) return;
     const truth = this.callTruth.get(call.id)!;
+    // Absage oder Verschiebung einer Terminfahrt: gewertet wird, ob der Disponent sie umsetzt
+    if (truth.bezug) return;
     if (!call.incidentId) {
       const lage = truth.main ?? truth;
       if (truth.main || this.calls.some((c) => c !== call && this.callTruth.get(c.id)?.main === truth)) {
@@ -1191,6 +1204,12 @@ export class Game {
       inc.polizei = 'vor Ort';
       this.log(inc, `Polizei bereits vor Ort (Streife ${lageTruth.streife})`);
     } else if (a.polizei) this.requestPolice(player, inc.id);
+    // Manche Terminfahrten werden später abgesagt oder verschoben, auch wenn der KTW schon unterwegs ist
+    const t = this.incTruth.get(inc.id);
+    if (t?.termin !== undefined && !t.generic && this.rng() < TERMIN_AENDERUNG_ANTEIL) {
+      const bis = Math.max(6 * 60_000, t.termin - this.time);
+      this.after(this.rand(5 * 60_000, bis), () => this.terminAenderung(inc.id));
+    }
     if (a.alarmUnitIds?.length) this.alarm(player, inc.id, a.alarmUnitIds);
     else if (a.alarmAao) this.alarm(player, inc.id, this.proposal(inc.id).map((p) => p.unitId));
   }
@@ -2068,7 +2087,10 @@ export class Game {
       inc.firstArrival = this.time;
       inc.status = 'laufend';
       const spaet = this.time - inc.termin;
-      if (spaet <= TERMIN_TOLERANZ_MS) this.addScore(15, `${inc.nr}: Terminfahrt pünktlich zur Abholung ${this.uhrzeit(inc.termin)} Uhr`);
+      const ae = truth.aenderung;
+      if (ae?.art === 'absage') this.addScore(-10, `${inc.nr}: Leerfahrt, die Terminfahrt war abgesagt`);
+      else if (ae?.art === 'verschieben' && !ae.umgesetzt) this.addScore(-5, `${inc.nr}: Verschiebung auf ${this.uhrzeit(ae.neu!)} Uhr nicht eingetragen`);
+      else if (spaet <= TERMIN_TOLERANZ_MS) this.addScore(15, `${inc.nr}: Terminfahrt pünktlich zur Abholung ${this.uhrzeit(inc.termin)} Uhr`);
       else this.addScore(-5, `${inc.nr}: Terminfahrt ${Math.round(spaet / 60000)} min nach der Abholzeit eingetroffen`);
     }
     // Bestellter Patient ist erst zur Abholzeit fertig
@@ -2475,12 +2497,92 @@ export class Game {
   private closeIncident(inc: IncidentState, manual: boolean) {
     inc.status = 'abgeschlossen';
     inc.closedAt = this.time;
-    this.log(inc, manual ? 'Einsatz manuell abgeschlossen' : 'Einsatz beendet');
+    this.log(inc, !manual ? 'Einsatz beendet' : inc.termin !== undefined && !inc.firstArrival ? 'Terminfahrt storniert' : 'Einsatz manuell abgeschlossen');
     this.score.incidentsClosed++;
     const truth = this.incTruth.get(inc.id);
     if (truth?.workDone) this.addScore(10, `${inc.nr}: Einsatz erfolgreich abgearbeitet`);
     if (truth?.tpl.polizei && !truth.fake && !inc.polizei) this.addScore(-5, `${inc.nr}: Polizei nicht verständigt`);
+    else if (manual && truth?.aenderung?.art === 'absage' && !inc.firstArrival) this.addScore(10, `${inc.nr}: Abgesagte Terminfahrt storniert`);
     else if (manual && truth && truth.stichwort && truth.tpl !== BMA_TEMPLATE) this.addScore(-15, `${inc.nr}: Einsatz vorzeitig geschlossen`);
+  }
+
+  /**
+   * Der Besteller ruft wegen einer Terminfahrt zurück: Absage oder neue Abholzeit.
+   * Die Änderung gilt sofort (der Patient ist dann nicht da bzw. erst später fertig), eintragen muss sie der Disponent.
+   */
+  terminAenderung(incidentId: string, art?: 'absage' | 'verschieben'): CallState | null {
+    const inc = this.incident(incidentId);
+    const orig = inc && this.incTruth.get(inc.id);
+    if (!inc || !orig || orig.generic || orig.aenderung || orig.termin === undefined || inc.status === 'abgeschlossen' || inc.firstArrival) return null;
+    art ??= this.rng() < 0.5 ? 'absage' : 'verschieben';
+    const alt = this.uhrzeit(orig.termin);
+    const neu = art === 'verschieben' ? (Math.ceil((this.clockStart + (orig.termin + this.rand(30, 120) * 60_000) / 60000) / 15) * 15 - this.clockStart) * 60000 : undefined;
+    const m = (orig.facts?.sex ?? 'm') === 'm';
+    const wen = `${m ? 'Herrn' : 'Frau'} {nachname}`;
+    const hallo = orig.objekt ? `Grüß Gott, hier nochmal ${orig.objekt}.` : 'Grüß Gott, ich hab vorhin bei Ihnen angerufen.';
+    const grund =
+      art === 'absage'
+        ? this.pick(
+            orig.objekt
+              ? ['Der Termin ist ausgefallen, das Gerät ist kaputt.', '{Er} hat heute Nacht hohes Fieber bekommen, der Arzt will {ihn} erst mal hierbehalten.', 'Die Klinik hat abgesagt, wir bekommen einen neuen Termin.']
+              : ['Der Termin ist ausgefallen, die Praxis hat gerade angerufen.', 'Mein Sohn fährt {ihn} jetzt doch selber.', '{Er} fühlt sich heute nicht gut, wir haben den Termin abgesagt.'],
+          )
+        : this.pick(['Die Klinik hat angerufen, der Termin ist später.', 'Der Arzt ist noch bei der Visite, vorher geht es nicht.', 'Die haben den Termin nach hinten geschoben.']);
+    const was =
+      art === 'absage'
+        ? `Wir hatten für ${alt} Uhr einen Krankentransport für ${wen} bestellt. Der muss leider abgesagt werden. ${grund}`
+        : `Wir hatten für ${alt} Uhr einen Krankentransport für ${wen} bestellt. Können Sie den bitte auf ${this.uhrzeit(neu!)} Uhr verschieben? ${grund}`;
+    const tpl: IncidentTemplate = {
+      id: `ktp_termin_${art}`,
+      role: orig.facts?.role ?? orig.tpl.role,
+      sex: orig.facts?.sex,
+      stichwort: orig.tpl.stichwort,
+      weight: 0,
+      where: orig.tpl.where,
+      opening: [`${hallo} ${was}`],
+      answers: {
+        was: [was],
+        termin: art === 'absage' ? ['Gar nicht mehr, der Transport fällt aus.', 'Der fällt ganz weg, bitte stornieren.'] : [`Neue Abholzeit ${this.uhrzeit(neu!)} Uhr bitte.`],
+        ziel: ['Wie bestellt, ins {ziel}.'],
+        wieviele: [`Es geht um ${wen}, {alter} Jahre.`],
+        zustand: art === 'absage' ? [grund] : ['Unverändert, {er} ist stabil.'],
+        gefahr: ['Nein.'],
+      },
+      lage: '',
+      workMin: [1, 1],
+    };
+    const call = this.ring({
+      tpl,
+      stichwort: tpl.stichwort,
+      pos: orig.pos,
+      address: orig.address,
+      spokenWhere: orig.spokenWhere,
+      objekt: orig.objekt,
+      needs: {},
+      patients: [],
+      lage: '',
+      workMs: 0,
+      name: orig.name,
+      alter: orig.alter,
+      facts: orig.facts,
+      fake: false,
+      termin: orig.termin,
+      ziel: orig.ziel,
+      main: orig,
+      bezug: { art, neu },
+    });
+    // Ab jetzt gilt die Änderung: abgesagt heißt Leerfahrt, verschoben heißt, der Patient ist erst später fertig
+    orig.aenderung = { art, neu };
+    if (art === 'absage') {
+      orig.patients = [];
+      orig.termin = undefined;
+      orig.lage = 'Transport abgesagt, Patient wird nicht transportiert. Leerfahrt.';
+      orig.workMs = 2 * 60_000;
+    } else {
+      orig.termin = neu;
+      orig.wartet = false;
+    }
+    return call;
   }
 
   /** Terminfahrten: Erinnerung 30 Minuten vor der Abholzeit und bei Fälligkeit, solange noch nicht disponiert */
