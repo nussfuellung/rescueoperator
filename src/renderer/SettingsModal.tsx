@@ -74,7 +74,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
   const testTts = () => {
     setTtsResult('…');
-    say('Florian Ammerbach 40 1 für Leitstelle, kommen. Status 4, am Einsatzort.', 'radio', true);
+    say('Florian Ammerbach 40 1 für Leitstelle. Status 4, am Einsatzort.', 'radio', true);
     setTimeout(() => setTtsResult(lastTtsResult()), 6000);
   };
 

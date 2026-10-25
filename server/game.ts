@@ -1340,7 +1340,7 @@ export class Game {
         return;
       }
       const ziel = inc ? `zum Einsatz ${inc.address}` : u.hasPatient ? 'mit Patient' : 'auf der Durchfahrt';
-      this.requestSpeak(u, 'info', `${air ? 'Fliegen' : 'Fahren'} in Ihren Bereich ein, ${ziel}, Status ${u.baseStatus}, kommen.`, group);
+      this.requestSpeak(u, 'info', `${air ? 'Fliegen' : 'Fahren'} in Ihren Bereich ein, ${ziel}, Status ${u.baseStatus}.`, group);
       return;
     }
     const group = u.tmo;
@@ -1349,7 +1349,7 @@ export class Game {
       u.hint = `Bereich der ${this.scn.ilsName} verlassen: abmelden und zurück zur ${f.ils}.`;
       return;
     }
-    this.requestSpeak(u, 'info', `Verlassen Ihren Bereich, melden uns ab zur ${f.ils}, kommen.`, group);
+    this.requestSpeak(u, 'info', `Verlassen Ihren Bereich, melden uns ab zur ${f.ils}.`, group);
   }
 
   /** FMS-Auftrag H: Fahren Sie Wache an. Beendet auch eine Gebietsabsicherung. */
@@ -1404,7 +1404,7 @@ export class Game {
   private freimeldung(u: UnitState) {
     const hosp = u.task === 'atHospital' ? this.scn.hospitals.find((h) => h.id === u.hospitalId) : undefined;
     const ort = hosp ? `am ${hosp.name}` : 'an der Einsatzstelle';
-    return this.pick([`Frei ${ort}, rücken ein, kommen.`, `Sind ${ort} wieder frei, Status 1, kommen.`]);
+    return this.pick([`Frei ${ort}, rücken ein.`, `Sind ${ort} wieder frei, Status 1.`]);
   }
 
   /** Ende der laufenden Schicht als Uhrzeit, z. B. "19:00" */
@@ -1460,26 +1460,26 @@ export class Game {
         this.speakPermit(u.id, true);
         return null;
       }
-      if (/sprech|meldung|was gibt|was liegt|was habt|was haben/.test(t)) return this.pick(['Kein Sprechwunsch, war ein Versehen, kommen.', 'Nichts weiter, Status versehentlich gedrückt, kommen.']);
-      return this.pick([`${u.callsign} hört, kommen.`, `Hier ${u.callsign}, kommen.`, `${u.callsign} hört.`]);
+      if (/sprech|meldung|was gibt|was liegt|was habt|was haben/.test(t)) return this.pick(['Kein Sprechwunsch, war ein Versehen.', 'Nichts weiter, Status versehentlich gedrückt.']);
+      return this.pick([`${u.callsign} hört.`, `Hier ${u.callsign}.`, `${u.callsign}, hört.`]);
     }
     // Ende, Dank oder Quittung: keine Antwort nötig
-    if (!t || istQuittung(t)) return f.kommen ? 'Verstanden, kommen.' : null;
+    if (!t || istQuittung(t)) return null;
     if (has(/\b(?:wiederhol\w*|nicht verstanden|schlecht verstanden|unverständlich|noch ?mal(?! status))\b/) && !has(/\bich wiederhole\b/)) {
       const last = [...this.radio].reverse().find((m) => m.from === u.callsign && m.kind === 'voice');
       if (u.speak?.text && !u.speak.answered) return `Ich wiederhole: ${u.speak.text}`;
-      return last ? `Ich wiederhole: ${last.text}` : 'Nichts weiter von uns, kommen.';
+      return last ? `Ich wiederhole: ${last.text}` : 'Nichts weiter von uns.';
     }
 
     // Gruppenwechsel: "wechseln Sie in Rufgruppe 3713"
     if (has(/\b(?:rufgruppe|gruppe|tmo|wechseln|wechselt|gehen sie (?:in|auf)|geht (?:in|auf)|kanal)\b/)) {
       const g = findeRufgruppe(t, this.scn.tmoGroups ?? []);
       if (g) {
-        if (u.tmo === g.id) return `Wir sind bereits in ${g.name}, kommen.`;
+        if (u.tmo === g.id) return `Wir sind bereits in ${g.name}.`;
         u.tmo = g.id;
-        return `In ${g.name}, kommen.`;
+        return `In ${g.name}.`;
       }
-      if (has(/\brufgruppe\b/)) return 'Welche Rufgruppe, bitte wiederholen, kommen.';
+      if (has(/\brufgruppe\b/)) return 'Welche Rufgruppe, bitte wiederholen.';
     }
 
     // Ist der Notarzt abkömmlich? An das NEF selbst oder an das RTW, in dem er mitfährt
@@ -1492,14 +1492,14 @@ export class Game {
     // Einsatzabbruch
     if (has(/\b(?:abbruch|einsatzabbruch|abbrechen|brechen sie (?:\w+ )*ab|brecht (?:\w+ )*ab|abgebrochen|storniert|stornieren|nicht mehr (?:benötigt|gebraucht|erforderlich|notwendig)|werden nicht (?:mehr )?(?:benötigt|gebraucht)|aus dem einsatz|aus einsatz entlassen|entlassen|sie sind frei|seid frei|können einrücken|könnt einrücken|dürfen einrücken)\b/)) {
       if (!inc) {
-        if (u.task === 'station') return 'Wir sind ohne Einsatz auf der Wache, kommen.';
+        if (u.task === 'station') return 'Wir sind ohne Einsatz auf der Wache.';
         if (has(/einrück|frei|entlassen/)) {
           this.returnToStation(u);
           return 'Verstanden, rücken ein zur Wache.';
         }
-        return 'Wir haben derzeit keinen Einsatz, kommen.';
+        return 'Wir haben derzeit keinen Einsatz.';
       }
-      if (u.hasPatient) return 'Negativ, wir haben einen Patienten an Bord, kommen.';
+      if (u.hasPatient) return 'Negativ, wir haben einen Patienten an Bord.';
       this.releaseUnit(u.id, true);
       return this.pick(['Verstanden, Abbruch, rücken ein.', 'Verstanden, brechen ab und rücken ein.']);
     }
@@ -1513,20 +1513,20 @@ export class Game {
           if (sprechwunsch) u.speak = undefined;
           if (u.status === 5) u.status = u.baseStatus;
           const err = this.assignHospital(u.id, h.id, false, true);
-          return err ? 'Bitte wiederholen, kommen.' : this.pick([`Verstanden, fahren ${h.name} an.`, `Verstanden, Transport ins ${h.name}.`, `${h.name}, verstanden.`]);
+          return err ? 'Bitte wiederholen.' : this.pick([`Verstanden, fahren ${h.name} an.`, `Verstanden, Transport ins ${h.name}.`, `${h.name}, verstanden.`]);
         }
-        if (u.task === 'toHospital' || u.task === 'atHospital') return hosp?.id === h.id ? `Verstanden, wir fahren bereits ${h.name} an, kommen.` : `Wir sind bereits mit Ziel ${hosp?.name ?? 'Klinik'} unterwegs, kommen.`;
-        if (!u.hasPatient && has(/\b(?:fahren sie|fahrt|anfahren|bringen|transport)/)) return this.typeOf(u)?.transport ? 'Wir haben noch keinen Patienten aufgenommen, kommen.' : 'Wir sind kein Transportmittel, kommen.';
+        if (u.task === 'toHospital' || u.task === 'atHospital') return hosp?.id === h.id ? `Verstanden, wir fahren bereits ${h.name} an.` : `Wir sind bereits mit Ziel ${hosp?.name ?? 'Klinik'} unterwegs.`;
+        if (!u.hasPatient && has(/\b(?:fahren sie|fahrt|anfahren|bringen|transport)/)) return this.typeOf(u)?.transport ? 'Wir haben noch keinen Patienten aufgenommen.' : 'Wir sind kein Transportmittel.';
       } else if (u.task === 'awaitHospital' && has(/\b(?:zielklinik|klinik\w*|krankenhaus|spital|anfahren|fahren sie|fahrt|bringen|transport\w*)\b/)) {
-        return 'Welche Zielklinik, bitte wiederholen, kommen.';
+        return 'Welche Zielklinik, bitte wiederholen.';
       }
     }
 
     // Einrücken: "Rücken Sie ein", "Fahren Sie Wache an", "zurück zum Standort"
     if (has(/\b(?:einrücken|rück(?:en|t) (?:\w+ )?ein|rückt ein|zurück (?:zur|zu|auf die|in die|an die|an) (?:\w+ )?(?:wache|standort|stützpunkt)|(?:wache|standort|stützpunkt) an(?:fahren)?|fahren sie (?:ihre |eure |die |zur )?wache|heimfahrt|nach hause|auftrag h|heimweg)\b/)) {
-      if (u.hasPatient) return 'Negativ, wir haben noch einen Patienten an Bord, kommen.';
-      if (u.task === 'station') return 'Wir sind bereits auf der Wache, kommen.';
-      if (u.task === 'returning') return 'Sind bereits auf dem Weg zur Wache, kommen.';
+      if (u.hasPatient) return 'Negativ, wir haben noch einen Patienten an Bord.';
+      if (u.task === 'station') return 'Wir sind bereits auf der Wache.';
+      if (u.task === 'returning') return 'Sind bereits auf dem Weg zur Wache.';
       if (inc) return 'Verstanden, wir rücken ein, sobald der Einsatz abgearbeitet ist.';
       this.returnToStation(u);
       return this.pick(['Verstanden, rücken ein zur Wache.', 'Verstanden, rücken ein.']);
@@ -1539,72 +1539,72 @@ export class Game {
     // Fragen, auch ohne Fragezeichen
     if (has(/\b(?:wo (?:seid|sind|befinde\w*|steh\w*|halte\w*|fahr\w*|genau|gerade|aktuell|jetzt)|wo seid ihr|standort|position|aktuell(?:er)? ort|welche(?:r|n)? (?:straße|ort|höhe)|auf welcher höhe)/)) {
       const tail = etaMin && unterwegs ? `, Eintreffen in etwa ${etaMin} Minuten` : '';
-      return `Wir sind ${where}${tail}, kommen.`;
+      return `Wir sind ${where}${tail}.`;
     }
     if (has(/\b(?:eintreff\w*|ankunft|ankommen|wie lange|wie weit|wann (?:seid|sind|kommt|kommen|könnt|können|erreich\w*|ist|seit ihr)|eta|minuten bis|schon (?:vor ort|da|dort|an der|am)|noch (?:weit|lange)|entfernung|voraussichtlich|wie viele minuten|in wie vielen minuten)\b/)) {
-      if (unterwegs) return `Eintreffen in etwa ${etaMin ?? 5} Minuten${u.task === 'toHospital' && hosp ? ` am ${hosp.name}` : ''}, kommen.`;
-      if (u.task === 'alarmed') return 'Wir rücken gerade aus, melden Status 3, kommen.';
-      if (vorOrt) return 'Wir sind bereits an der Einsatzstelle, kommen.';
-      if (u.task === 'atHospital') return `Wir sind bereits am ${hosp?.name ?? 'Krankenhaus'}, kommen.`;
-      return `Wir sind ${where}, derzeit ohne Einsatz, kommen.`;
+      if (unterwegs) return `Eintreffen in etwa ${etaMin ?? 5} Minuten${u.task === 'toHospital' && hosp ? ` am ${hosp.name}` : ''}.`;
+      if (u.task === 'alarmed') return 'Wir rücken gerade aus, melden Status 3.';
+      if (vorOrt) return 'Wir sind bereits an der Einsatzstelle.';
+      if (u.task === 'atHospital') return `Wir sind bereits am ${hosp?.name ?? 'Krankenhaus'}.`;
+      return `Wir sind ${where}, derzeit ohne Einsatz.`;
     }
     if (has(/\b(?:lage\w*|rückmeldung|zwischenmeldung|sachstand|situation|erkundung|was ist (?:los|passiert)|was liegt vor|wie sieht es (?:\w+ )*aus|wie schaut es (?:\w+ )*aus|was habt ihr (?:vor ort|da)|was haben sie (?:vor ort|da)|meldung von der einsatzstelle|wie ist es vor ort)\b/)) {
-      if (truth && u.task === 'onScene' && !truth.erkundet) return 'Erkundung läuft noch, Lagemeldung folgt, kommen.';
+      if (truth && u.task === 'onScene' && !truth.erkundet) return 'Erkundung läuft noch, Lagemeldung folgt.';
       if (truth && vorOrt) {
         const p = truth.patients.find((x) => x.unitId === u.id && !x.done);
-        return `${truth.lage}${p ? ` Wir versorgen: ${p.desc}.` : ''} Kommen.`;
+        return `${truth.lage}${p ? ` Wir versorgen: ${p.desc}.` : ''}`;
       }
-      if (inc) return 'Wir sind noch nicht vor Ort, Lagemeldung folgt, kommen.';
-      return 'Wir haben keinen Einsatz, keine besonderen Vorkommnisse, kommen.';
+      if (inc) return 'Wir sind noch nicht vor Ort, Lagemeldung folgt.';
+      return 'Wir haben keinen Einsatz, keine besonderen Vorkommnisse.';
     }
     if (has(/\b(?:nachforder\w*|weitere (?:kräfte|fahrzeuge|einheiten|unterstützung|rettungsmittel)|mehr (?:kräfte|leute|fahrzeuge)|brauch\w* (?:ihr|sie|du) (?:noch )?(?:\w+ )?(?:kräfte|fahrzeuge|unterstützung|verstärkung|was|etwas|einen|ein|eine|weitere|mehr|noch)|benötig\w* (?:ihr|sie) (?:noch )?|unterstützung|verstärkung|reicht das|reichen die kräfte|kräfte ausreichend|zusätzlich)/)) {
-      if (!truth || !vorOrt) return 'Können wir erst vor Ort beurteilen, kommen.';
-      if (!truth.erkundet) return 'Erkundung läuft noch, können wir noch nicht beurteilen, kommen.';
+      if (!truth || !vorOrt) return 'Können wir erst vor Ort beurteilen.';
+      if (!truth.erkundet) return 'Erkundung läuft noch, können wir noch nicht beurteilen.';
       const missing = Object.entries(truth.needs).filter(([type, n]) => inc!.unitIds.filter((id) => this.unit(id)?.type === type).length < n);
-      return missing.length ? `Ja, wir benötigen noch ${missing.map(([type, n]) => `${n} ${type}`).join(' und ')}, kommen.` : 'Nein, die Kräfte reichen aus, kommen.';
+      return missing.length ? `Ja, wir benötigen noch ${missing.map(([type, n]) => `${n} ${type}`).join(' und ')}.` : 'Nein, die Kräfte reichen aus.';
     }
     if (has(/\b(?:notarzt|notärztin|na|arzt|ärztin|nef|rth|hubschrauber)\b/)) {
-      if (this.istNotarzt(u)) return 'Ja, Notarzt ist an Bord, kommen.';
-      if (this.units.some((d) => d.begleitet === u.id)) return 'Ja, Notarzt begleitet den Transport, kommen.';
+      if (this.istNotarzt(u)) return 'Ja, Notarzt ist an Bord.';
+      if (this.units.some((d) => d.begleitet === u.id)) return 'Ja, Notarzt begleitet den Transport.';
       const doc = inc?.unitIds.map((id) => this.unit(id)).filter((x): x is UnitState => !!x && (x.type === 'NEF' || !!this.typeOf(x)?.air)) ?? [];
-      if (doc.some((x) => x.task === 'onScene' || x.task === 'awaitHospital')) return 'Notarzt ist bei uns vor Ort, kommen.';
-      if (doc.length) return 'Notarzt ist alarmiert, aber noch nicht vor Ort, kommen.';
-      if (has(/\b(?:nachforder\w*|brauch\w*|benötig\w*|anfordern|schicken)\b/)) return vorOrt ? 'Ja, Notarzt wäre erforderlich, bitte nachalarmieren, kommen.' : 'Können wir erst vor Ort beurteilen, kommen.';
-      return 'Negativ, wir sind ohne Notarzt, kommen.';
+      if (doc.some((x) => x.task === 'onScene' || x.task === 'awaitHospital')) return 'Notarzt ist bei uns vor Ort.';
+      if (doc.length) return 'Notarzt ist alarmiert, aber noch nicht vor Ort.';
+      if (has(/\b(?:nachforder\w*|brauch\w*|benötig\w*|anfordern|schicken)\b/)) return vorOrt ? 'Ja, Notarzt wäre erforderlich, bitte nachalarmieren.' : 'Können wir erst vor Ort beurteilen.';
+      return 'Negativ, wir sind ohne Notarzt.';
     }
     if (has(/\b(?:besatzung|stärke|personal|wie viele (?:leute|mann|kräfte|kameraden)|mann an bord|wie stark)\b/)) {
       const rd = this.typeOf(u)?.org === 'RD';
-      return `Besatzung ${rd ? (u.type === 'NEF' ? '1/1' : '0/2') : this.pick(['1/5', '1/8', '0/6', '1/2', '0/3'])}, kommen.`;
+      return `Besatzung ${rd ? (u.type === 'NEF' ? '1/1' : '0/2') : this.pick(['1/5', '1/8', '0/6', '1/2', '0/3'])}.`;
     }
     if (has(/\b(?:patient\w*|zustand|transportziel|zielklinik|klinik\w*|krankenhaus|wohin|an bord|pzc|verletzt\w*|verletzte|betroffene|transport\w*)\b/)) {
       const p = truth?.patients.find((x) => x.unitId === u.id && !x.done);
-      if (u.task === 'toHospital' && hosp) return `Wir transportieren ${p ? p.desc : 'den Patienten'} in das ${hosp.name}, kommen.`;
+      if (u.task === 'toHospital' && hosp) return `Wir transportieren ${p ? p.desc : 'den Patienten'} in das ${hosp.name}.`;
       if (u.task === 'awaitHospital' && p) {
         u.pzc = p.pzc;
-        return `Patient: ${p.desc}. PZC ${pzcSprech(p.pzc)}, erbitten Zielklinik, kommen.`;
+        return `Patient: ${p.desc}. PZC ${pzcSprech(p.pzc)}, erbitten Zielklinik.`;
       }
-      if (u.hasPatient) return 'Patient ist stabil, wir sind transportbereit, kommen.';
-      if (vorOrt && truth) return `${truth.lage} Kommen.`;
-      return 'Wir haben keinen Patienten an Bord, kommen.';
+      if (u.hasPatient) return 'Patient ist stabil, wir sind transportbereit.';
+      if (vorOrt && truth) return truth.lage;
+      return 'Wir haben keinen Patienten an Bord.';
     }
     const label: Record<number, string> = { 1: 'frei über Funk', 2: 'einsatzbereit auf der Wache', 3: 'auf der Anfahrt', 4: 'am Einsatzort', 6: 'außer Dienst', 7: 'Patient aufgenommen', 8: 'am Transportziel' };
     const statusText = `Status ${u.baseStatus ?? u.status}, ${label[u.baseStatus ?? u.status] ?? 'im Einsatz'}`;
     if (has(/\b(?:einsatzbereit|verfügbar|frei|klar|kapazität\w*|einsatz übernehmen|übernehmen können|noch was übernehmen|könnt ihr|können sie (?:\w+ )*(?:übernehmen|fahren|einsatz))\b/) && (frage || has(/\b(?:sind sie|seid ihr)\b/))) {
       const s = u.baseStatus ?? u.status;
-      if (s === 1) return 'Ja, wir sind frei über Funk, Status 1, kommen.';
-      if (s === 2) return 'Ja, wir sind einsatzbereit auf der Wache, Status 2, kommen.';
-      return `Negativ, wir sind ${statusText}, kommen.`;
+      if (s === 1) return 'Ja, wir sind frei über Funk, Status 1.';
+      if (s === 2) return 'Ja, wir sind einsatzbereit auf der Wache, Status 2.';
+      return `Negativ, wir sind ${statusText}.`;
     }
-    if (has(/\bstatus\b/)) return `Wir sind ${statusText}, kommen.`;
-    if (has(/\b(?:melden sie sich frei|meldet euch frei|frei melden)\b/)) return vorOrt || u.hasPatient ? `Negativ, wir sind noch gebunden, ${statusText}, kommen.` : `Wir sind ${statusText}, kommen.`;
-    if (has(/\b(?:hört ihr|hören sie mich|verstehen sie mich|versteht ihr|funkprobe|empfang|wie ist die verständigung|lesbarkeit)\b/)) return this.pick(['Verstehe Sie gut, kommen.', 'Laut und deutlich, kommen.', 'Höre Sie klar, kommen.']);
-    if (frage) return this.pick(['Frage nicht verstanden, bitte wiederholen, kommen.', 'Bitte wiederholen, kommen.', 'Das können wir gerade nicht sagen, wir melden uns, kommen.']);
+    if (has(/\bstatus\b/)) return `Wir sind ${statusText}.`;
+    if (has(/\b(?:melden sie sich frei|meldet euch frei|frei melden)\b/)) return vorOrt || u.hasPatient ? `Negativ, wir sind noch gebunden, ${statusText}.` : `Wir sind ${statusText}.`;
+    if (has(/\b(?:hört ihr|hören sie mich|verstehen sie mich|versteht ihr|funkprobe|empfang|wie ist die verständigung|lesbarkeit)\b/)) return this.pick(['Verstehe Sie gut.', 'Laut und deutlich.', 'Höre Sie klar.']);
+    if (frage) return this.pick(['Frage nicht verstanden, bitte wiederholen.', 'Bitte wiederholen.', 'Das können wir gerade nicht sagen, wir melden uns.']);
     if (has(/\b(?:fahrt|fahren sie|übernehmt|übernehmen sie|anfahren|alarm\w*|einsatz)\b/)) {
       if (inc && (u.task === 'alarmed' || unterwegs)) return this.pick(['Verstanden, sind unterwegs.', 'Verstanden, übernehmen.', 'Habe verstanden, fahren an.']);
-      if (!inc) return 'Verstanden, erwarten die Alarmierung, kommen.';
+      if (!inc) return 'Verstanden, erwarten die Alarmierung.';
       return this.pick(['Verstanden.', 'Verstanden, übernehmen.']);
     }
-    return this.pick(['Verstanden.', 'Verstanden, kommen.', 'Habe verstanden.', 'Verstanden, wird gemacht.', 'Alles klar, verstanden.']);
+    return this.pick(['Verstanden.', 'Habe verstanden.', 'Verstanden, wird gemacht.', 'Alles klar, verstanden.']);
   }
 
   /** Notarztmittel: NEF oder Rettungshubschrauber */
@@ -1618,33 +1618,33 @@ export class Game {
       ? u
       : this.units.find((d) => d.begleitet === u.id) ??
         (u.incidentId ? this.units.find((d) => d.incidentId === u.incidentId && this.istNotarzt(d)) : undefined);
-    if (!doc) return 'Wir haben keinen Notarzt bei uns, kommen.';
+    if (!doc) return 'Wir haben keinen Notarzt bei uns.';
     const wir = doc === u ? 'wir' : 'der Notarzt';
     const Wir = doc === u ? 'Wir' : 'Der Notarzt';
-    if (doc.crewPlayerId && doc !== u) return 'Bitte direkt beim Notarzt erfragen, kommen.';
+    if (doc.crewPlayerId && doc !== u) return 'Bitte direkt beim Notarzt erfragen.';
     const min = (ms: number) => Math.max(1, Math.round(ms / 60000));
     const inc = doc.incidentId ? this.incident(doc.incidentId) : undefined;
     const truth = inc ? this.incTruth.get(inc.id) : undefined;
     const hosp = doc.hospitalId ? this.scn.hospitals.find((h) => h.id === doc.hospitalId) : undefined;
     const frei = () => {
       const err = this.releaseUnit(doc.id, false, false);
-      if (err) return `Negativ, ${err}, kommen.`;
-      return doc === u ? 'Ja, Notarzt ist abkömmlich. Sind frei über Funk, Status 1, kommen.' : `Ja, Notarzt ist abkömmlich, ${shortCallsign(doc.callsign)} ist frei, Status 1, kommen.`;
+      if (err) return `Negativ, ${err}.`;
+      return doc === u ? 'Ja, Notarzt ist abkömmlich. Sind frei über Funk, Status 1.' : `Ja, Notarzt ist abkömmlich, ${shortCallsign(doc.callsign)} ist frei, Status 1.`;
     };
     if (!inc) {
-      if (doc.status === 6) return `Negativ, ${wir === 'wir' ? 'wir sind' : `${shortCallsign(doc.callsign)} ist`} außer Dienst, kommen.`;
-      if (doc.task === 'covering' || doc.task === 'toCover') return `Ja, einsatzbereit zur Gebietsabsicherung${doc.cover ? ` in ${doc.cover.name}` : ''}, Status ${doc.status}, kommen.`;
-      return `Ja, Notarzt ist frei, Status ${doc.baseStatus ?? doc.status}, kommen.`;
+      if (doc.status === 6) return `Negativ, ${wir === 'wir' ? 'wir sind' : `${shortCallsign(doc.callsign)} ist`} außer Dienst.`;
+      if (doc.task === 'covering' || doc.task === 'toCover') return `Ja, einsatzbereit zur Gebietsabsicherung${doc.cover ? ` in ${doc.cover.name}` : ''}, Status ${doc.status}.`;
+      return `Ja, Notarzt ist frei, Status ${doc.baseStatus ?? doc.status}.`;
     }
     switch (doc.task) {
       case 'alarmed':
       case 'toScene': {
         const eta = doc.eta ? `, Eintreffen in etwa ${min(doc.eta - this.time)} Minuten` : '';
-        return `${Wir} ${wir === 'wir' ? 'sind' : 'ist'} auf der Anfahrt zum Einsatz ${inc.address}${eta}. Bei Bedarf bitte umdisponieren, kommen.`;
+        return `${Wir} ${wir === 'wir' ? 'sind' : 'ist'} auf der Anfahrt zum Einsatz ${inc.address}${eta}. Bei Bedarf bitte umdisponieren.`;
       }
       case 'toHospital': {
         const eta = doc.eta ? min(doc.eta - this.time) : 5;
-        return `Negativ, ${wir} ${wir === 'wir' ? 'begleiten' : 'begleitet'} den Patienten ins ${hosp?.name ?? 'Krankenhaus'}, Eintreffen in etwa ${eta} Minuten, abkömmlich nach der Übergabe in etwa ${eta + 5} Minuten, kommen.`;
+        return `Negativ, ${wir} ${wir === 'wir' ? 'begleiten' : 'begleitet'} den Patienten ins ${hosp?.name ?? 'Krankenhaus'}, Eintreffen in etwa ${eta} Minuten, abkömmlich nach der Übergabe in etwa ${eta + 5} Minuten.`;
       }
       case 'atHospital': {
         const rest = doc.timer !== undefined ? doc.timer - this.time : 0;
@@ -1652,20 +1652,20 @@ export class Game {
           doc.timer = undefined;
           return frei().replace('Ja, Notarzt ist abkömmlich', 'Ja, Übergabe ist abgeschlossen');
         }
-        return `Negativ, Übergabe im ${hosp?.name ?? 'Krankenhaus'} läuft noch, abkömmlich in etwa ${min(rest)} Minuten, kommen.`;
+        return `Negativ, Übergabe im ${hosp?.name ?? 'Krankenhaus'} läuft noch, abkömmlich in etwa ${min(rest)} Minuten.`;
       }
       case 'onScene': {
         if (!truth) return frei();
-        if (!truth.erkundet) return 'Negativ, Erstversorgung läuft noch, wir melden uns, kommen.';
+        if (!truth.erkundet) return 'Negativ, Erstversorgung läuft noch, wir melden uns.';
         const offen = truth.patients.filter((p) => !p.done && (!p.unitId || p.unitId === doc.begleitet));
         if (doc.begleitet || offen.some((p) => p.pzc.endsWith('1'))) {
           const carrier = doc.begleitet ? this.unit(doc.begleitet) : undefined;
           const ziel = carrier?.hospitalId ? this.scn.hospitals.find((h) => h.id === carrier.hospitalId)?.name : undefined;
-          return `Negativ, Patient ist notarztpflichtig, ${wir} ${wir === 'wir' ? 'begleiten' : 'begleitet'} den Transport${ziel ? ` ins ${ziel}` : ''}. Abkömmlich nach der Übergabe in der Klinik, kommen.`;
+          return `Negativ, Patient ist notarztpflichtig, ${wir} ${wir === 'wir' ? 'begleiten' : 'begleitet'} den Transport${ziel ? ` ins ${ziel}` : ''}. Abkömmlich nach der Übergabe in der Klinik.`;
         }
         if (!truth.workDone && offen.length && truth.needs[doc.type]) {
           const rest = Math.max(60_000, truth.workMs - (truth.progress ?? 0));
-          return `Negativ, Patient wird noch notärztlich versorgt, abkömmlich in etwa ${min(rest)} Minuten, kommen.`;
+          return `Negativ, Patient wird noch notärztlich versorgt, abkömmlich in etwa ${min(rest)} Minuten.`;
         }
         // Notarzt wird nicht mehr gebraucht: Patient bleibt beim Rettungsdienst
         if (truth.needs[doc.type]) truth.needs[doc.type] = Math.max(0, truth.needs[doc.type] - 1);
@@ -1673,7 +1673,7 @@ export class Game {
         return frei();
       }
       default:
-        return `${Wir} ${wir === 'wir' ? 'sind' : 'ist'} Status ${doc.status}, kommen.`;
+        return `${Wir} ${wir === 'wir' ? 'sind' : 'ist'} Status ${doc.status}.`;
     }
   }
 
@@ -1687,7 +1687,7 @@ export class Game {
     const old = u.tmo;
     this.radioMsg(this.scn.ilsName, u.callsign, `Wechseln Sie in Rufgruppe ${this.tmoName(group)}.`, 'voice', old);
     u.tmo = group;
-    if (!u.crewPlayerId) this.after(this.rand(3000, 6000), () => this.radioMsg(u.callsign, this.scn.ilsName, `In ${this.tmoName(group)}, kommen.`, 'voice', group));
+    if (!u.crewPlayerId) this.after(this.rand(3000, 6000), () => this.radioMsg(u.callsign, this.scn.ilsName, `In ${this.tmoName(group)}.`, 'voice', group));
   }
 
   private returnToStation(u: UnitState) {
@@ -1725,7 +1725,7 @@ export class Game {
   private speakPermit(unitId: string, viaFunk = false): string | void {
     const u = this.unit(unitId);
     if (!u?.speak || u.speak.answered) return 'Kein Sprechwunsch offen';
-    if (!viaFunk) this.radioMsg(this.scn.ilsName, u.callsign, 'Sprechaufforderung, kommen.', 'voice');
+    if (!viaFunk) this.radioMsg(this.scn.ilsName, u.callsign, 'Sprechaufforderung.', 'voice');
     u.speak.answered = true;
     u.status = u.baseStatus;
     if (u.speak.kind === 'crew') {
@@ -1864,7 +1864,7 @@ export class Game {
       return;
     }
     u.hint = undefined;
-    this.requestSpeak(u, 'info', `Sind am Absicherungsstandort ${name} angekommen, stehen auf Status 1, kommen.`);
+    this.requestSpeak(u, 'info', `Sind am Absicherungsstandort ${name} angekommen, stehen auf Status 1.`);
   }
 
   // ---------- Bewegung ----------
