@@ -48,6 +48,14 @@ import {
   classifyAll,
   fallbackAnswers,
   ADDRESS_NOT_YET_SAID,
+  ERNEUT_NACHFRAGE,
+  ERNEUT_NIEMAND,
+  ERNEUT_VERSCHLECHTERUNG,
+  PANIK,
+  PANIK_BERUHIGT,
+  PANIK_BERUHIGT_HALB,
+  PANIK_OPENING,
+  PANIK_PREFIX,
   isYesNoQuestion,
   questionText,
   type CallerFacts,
@@ -135,7 +143,16 @@ interface Truth {
   ziel?: string;
   /** Fahrzeug war vor der Abholzeit da, Wartezeit ist eingerechnet */
   wartet?: boolean;
+  /** Panischer Anrufer: so oft muss der Calltaker beruhigen, bevor brauchbare Antworten kommen */
+  panik?: number;
+  /** Anrufer kann sich zum angelegten Einsatz erneut melden ('immer' erzwingt es, z. B. in Tests) */
+  erneut?: 'zufall' | 'immer';
+  /** Zustand hat sich laut erneutem Anruf verschlechtert: Text für die Lage */
+  verschlechtert?: string;
 }
+
+/** Erneuter Anruf zu einem bestehenden Einsatz: Anlass (Verschlechterung = Index in ERNEUT_VERSCHLECHTERUNG) */
+type ErneutArt = 'nachfrage' | 'niemand' | number;
 
 const MISSED_AFTER_MS = 90_000;
 /** Anteil der Übergaben von der KVB (116117) an allen Notrufen */
@@ -191,6 +208,8 @@ export class Game {
 
   private callTruth = new Map<string, Truth>();
   private incTruth = new Map<string, Truth>();
+  /** Erneute Anrufe zu bestehenden Einsätzen (Anruf-id → Einsatz und Anlass) */
+  private erneut = new Map<string, { inc: string; art: ErneutArt }>();
   /** IVENA: Abmeldungen je Klinik und Fachbereich, Zuweisungen */
   private ivena: { abmeldungen: IvenaAbmeldung[]; zuweisungen: NonNullable<PublicState['ivena']>['zuweisungen']; nextCheck: number; last: Record<string, number> } = {
     abmeldungen: [],
@@ -494,14 +513,30 @@ export class Game {
   }
 
   /** Erzeugt einen neuen Notruf (optional mit fester Vorlage, für Tests) */
-  spawnCall(templateId?: string): CallState | null {
+  /**
+   * Gezielt erzeugte Anrufe (templateId) bleiben ohne Zufall bei Panik und erneutem Anruf,
+   * damit sie berechenbar sind; opts schaltet beides gezielt ein.
+   */
+  spawnCall(templateId?: string, opts: { panik?: number; erneut?: boolean } = {}): CallState | null {
     const tpl = templateId
       ? ALLE_VORLAGEN.find((t) => t.id === templateId)
       : this.weightedTemplate();
     if (!tpl) return null;
     const truth = this.buildTruth(tpl);
     if (!truth) return null;
+    truth.panik = opts.panik ?? (templateId ? undefined : this.rollPanik(truth));
+    truth.erneut = opts.erneut ? 'immer' : templateId ? undefined : 'zufall';
     return this.ring(truth);
+  }
+
+  /** Wie oft ein Anrufer beruhigt werden muss (0 = gefasst); Angehörige bei schweren Notfällen öfter panisch */
+  private rollPanik(truth: Truth): number {
+    if (truth.fake || truth.streife || truth.termin !== undefined || truth.stichwort.startsWith('RD KTP')) return 0;
+    const role = truth.facts?.role;
+    if (role === 'personal') return 0;
+    const schwer = truth.tpl.tcpr || truth.stichwort === 'RD 2' || truth.stichwort.startsWith('B 3') || truth.stichwort.startsWith('B 4');
+    const p = (schwer ? 0.3 : truth.stichwort.startsWith('RD') || truth.stichwort.startsWith('B') ? 0.12 : 0.06) * (role === 'angehoerig' ? 1.3 : 1);
+    return this.rng() < p ? (this.rng() < 0.5 ? 1 : 2) : 0;
   }
 
   private weightedTemplate(): IncidentTemplate {
@@ -980,6 +1015,17 @@ export class Game {
       this.callerSays(call, `${this.fill(this.pick(truth.tpl.opening), truth, call.phone)} ${truth.spokenWhere}`);
       return;
     }
+    const erneut = this.erneut.get(call.id);
+    if (erneut !== undefined) {
+      const inc = this.incident(erneut.inc);
+      call.transcript.push({ from: 'calltaker', text: 'Notruf Feuerwehr und Rettungsdienst. Wo genau ist der Notfallort?', t: this.time });
+      call.transcript.push({ from: 'system', text: `Rufnummer bekannt: erneuter Anruf zu Einsatz ${inc?.nr ?? ''} (${inc?.address ?? truth.address}).`, t: this.time });
+      const art = erneut.art;
+      const text = typeof art === 'number' ? ERNEUT_VERSCHLECHTERUNG[art].text : this.pick(art === 'niemand' ? ERNEUT_NIEMAND : ERNEUT_NACHFRAGE);
+      this.callerSays(call, this.fill(text, truth, call.phone));
+      if (inc) this.log(inc, typeof art === 'number' ? `Erneuter Anruf: ${truth.verschlechtert}` : 'Erneuter Anruf: Anrufer fragt nach dem Eintreffen');
+      return;
+    }
     call.transcript.push({
       from: 'calltaker',
       text:
@@ -989,8 +1035,10 @@ export class Game {
       t: this.time,
     });
     call.asked.push('wo');
-    this.callerSays(call, this.fill(this.pick(truth.tpl.opening), truth));
-    if (!truth.fake && this.rng() < 0.7) {
+    const panisch = (truth.panik ?? 0) > 0;
+    this.callerSays(call, (panisch ? this.pick(PANIK_OPENING) : '') + this.fill(this.pick(truth.tpl.opening), truth));
+    // Panische Anrufer nennen den Ort nicht von selbst
+    if (!truth.fake && !panisch && this.rng() < 0.7) {
       this.after(4000, () => {
         if (call.state !== 'active' || truth.whereSaid) return;
         truth.whereSaid = true;
@@ -1019,6 +1067,27 @@ export class Game {
     const said = freeText ? freeText.slice(0, 300) : q ? questionText(q) : '';
     call.transcript.push({ from: 'calltaker', text: said, t: this.time });
     const qs: QuestionId[] = freeText ? classifyAll(freeText) : q ? [q] : [];
+    // Panik: Erst Beruhigen hilft, vorher kommen kaum brauchbare Antworten
+    if ((truth.panik ?? 0) > 0) {
+      if (qs.includes('beruhigen')) {
+        if (!call.asked.includes('beruhigen')) call.asked.push('beruhigen');
+        truth.panik!--;
+        if (truth.panik) {
+          this.callerSays(call, this.pick(PANIK_BERUHIGT_HALB));
+          return;
+        }
+        this.addScore(5, 'Panischen Anrufer beruhigt');
+        const rest = qs.filter((x) => x !== 'beruhigen');
+        if (!rest.length) {
+          this.callerSays(call, this.pick(PANIK_BERUHIGT));
+          return;
+        }
+        qs.splice(0, qs.length, ...rest);
+      } else if (!qs.includes('verabschieden') && (!qs.length || this.rng() < 0.65)) {
+        this.callerSays(call, this.pick(PANIK), this.rand(800, 1600));
+        return;
+      }
+    }
     if (!qs.length) {
       const pool = freeText && isYesNoQuestion(freeText) ? YES_NO : NOT_UNDERSTOOD;
       this.callerSays(call, this.pick(pool));
@@ -1039,7 +1108,10 @@ export class Game {
         ? ADDRESS_NOT_YET_SAID
         : truth.tpl.answers[qq] ??
           (truth.fake && truth.tpl.answers.was ? truth.tpl.answers.was : fallbackAnswers(qq, truth.tpl, truth.facts?.role ?? 'angehoerig'));
-      let text = this.fill(this.pick(pool), truth, call.phone);
+      const erneut = this.erneut.get(call.id)?.art;
+      const schlechter = typeof erneut === 'number' && ['zustand', 'bewusstsein', 'atmung'].includes(qq) ? ERNEUT_VERSCHLECHTERUNG[erneut].zustand : undefined;
+      let text = this.fill(schlechter ?? this.pick(pool), truth, call.phone);
+      if ((truth.panik ?? 0) > 0) text = this.pick(PANIK_PREFIX) + text;
       if (repeated && this.rng() < 0.6) text = `${this.pick(['Das hab ich doch schon gesagt!', 'Wie gesagt:', 'Nochmal:'])} ${text}`;
       parts.push(text);
     }
@@ -1182,6 +1254,11 @@ export class Game {
         }
       }
       this.incTruth.set(inc.id, truth);
+      if (truth.erneut && call && !truth.generic) {
+        const t = truth;
+        const c = call;
+        this.after(this.rand(3, 7) * 60_000, () => this.erneutAnrufen(inc, t, c));
+      }
     } else {
       this.incTruth.set(inc.id, this.genericTruth(inc, 'Keine besondere Lage, Einsatzstelle erkundet.'));
     }
@@ -2153,6 +2230,45 @@ export class Game {
     });
   }
 
+  /** Anrufer meldet sich erneut, solange noch niemand eingetroffen ist: Nachfrage oder Verschlechterung */
+  private erneutAnrufen(inc: IncidentState, truth: Truth, first: CallState) {
+    if (inc.status === 'abgeschlossen' || inc.firstArrival || first.state !== 'ended' || truth.fake || truth.streife) return;
+    if (truth.termin !== undefined || truth.stichwort.startsWith('RD KTP') || truth.tpl.kvb || this.incTruth.get(inc.id) !== truth) return;
+    if ([...this.erneut.values()].some((e) => e.inc === inc.id)) return;
+    const niemand = !inc.unitIds.length;
+    if (truth.erneut !== 'immer' && this.rng() >= (niemand ? 0.7 : 0.25)) return;
+    const hatNa = this.units.some((u) => this.typeOf(u)?.fills.includes('NEF'));
+    const kannSchlechter = hatNa && truth.stichwort.startsWith('RD') && truth.patients.length > 0 && !truth.needs.NEF && truth.facts?.role !== 'selbst';
+    let art: ErneutArt = niemand ? 'niemand' : 'nachfrage';
+    // Ist noch gar niemand alarmiert, steht das im Vordergrund
+    if (!niemand && kannSchlechter && (truth.erneut === 'immer' || this.rng() < 0.5)) {
+      art = Math.floor(this.rng() * ERNEUT_VERSCHLECHTERUNG.length);
+      const v = ERNEUT_VERSCHLECHTERUNG[art];
+      truth.verschlechtert = v.lage;
+      truth.needs.NEF = 1;
+      truth.lage = `${v.lage} ${truth.lage}`;
+      for (const p of truth.patients) if (!p.done) p.pzc = p.pzc.slice(0, 5) + '1';
+    }
+    const call = this.ring(truth);
+    // Gleicher Anschluss wie beim ersten Anruf
+    call.phone = first.phone;
+    call.aml = first.aml;
+    call.landline = first.landline;
+    call.incidentId = inc.id;
+    this.erneut.set(call.id, { inc: inc.id, art });
+    if (typeof art === 'number')
+      // Wurde der Notarzt nach dem Anruf nachalarmiert?
+      this.after(4 * 60_000, () => {
+        if (inc.status === 'abgeschlossen' || call.missed) return;
+        const na = inc.unitIds.some((id) => {
+          const u = this.unit(id);
+          return u && this.typeOf(u)?.fills.includes('NEF');
+        });
+        if (na) this.addScore(10, `${inc.nr}: Nach erneutem Anruf Notarzt nachalarmiert`);
+        else this.addScore(-10, `${inc.nr}: Verschlechterung gemeldet, aber kein Notarzt nachalarmiert`);
+      });
+  }
+
   /** Verlauf einmalig auswürfeln und auf die Wahrheit anwenden */
   private verlaufFor(truth: Truth): Verlauf | undefined {
     if (truth.fake || truth.generic || truth.tpl.kvb) return undefined;
@@ -2172,6 +2288,12 @@ export class Game {
       this.rng,
       has,
     );
+    // Laut erneutem Anruf verschlechtert: Notarzt und Transport bleiben, die Lage nennt die Verschlechterung
+    if (truth.verschlechtert) {
+      v.keinTransport = false;
+      if (has('NEF')) v.needs.NEF = Math.max(1, v.needs.NEF ?? 0);
+      if (!v.lage.includes(truth.verschlechtert)) v.lage = `${truth.verschlechtert} ${v.lage}`;
+    }
     const hadNef = !!truth.needs.NEF;
     truth.nachgefordert = Object.entries(v.needs).some(([k, n]) => n > (truth.needs[k] ?? 0));
     truth.verlauf = v;
@@ -2759,7 +2881,8 @@ export class Game {
         c.endedAt = this.time;
         this.score.callsMissed++;
         const truth = this.callTruth.get(c.id)!;
-        if (!truth.fake) {
+        if (this.erneut.has(c.id)) this.addScore(-10, 'Erneuter Anruf zu einem Einsatz nicht angenommen');
+        else if (!truth.fake) {
           this.addScore(-15, 'Notruf nicht angenommen, Anrufer hat aufgelegt');
           truth.retries = (truth.retries ?? 0) + 1;
           if (truth.retries <= 2) this.after(20_000, () => this.ring(truth, true));
