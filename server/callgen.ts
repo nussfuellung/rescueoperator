@@ -1242,6 +1242,7 @@ const POLICE: Partial<Record<QuestionId, string[]>> = {
   ortbestaetigen: ['Korrekt.', 'Ja, richtig.', 'Ja, das passt.'],
   beruhigen: ['Danke, wir haben das im Griff.', 'Alles gut, wir warten auf den RTW.'],
   tcpr: ['Momentan nicht nötig, {er} atmet. Wir melden uns, wenn sich was ändert.'],
+  verabschieden: ['Verstanden, danke. Wir warten auf den RTW.', 'Alles klar, wir weisen ein. Servus.'],
 };
 
 const NO_PATIENT: Partial<Record<QuestionId, string[]>> = {
