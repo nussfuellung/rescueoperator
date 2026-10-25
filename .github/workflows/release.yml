@@ -91,6 +91,17 @@ jobs:
           test -x /usr/bin/rescue-operator
           grep -x 'Categories=Game;Simulation;' /usr/share/applications/rescue-operator.desktop
           if ldd /opt/rescue.Operator/rescue-operator | grep 'not found'; then exit 1; fi
+      - name: Selbst-Update über pacman
+        # Bietet dieselbe Paketdatei als Version 99.0.0 an. Der Job läuft als root, pkexec fragt also nicht nach dem Passwort.
+        run: |
+          pacman -S --noconfirm --needed polkit xorg-server-xvfb python
+          mkdir upd && cp pakete/*.pacman upd/
+          sed 's/^version: .*/version: 99.0.0/' pakete/latest-linux.yml > upd/latest-linux.yml
+          (cd upd && python -m http.server 8765 >/dev/null 2>&1 &)
+          sleep 2
+          LST_UPDATE_URL=http://127.0.0.1:8765/ timeout 120 xvfb-run -a /usr/bin/rescue-operator --no-sandbox || true
+          pkill -f /opt/rescue.Operator || true
+          grep -E '(reinstalled|upgraded) rescue-operator' /var/log/pacman.log
 
   release:
     needs: [build, pacman-test]
