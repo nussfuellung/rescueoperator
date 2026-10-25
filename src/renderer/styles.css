@@ -2553,6 +2553,60 @@ button.gross {
   gap: 6px;
   align-items: center;
 }
+
+/* Terminfahrten (geplante Krankentransporte) */
+.termin-liste {
+  border-bottom: 1px solid var(--line);
+}
+.termin-kopf {
+  padding: 3px 8px;
+  color: var(--muted);
+  background: var(--panel-alt);
+  border-bottom: 1px solid var(--line-soft);
+}
+.badge.termin {
+  background: #3d4a5c;
+  font-variant-numeric: tabular-nums;
+}
+.badge.termin.bald {
+  background: #8a5a00;
+}
+.badge.termin.faellig {
+  background: #8b1a1a;
+  animation: ringbadge 1s infinite;
+}
+.incident-row.termin-row.faellig .muted {
+  color: var(--error-text);
+}
+.termin-zeile {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 4px;
+}
+.termin-zeile.bald {
+  color: var(--accent);
+}
+.termin-zeile.faellig {
+  color: var(--error-text);
+}
+.em-termin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.em-termin input[type='time'] {
+  margin-left: 6px;
+  width: auto;
+}
+.em-badge.ktp {
+  background: #3d4a5c;
+  color: #fff;
+}
+.call-row.ringing.ktp b {
+  color: var(--info-text);
 .s8-tag {
   font-size: 10px;
   padding: 0 4px;

@@ -604,6 +604,16 @@ function indexOf(scn: Scenario) {
       const kind = OBJECT_KIND_LABEL[obj.kind];
       return { hit: { obj, kind, town, street }, name: foldText(obj.name), hay: foldText(`${obj.name} ${kind} ${town} ${street}`) };
     });
+    // Kliniken ebenfalls finden (Abholung bei Verlegung und Entlassung)
+    const names = new Set(scn.objects.map((o) => o.name));
+    for (const h of scn.hospitals ?? []) {
+      if (names.has(h.name)) continue;
+      const obj: MapObject = { id: h.id, name: h.name, kind: 'sonstiges', x: h.x, y: h.y, bma: false };
+      const addr = nearestAddress(scn, obj, 200);
+      const town = addr?.town ?? (townAt(scn.towns, obj) ?? nearestTown(scn.towns, obj))?.name ?? '';
+      const street = addr ? `${addr.street} ${addr.number}` : '';
+      idx.push({ hit: { obj, kind: 'Klinik', town, street }, name: foldText(h.name), hay: foldText(`${h.name} klinik krankenhaus ${town} ${street}`) });
+    }
     objectIndex.set(scn.objects, idx);
   }
   return idx;

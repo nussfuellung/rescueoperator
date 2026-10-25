@@ -128,10 +128,13 @@ export type Action =
       alarmUnitIds?: string[];
       /** Direkt nach AAO alarmieren (Tablet ohne Straßennetz) */
       alarmAao?: boolean;
+      /** Terminfahrt: Abholzeit als Spielzeit; der Einsatz wird erst später disponiert */
+      termin?: number;
       /** Polizei gleich mit dem Anlegen verständigen */
       polizei?: boolean;
     }
-  | { a: 'updateIncident'; incidentId: string; stichwort?: string; schlagwort?: string; note?: string; tmo?: string }
+  /** termin: neue Abholzeit (Spielzeit), null hebt den Termin auf */
+  | { a: 'updateIncident'; incidentId: string; stichwort?: string; schlagwort?: string; note?: string; tmo?: string; termin?: number | null }
   | { a: 'setTmo'; unitIds: string[]; group: string }
   | { a: 'groupCall'; group: string; text: string }
   | { a: 'crewTmo'; group: string }

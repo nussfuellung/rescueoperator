@@ -161,6 +161,30 @@ export const ROLE_LABEL = {
 /** Bayerische Hilfsfrist Rettungsdienst: 12 Minuten */
 export const HILFSFRIST_MS = 12 * 60 * 1000;
 
+/** Uhrzeit "HH:MM" einer Spielzeit (Terminfahrten) */
+export function formatHhmm(clockStartMin: number, timeMs: number): string {
+  return formatClock(clockStartMin, timeMs).slice(0, 5);
+}
+
+/** Zeitspanne bis zu einem Termin in ganzen Minuten: "20 min", "1 h 05 min" */
+export function formatMinuten(ms: number): string {
+  const min = Math.max(0, Math.ceil(ms / 60000));
+  return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min`;
+}
+
+/**
+ * Spielzeit zur eingegebenen Uhrzeit "HH:MM": das nächste Vorkommen ab jetzt.
+ * Bis 30 Minuten zurück gilt die Uhrzeit noch als heute (Termin schon fällig), sonst als morgen.
+ */
+export function terminAusUhrzeit(clockStartMin: number, nowMs: number, hhmm: string): number | undefined {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
+  if (!m || +m[1] > 23 || +m[2] > 59) return undefined;
+  const now = clockStartMin + nowMs / 60000;
+  let min = Math.floor(now / 1440) * 1440 + +m[1] * 60 + +m[2];
+  if (min < now - 30) min += 1440;
+  return (min - clockStartMin) * 60000;
+}
+
 export function formatClock(clockStartMin: number, timeMs: number): string {
   const totalSec = Math.floor(clockStartMin * 60 + timeMs / 1000);
   const h = Math.floor(totalSec / 3600) % 24;

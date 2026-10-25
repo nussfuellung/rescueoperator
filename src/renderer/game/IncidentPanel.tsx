@@ -7,12 +7,15 @@ import { computeProposal, freeUnitTimes } from '../../../shared/dispatch';
 import type { IncidentState, UnitState } from '../../../shared/types';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
+import { TerminListe, TerminZeile, istGeplant } from './TerminListe';
 import { S8Tag } from './S8Tag';
 
 const HIDE_DONE_KEY = 'lst.hideDoneIncidents';
 
 export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
   const { state } = ctx;
+  // Noch nicht disponierte Terminfahrten stehen getrennt in der Terminliste
+  const geplant = state.incidents.filter(istGeplant).length;
   // Abgeschlossene Einsätze ausblenden (Einstellung bleibt gespeichert, gilt auch im ausgelagerten Fenster)
   const [hideDone, setHideDone] = useState(() => {
     try {
@@ -32,6 +35,7 @@ export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
   };
   const doneCount = state.incidents.filter((i) => i.status === 'abgeschlossen').length;
   const list = [...state.incidents]
+    .filter((i) => !istGeplant(i))
     // der gerade gewählte Einsatz bleibt sichtbar, auch wenn er abgeschlossen ist
     .filter((i) => !hideDone || i.status !== 'abgeschlossen' || i.id === ctx.selectedIncident)
     .sort((a, b) => {
@@ -57,7 +61,8 @@ export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
     <div className="panel incidents">
       <div className="panel-title">
         <span>
-          Einsätze ({state.incidents.filter((i) => i.status !== 'abgeschlossen').length} aktiv
+          Einsätze ({state.incidents.filter((i) => i.status !== 'abgeschlossen' && !istGeplant(i)).length} aktiv
+          {geplant > 0 ? `, ${geplant} ${geplant === 1 ? 'Terminfahrt' : 'Terminfahrten'}` : ''}
           {covers.length > 0 ? `, ${covers.length} ${covers.length === 1 ? 'Gebietsabsicherung' : 'Gebietsabsicherungen'}` : ''})
         </span>
         <button
@@ -69,7 +74,8 @@ export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
         </button>
       </div>
       <div className="incident-list">
-        {list.length === 0 && !covers.length && (
+        <TerminListe ctx={ctx} />
+        {list.length === 0 && !covers.length && !geplant && (
           <div className="muted small pad">{hideDone && doneCount > 0 ? 'Keine offenen Einsätze.' : 'Keine Einsätze.'}</div>
         )}
         {covers.map((c) => (
@@ -200,6 +206,7 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
           {inc.sondersignal === false && <span className="warn">ohne Sondersignal</span>}
         </div>
       )}
+      <TerminZeile ctx={ctx} inc={inc} />
       {inc.schlagwort && <code className="em-schlagwort">{inc.schlagwort}</code>}
       <div className="row">
         <select
