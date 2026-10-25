@@ -106,7 +106,7 @@ describe('IVENA und PZC', () => {
       game.tick(1000);
       u = game.units.find((x) => x.task === 'awaitHospital');
     }
-    expect(u?.pzc).toMatch(/^332\d\d1$/);
+    expect((game as unknown as { patientOf: (u: unknown) => { pzc: string } }).patientOf(u!).pzc).toMatch(/^332\d\d1$/);
     expect(game.publicState().ivena).toBeTruthy();
     // Klinik A meldet die Kardiologie ab
     const iv = (game as unknown as { ivena: { abmeldungen: { hospitalId: string; fach: string; bis: number; grund: string }[] } }).ivena;

@@ -57,19 +57,34 @@ describe('Patientenanmeldung per Telefon', () => {
       game.tick(1000);
       u = game.units.find((x) => x.task === 'awaitHospital');
     }
-    expect(u?.pzc).toMatch(/^711\d\d2$/);
+    // Noch nicht gemeldet: Der PZC ist in der Leitstelle unbekannt
+    expect(u?.pzc).toBeUndefined();
+    const pat = (game as unknown as { patientOf: (u: UnitState) => { pzc: string } }).patientOf.bind(game)(u!);
+    expect(pat.pzc).toMatch(/^711\d\d2$/);
     const ring = (game as unknown as { ringRtw: (u: UnitState, p: { pzc: string; desc: string }) => CallState }).ringRtw.bind(game);
-    const rtw = ring(u!, { pzc: u!.pzc!, desc: 'V. a. Nierenkolik rechts' });
+    const rtw = ring(u!, { pzc: pat.pzc, desc: 'V. a. Nierenkolik rechts' });
     expect(rtw.kind).toBe('rtw');
+    expect(u!.pzc).toBeUndefined();
     game.handle(p.id, { a: 'answerCall', callId: rtw.id });
+    expect(u!.pzc).toBe(pat.pzc);
     expect(rtw.transcript.some((l) => l.from === 'caller' && l.text.includes('PZC 7 1 1'))).toBe(true);
     // Eine Patientenanmeldung ist kein Notruf: kein Einsatz daraus
     expect(game.handle(p.id, { a: 'createIncident', callId: rtw.id, stichwort: 'RD 1', address: 'x', x: 0, y: 0, note: '', patients: 1 })).toBeTruthy();
     const h = scn.hospitals.find((x) => x.specialties.includes('Urologie'))!;
     game.handle(p.id, { a: 'assignHospital', unitId: u!.id, hospitalId: h.id });
-    expect(rtw.state).toBe('ended');
-    expect(rtw.transcript.at(-1)!.text).toContain(h.name);
     expect(u!.hospitalId).toBe(h.id);
+    // Das Gespräch endet nicht sofort: Die Besatzung quittiert, dann legt der Calltaker auf
+    expect(rtw.state).toBe('active');
+    expect(rtw.transcript.at(-1)).toMatchObject({ from: 'calltaker' });
+    expect(rtw.transcript.at(-1)!.text).toContain(h.name);
+    for (let t = 0; t < 5000; t += 500) game.tick(500);
+    expect(rtw.transcript.at(-1)).toMatchObject({ from: 'caller' });
+    expect(rtw.transcript.at(-1)!.text).toMatch(/Verstanden.*tschüss/);
+    expect(game.handle(p.id, { a: 'endCall', callId: rtw.id })).toBeUndefined();
+    expect(rtw.state).toBe('ended');
+    // Mit Zielklinik aufgelegt: keine erneute Anfrage über Funk
+    for (let t = 0; t < 60_000; t += 1000) game.tick(1000);
+    expect(u!.speak?.kind).not.toBe('zielklinik');
   });
 
   it('meldet sich über Funk, wenn niemand abnimmt', () => {
@@ -88,5 +103,61 @@ describe('Patientenanmeldung per Telefon', () => {
     expect(rtw.state).toBe('ended');
     expect(rtw.missed).toBe(true);
     expect(u.speak?.kind).toBe('zielklinik');
+  });
+
+  it('zeigt den PZC erst nach der Meldung über Funk', () => {
+    const scn = generateScenario({ seed: 4711, towns: 8 });
+    scn.settings.callsPerHour = 0;
+    scn.settings.bmaPerHour = 0;
+    const game = new Game(scn, { seed: 5 });
+    const p = game.addPlayer('D', 'dispatcher');
+    game.handle(p.id, { a: 'start' });
+    const call = game.spawnCall('rd_nierenkolik')!;
+    game.handle(p.id, { a: 'answerCall', callId: call.id });
+    const truth = (game as unknown as { callTruth: Map<string, { pos: { x: number; y: number } }> }).callTruth.get(call.id)!;
+    game.handle(p.id, { a: 'createIncident', callId: call.id, stichwort: 'RD 2', address: 'x', x: truth.pos.x, y: truth.pos.y, note: '', patients: 1 });
+    game.handle(p.id, { a: 'endCall', callId: call.id });
+    const inc = game.incidents[0];
+    game.handle(p.id, { a: 'alarm', incidentId: inc.id, unitIds: game.proposal(inc.id).map((x) => x.unitId) });
+    let u: UnitState | undefined;
+    for (let t = 0; t < 3 * 3600_000 && !u; t += 1000) {
+      game.tick(1000);
+      u = game.units.find((x) => x.task === 'awaitHospital');
+    }
+    expect(u).toBeTruthy();
+    // Bis die Besatzung sich meldet, taucht kein PZC auf, auch nicht in der Lage für die Clients
+    for (let t = 0; t < 120_000 && !u!.speak?.text.includes('PZC') && !game.calls.some((c) => c.kind === 'rtw'); t += 1000) {
+      expect(u!.pzc).toBeUndefined();
+      game.tick(1000);
+    }
+    expect(game.publicState().units.find((x) => x.id === u!.id)!.pzc).toBeUndefined();
+    const rtw = game.calls.find((c) => c.kind === 'rtw');
+    if (rtw) game.handle(p.id, { a: 'answerCall', callId: rtw.id });
+    else game.handle(p.id, { a: 'speakPermit', unitId: u!.id });
+    expect(u!.pzc).toMatch(/^711\d\d2$/);
+  });
+});
+
+describe('IVENA-Ab- und Anmeldungen', () => {
+  it('melden Fachbereiche unregelmäßig und unterschiedlich lange ab', () => {
+    const scn = JSON.parse(gunzipSync(readFileSync('assets/ils-wuerzburg.json.gz')).toString()) as Scenario;
+    scn.settings.callsPerHour = 0;
+    scn.settings.bmaPerHour = 0;
+    const game = new Game(scn);
+    const g = game as unknown as { checkIvena(): void; ivena: { abmeldungen: { hospitalId: string; fach: string; seit?: number; bis: number }[] } };
+    const gesehen = new Map<string, { seit: number; bis: number }>();
+    for (let t = 0; t < 12 * 3600_000; t += 10_000) {
+      game.time = t;
+      g.checkIvena();
+      for (const a of g.ivena.abmeldungen) gesehen.set(`${a.hospitalId}:${a.fach}:${a.seit}`, { seit: a.seit!, bis: a.bis });
+    }
+    const spaeter = [...gesehen.values()].filter((a) => a.seit > 0);
+    expect(spaeter.length).toBeGreaterThan(10);
+    // Abmeldezeitpunkte liegen nicht im Minutenraster
+    expect(spaeter.some((a) => a.seit % 60_000 !== 0)).toBe(true);
+    const dauer = spaeter.map((a) => (a.bis - a.seit) / 60_000);
+    expect(Math.min(...dauer)).toBeGreaterThanOrEqual(10);
+    expect(Math.max(...dauer)).toBeLessThanOrEqual(240);
+    expect(Math.max(...dauer) - Math.min(...dauer)).toBeGreaterThan(60);
   });
 });

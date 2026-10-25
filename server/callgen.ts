@@ -1119,7 +1119,7 @@ const QUESTION_TEXT: Record<QuestionId, string> = {
   zustand: 'Wie geht es der Person gerade?',
   gefahr: 'Gibt es besondere Gefahren, zum Beispiel Feuer, Rauch oder eingeklemmte Personen?',
   tcpr: 'Ich leite Sie jetzt zur Herzdruckmassage an: Legen Sie Ihre Hände in die Brustmitte und drücken Sie fest und schnell, zweimal pro Sekunde.',
-  beruhigen: 'Bleiben Sie ruhig, Hilfe ist organisiert. Ich bleibe bei Ihnen am Telefon.',
+  beruhigen: 'Bleiben Sie ruhig, wir kümmern uns. Atmen Sie einmal tief durch.',
   alter: 'Wie alt ist die Person?',
   atmung: 'Atmet die Person normal?',
   bewusstsein: 'Ist die Person wach und ansprechbar?',
@@ -1131,6 +1131,7 @@ const QUESTION_TEXT: Record<QuestionId, string> = {
   termin: 'Für wann brauchen Sie den Transport, um wie viel Uhr soll abgeholt werden?',
   ziel: 'Wohin soll der Transport gehen?',
   transportart: 'Liegend, sitzend oder mit Tragestuhl?',
+  verabschieden: 'Ich schicke Ihnen jemanden, die Einsatzkräfte sind auf dem Weg. Wenn sich etwas ändert, rufen Sie sofort wieder die 112 an.',
 };
 
 export function questionText(q: QuestionId): string {
@@ -1159,6 +1160,8 @@ const RULES: [QuestionId, RegExp][] = [
   ['transportart', /liegend|sitzend|tragestuhl|rollstuhl|gehfähig|transportart/],
   ['ziel', /wohin|transportziel|zielort|zielklinik|wo soll (es|er|sie|der transport)( denn)? hin|in welche[sm]? (klinik|krankenhaus)|welche[sm]? (klinik|krankenhaus)|wo geht es hin/],
   ['rueckruf', /rückruf|zurückrufen|(ihre|eine|welche[rn]?|die) (telefon|handy)?nummer|erreichen wir sie|erreichbar|telefonnummer/],
+  // Hilfe zusagen und das Gespräch beenden
+  ['verabschieden', /(ich |wir )?schicke[n]? (ihnen )?(jetzt )?(jemand|hilfe|einen|den|die|rettungsdienst|feuerwehr|polizei)|(einsatzkräfte|rettungsdienst|feuerwehr|kollegen) (sind|ist|kommen|kommt) (schon )?(auf dem weg|unterwegs)|auf wiederhören|wiederhören|ich lege (jetzt )?auf/],
   ['beruhigen', /ruhig|beruhig|keine angst|keine sorge|hilfe (ist|kommt) (unterwegs|organisiert)|tief durchatmen/],
   ['alter', /wie alt|alter |jahre alt|geburtsjahr|welches alter/],
   ['vorerkrankung', /vorerkrank|krankheit|medikament|tabletten|diabet|zucker|herzkrank|blutverdünn|allergi|krank (ist|war)/],
@@ -1292,6 +1295,7 @@ export const DEFAULT_ANSWERS: Record<QuestionId, string[]> = {
   termin: ['Wann? Jetzt sofort natürlich!', 'Sofort, bitte!'],
   ziel: ['Das wissen Sie doch besser, Hauptsache schnell!', 'Keine Ahnung, ins nächste Krankenhaus halt.'],
   transportart: ['Das weiß ich doch nicht, schicken Sie einfach jemanden!', 'Keine Ahnung.'],
+  verabschieden: ['Okay, danke! Bis gleich.', 'Ja, danke. Ich warte draußen.', 'Danke, bitte beeilen Sie sich!', 'Okay. Vielen Dank!'],
 };
 
 /** Rückbestätigung, bevor der Anrufer überhaupt einen Ort genannt hat */

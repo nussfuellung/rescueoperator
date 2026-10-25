@@ -32,6 +32,7 @@ const QUESTIONS: { id: QuestionId; label: string; key: string }[] = [
   { id: 'zugang', label: 'Stockwerk / Zugang', key: 't' },
   { id: 'rueckruf', label: 'Rückrufnummer', key: 'z' },
   { id: 'ortbestaetigen', label: 'Adresse rückbestätigen', key: '0' },
+  { id: 'verabschieden', label: 'Ich schicke Ihnen jemand', key: 'u' },
 ];
 
 /** Zusätzliche Fragen bei Anrufen auf der Krankentransport-Leitung 19222 */
@@ -150,6 +151,7 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
                         {l.text}
                       </div>
                     ))}
+                  {c.typing && <div className="line caller typing">Besatzung spricht…</div>}
                 </div>
                 <div className="small">
                   PZC <code>{c.rtw!.pzc}</code> {pzcText(c.rtw!.pzc)}
@@ -157,6 +159,7 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
                 </div>
                 <div className="row">
                   {u && u.task === 'awaitHospital' && !u.hospitalId && <HospitalSelect ctx={ctx} u={u} />}
+                  {u?.hospitalId && <span className="small">Zielklinik: {ctx.scn.hospitals.find((h) => h.id === u.hospitalId)?.name}</span>}
                   {ctx.openIvena && <button onClick={ctx.openIvena}>IVENA öffnen</button>}
                   <button className="danger" onClick={() => conn.send({ a: 'endCall', callId: c.id })}>
                     Auflegen

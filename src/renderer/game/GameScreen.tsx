@@ -6,6 +6,7 @@ import { conn, useNet } from '../net';
 import { MapView, type Hit } from '../MapView';
 import { alarmTone, beep, isMuted, ring, setMuted } from '../sound';
 import { EswlMeldungen } from './EswlMeldungen';
+import { IvenaMeldungen } from './IvenaMeldungen';
 import { CallPanel, IncidentFormPanel } from './CallPanel';
 import { IncidentPanel } from './IncidentPanel';
 import { UnitBoard } from './UnitBoard';
@@ -318,10 +319,10 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
         <button
           onClick={() => setShowIvena(true)}
           title="IVENA: Patientenzuweisung nach PZC und An-/Abmeldestatus der Kliniken"
-          className={state.units.some((u) => u.task === 'awaitHospital' && !u.hospitalId) ? 'attention' : ''}
+          className={state.units.some((u) => u.task === 'awaitHospital' && !u.hospitalId && u.pzc) ? 'attention' : ''}
         >
           🏥 IVENA{(() => {
-            const n = state.units.filter((u) => u.task === 'awaitHospital' && !u.hospitalId).length;
+            const n = state.units.filter((u) => u.task === 'awaitHospital' && !u.hospitalId && u.pzc).length;
             return n ? ` (${n})` : '';
           })()}
         </button>
@@ -419,7 +420,12 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showIvena && <IvenaModal ctx={ctx} onClose={() => setShowIvena(false)} />}
       {showDevice && <DeviceModal hostInfo={props.hostInfo} remote={remote} setRemote={setRemote} tonPc={tonPc} setTonPc={setTonPc} onClose={() => setShowDevice(false)} />}
-      {me?.role !== 'crew' && <EswlMeldungen ctx={ctx} />}
+      {me?.role !== 'crew' && (
+        <div className="meldungen-stapel">
+          <EswlMeldungen ctx={ctx} />
+          <IvenaMeldungen ctx={ctx} />
+        </div>
+      )}
       {toasts}
     </div>
   );
