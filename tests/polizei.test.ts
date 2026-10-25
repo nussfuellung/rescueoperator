@@ -51,7 +51,7 @@ describe('Polizei', () => {
       game.handle(p.id, { a: 'start' });
       const call = game.spawnCall(tpl.id)!;
       expect(call, tpl.id).toBeTruthy();
-      expect(call.polizei, tpl.id).toMatch(/\d+\/\d/);
+      expect(call.polizei, tpl.id).toMatch(/^Main \d+\/\d$/);
       expect(call.phone).toMatch(/^Polizei /);
       expect(call.aml).toBeUndefined();
       game.handle(p.id, { a: 'answerCall', callId: call.id });
