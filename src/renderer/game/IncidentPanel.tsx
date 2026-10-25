@@ -8,12 +8,35 @@ import type { IncidentState, UnitState } from '../../../shared/types';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
 
+const HIDE_DONE_KEY = 'lst.hideDoneIncidents';
+
 export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
   const { state } = ctx;
-  const list = [...state.incidents].sort((a, b) => {
-    const order = { offen: 0, alarmiert: 1, laufend: 2, abgeschlossen: 3 };
-    return order[a.status] - order[b.status] || b.createdAt - a.createdAt;
+  // Abgeschlossene Einsätze ausblenden (Einstellung bleibt gespeichert, gilt auch im ausgelagerten Fenster)
+  const [hideDone, setHideDone] = useState(() => {
+    try {
+      return localStorage.getItem(HIDE_DONE_KEY) === '1';
+    } catch {
+      return false;
+    }
   });
+  const toggleHideDone = () => {
+    const n = !hideDone;
+    setHideDone(n);
+    try {
+      localStorage.setItem(HIDE_DONE_KEY, n ? '1' : '0');
+    } catch {
+      /* egal */
+    }
+  };
+  const doneCount = state.incidents.filter((i) => i.status === 'abgeschlossen').length;
+  const list = [...state.incidents]
+    // der gerade gewählte Einsatz bleibt sichtbar, auch wenn er abgeschlossen ist
+    .filter((i) => !hideDone || i.status !== 'abgeschlossen' || i.id === ctx.selectedIncident)
+    .sort((a, b) => {
+      const order = { offen: 0, alarmiert: 1, laufend: 2, abgeschlossen: 3 };
+      return order[a.status] - order[b.status] || b.createdAt - a.createdAt;
+    });
   const sel = state.incidents.find((i) => i.id === ctx.selectedIncident);
   // Gebietsabsicherungen je Standort, damit sie neben den Einsätzen nicht vergessen werden
   const covers = useMemo(() => {
@@ -32,11 +55,22 @@ export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
   return (
     <div className="panel incidents">
       <div className="panel-title">
-        Einsätze ({state.incidents.filter((i) => i.status !== 'abgeschlossen').length} aktiv
-        {covers.length > 0 ? `, ${covers.length} ${covers.length === 1 ? 'Gebietsabsicherung' : 'Gebietsabsicherungen'}` : ''})
+        <span>
+          Einsätze ({state.incidents.filter((i) => i.status !== 'abgeschlossen').length} aktiv
+          {covers.length > 0 ? `, ${covers.length} ${covers.length === 1 ? 'Gebietsabsicherung' : 'Gebietsabsicherungen'}` : ''})
+        </span>
+        <button
+          className={`small-btn hide-done ${hideDone ? 'on' : ''}`}
+          title={hideDone ? 'Abgeschlossene Einsätze wieder anzeigen' : 'Abgeschlossene Einsätze in der Liste ausblenden'}
+          onClick={toggleHideDone}
+        >
+          {hideDone ? `${doneCount} abgeschlossene ausgeblendet` : 'Abgeschlossene ausblenden'}
+        </button>
       </div>
       <div className="incident-list">
-        {list.length === 0 && !covers.length && <div className="muted small pad">Keine Einsätze.</div>}
+        {list.length === 0 && !covers.length && (
+          <div className="muted small pad">{hideDone && doneCount > 0 ? 'Keine offenen Einsätze.' : 'Keine Einsätze.'}</div>
+        )}
         {covers.map((c) => (
           <div
             key={c.key}
