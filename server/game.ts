@@ -914,13 +914,24 @@ export class Game {
       if (repeated && this.rng() < 0.6) text = `${this.pick(['Das hab ich doch schon gesagt!', 'Wie gesagt:', 'Nochmal:'])} ${text}`;
       parts.push(text);
     }
-    this.callerSays(call, parts.join(' '), this.rand(1200, 2600));
+    const delay = this.rand(1200, 2600);
+    this.callerSays(call, parts.join(' '), delay);
+    // "Ich schicke Ihnen jemand": Der Anrufer bedankt sich und legt auf
+    if (qs.includes('verabschieden'))
+      this.after(delay + 1500, () => {
+        if (call.state === 'active') this.finishCall(call);
+      });
   }
 
   private endCall(player: Player, callId: string): string | void {
     const call = this.calls.find((c) => c.id === callId);
     if (!call || call.state !== 'active') return 'Kein aktives Gespräch';
     if (call.takerId !== player.id) return 'Das Gespräch führt ein anderer Calltaker';
+    this.finishCall(call);
+  }
+
+  /** Gespräch beenden und bewerten, ob zum Notruf ein Einsatz angelegt wurde */
+  private finishCall(call: CallState) {
     call.state = 'ended';
     call.endedAt = this.time;
     call.typing = false;

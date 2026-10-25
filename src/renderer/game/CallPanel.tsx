@@ -32,6 +32,7 @@ const QUESTIONS: { id: QuestionId; label: string; key: string }[] = [
   { id: 'zugang', label: 'Stockwerk / Zugang', key: 't' },
   { id: 'rueckruf', label: 'Rückrufnummer', key: 'z' },
   { id: 'ortbestaetigen', label: 'Adresse rückbestätigen', key: '0' },
+  { id: 'verabschieden', label: 'Ich schicke Ihnen jemand', key: 'u' },
 ];
 
 export function CallPanel({ ctx }: { ctx: GameCtx }) {
