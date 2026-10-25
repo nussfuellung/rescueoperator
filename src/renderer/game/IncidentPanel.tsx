@@ -4,7 +4,7 @@ import { SchlagwortSelect } from './SchlagwortSelect';
 import { useEffect, useMemo, useState } from 'react';
 import { AIR_SPEED, AIR_TURNOUT, FMS_COLOR, FMS_TEXT, formatClock, formatDuration, shortCallsign } from '../../../shared/catalog';
 import { computeProposal } from '../../../shared/dispatch';
-import type { IncidentState } from '../../../shared/types';
+import type { IncidentState, UnitState } from '../../../shared/types';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
 
@@ -15,12 +15,66 @@ export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
     return order[a.status] - order[b.status] || b.createdAt - a.createdAt;
   });
   const sel = state.incidents.find((i) => i.id === ctx.selectedIncident);
+  // Gebietsabsicherungen je Standort, damit sie neben den Einsätzen nicht vergessen werden
+  const covers = useMemo(() => {
+    const m = new Map<string, { key: string; name: string; x: number; y: number; since: number; units: UnitState[] }>();
+    for (const u of state.units) {
+      if (!u.cover || u.incidentId) continue;
+      const key = u.cover.stationId ?? `${Math.round(u.cover.x)},${Math.round(u.cover.y)}`;
+      const c = m.get(key) ?? { key, name: u.cover.name, x: u.cover.x, y: u.cover.y, since: u.cover.since ?? state.time, units: [] };
+      c.since = Math.min(c.since, u.cover.since ?? state.time);
+      c.units.push(u);
+      m.set(key, c);
+    }
+    return [...m.values()].sort((a, b) => a.since - b.since);
+  }, [state.units, state.time]);
 
   return (
     <div className="panel incidents">
-      <div className="panel-title">Einsätze ({state.incidents.filter((i) => i.status !== 'abgeschlossen').length} aktiv)</div>
+      <div className="panel-title">
+        Einsätze ({state.incidents.filter((i) => i.status !== 'abgeschlossen').length} aktiv
+        {covers.length > 0 ? `, ${covers.length} ${covers.length === 1 ? 'Gebietsabsicherung' : 'Gebietsabsicherungen'}` : ''})
+      </div>
       <div className="incident-list">
-        {list.length === 0 && <div className="muted small pad">Keine Einsätze.</div>}
+        {list.length === 0 && !covers.length && <div className="muted small pad">Keine Einsätze.</div>}
+        {covers.map((c) => (
+          <div
+            key={c.key}
+            className="incident-row cover-row"
+            title="Gebietsabsicherung: Fahrzeuge stehen auf Status 1 am Standort, bis sie mit H zurückgeschickt werden"
+            onClick={() => {
+              ctx.setSelectedIncident(null);
+              if (ctx.locate) ctx.locate(c.units[0]);
+              else ctx.focus(c);
+            }}
+          >
+            <span className="badge absicherung">Absicherung</span>
+            <span className="inc-sw">
+              {c.units.map((u) => (
+                <span key={u.id} className="cover-unit">
+                  <span className="fms" style={{ background: FMS_COLOR[u.status] }}>
+                    {u.status}
+                  </span>{' '}
+                  {shortCallsign(u.callsign)}
+                </span>
+              ))}
+            </span>
+            <span className="addr">{c.name}</span>
+            <span className="muted small row">
+              {formatDuration(state.time - c.since)}
+              <button
+                className="small-btn"
+                title="H – Fahren Sie Wache an: Gebietsabsicherung beenden"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  for (const u of c.units) conn.send({ a: 'sendHome', unitId: u.id });
+                }}
+              >
+                H
+              </button>
+            </span>
+          </div>
+        ))}
         {list.map((i) => (
           <div
             key={i.id}

@@ -298,7 +298,7 @@ export interface UnitState {
   /** Aktuell geschaltete TMO-Rufgruppe */
   tmo?: string;
   /** Gebietsabsicherung: Standort, an dem das Fahrzeug bereitsteht */
-  cover?: { name: string; x: number; y: number; stationId?: string };
+  cover?: { name: string; x: number; y: number; stationId?: string; /** Spielzeit der Verlegung */ since?: number };
   /** Über die ESWL von einer Nachbar-ILS entsandt: gehört nicht zum eigenen Bereich und fährt danach heim */
   fremd?: { nachbarId: string; ils: string; wache: string; imBereich: boolean };
 }
