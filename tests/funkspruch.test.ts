@@ -157,3 +157,76 @@ describe('Antworten der Besatzungen', () => {
     expect(['returning', 'station']).toContain(u.task);
   });
 });
+
+describe('Notarzt abkömmlich', () => {
+  type Truth = { patients: { pzc: string; done: boolean; unitId?: string }[]; needs: Record<string, number>; erkundet?: boolean; workDone?: boolean };
+  function einsatzMitNotarzt(seed: number, arztbegleitung: boolean) {
+    const scn = generateScenario({ seed: 4711, towns: 8 });
+    scn.settings.callsPerHour = 0;
+    scn.settings.bmaPerHour = 0;
+    const game = new Game(scn, { seed });
+    const dp = game.addPlayer('Disponent', 'dispatcher');
+    game.handle(dp.id, { a: 'start' });
+    const call = game.spawnCall('rd_fall')!;
+    game.handle(dp.id, { a: 'answerCall', callId: call.id });
+    const pos = (game as unknown as { callTruth: Map<string, { pos: { x: number; y: number } }> }).callTruth.get(call.id)!.pos;
+    game.handle(dp.id, { a: 'createIncident', callId: call.id, stichwort: 'RD 2', address: 'Test', x: pos.x, y: pos.y, note: '', patients: 1 });
+    game.handle(dp.id, { a: 'endCall', callId: call.id });
+    const inc = game.incidents[0];
+    const truth = (game as unknown as { incTruth: Map<string, Truth> }).incTruth.get(inc.id)!;
+    const rtw = game.units.find((u) => u.type === 'RTW' && u.status === 2)!;
+    const nef = game.units.find((u) => u.type === 'NEF' && u.status === 2)!;
+    game.handle(dp.id, { a: 'alarm', incidentId: inc.id, unitIds: [rtw.id, nef.id] });
+    truth.needs = { RTW: 1, NEF: 1 };
+    for (const p of truth.patients) p.pzc = p.pzc.slice(0, 5) + (arztbegleitung ? '1' : '2');
+    return { game, dp, inc, truth, rtw, nef, scn };
+  }
+
+  it('NEF in der Anfahrt verweist aufs Umdisponieren, vor Ort ohne Arztbegleitung wird es frei', () => {
+    const { game, inc, truth, rtw, nef } = einsatzMitNotarzt(5, false);
+    let guard = 0;
+    while (nef.task !== 'toScene' && guard++ < 1000) game.tick(500);
+    expect(game.radioReply(nef, 'sind sie abkömmlich')).toMatch(/Anfahrt.*umdisponieren/);
+    guard = 0;
+    while (!(nef.task === 'onScene' && truth.erkundet && rtw.task === 'onScene') && guard++ < 20000) game.tick(500);
+    expect(nef.task).toBe('onScene');
+    const antwort = game.radioReply(rtw, gesprochen('rotkreuz von leitstelle ist der notarzt abkömmlich kommen'))!;
+    if (/notärztlich versorgt/.test(antwort)) {
+      // Noch in der Versorgung: Restzeit wird genannt, das NEF bleibt
+      expect(antwort).toMatch(/in etwa \d+ Minuten/);
+      expect(nef.incidentId).toBe(inc.id);
+      truth.workDone = true;
+      expect(game.radioReply(nef, 'Ist der Notarzt abkömmlich?')).toMatch(/^Ja/);
+    } else expect(antwort).toMatch(/^Ja, Notarzt ist abkömmlich/);
+    expect(nef.incidentId).toBeUndefined();
+    expect(nef.status).toBe(1);
+    expect(truth.needs.NEF).toBe(0);
+  });
+
+  it('begleitender Notarzt fährt in Status 7 mit und ist erst nach der Übergabe abkömmlich', () => {
+    const { game, dp, rtw, nef, scn } = einsatzMitNotarzt(6, true);
+    let guard = 0;
+    while (rtw.task !== 'awaitHospital' && guard++ < 20000) {
+      game.tick(500);
+      for (const u of [rtw, nef]) if (u.speak && !u.speak.answered) game.handle(dp.id, { a: 'speakPermit', unitId: u.id });
+    }
+    expect(rtw.task).toBe('awaitHospital');
+    expect(nef.begleitet).toBe(rtw.id);
+    expect(game.radioReply(nef, 'können sie sich für einen folgeeinsatz frei machen')).toMatch(/notarztpflichtig/);
+    expect(game.radioReply(rtw, 'ist ein notarzt bei euch an bord')).toMatch(/begleitet/);
+    game.handle(dp.id, { a: 'assignHospital', unitId: rtw.id, hospitalId: scn.hospitals[0].id });
+    guard = 0;
+    while (rtw.task !== 'toHospital' && guard++ < 2000) game.tick(500);
+    expect(nef.task).toBe('toHospital');
+    expect(nef.status).toBe(7);
+    expect(game.radioReply(rtw, 'wann ist der notarzt wieder frei')).toMatch(/begleitet den Patienten.*abkömmlich nach der Übergabe in etwa \d+ Minuten/);
+    guard = 0;
+    while (nef.task === 'toHospital' && guard++ < 20000) game.tick(500);
+    expect(nef.task).toBe('atHospital');
+    expect(nef.status).toBe(8);
+    nef.timer = (game as unknown as { time: number }).time + 60_000;
+    expect(game.radioReply(nef, 'notarzt abkömmlich')).toMatch(/Übergabe ist abgeschlossen/);
+    expect(nef.status).toBe(1);
+    expect(nef.incidentId).toBeUndefined();
+  });
+});
