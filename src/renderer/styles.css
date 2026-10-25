@@ -2356,9 +2356,9 @@ button.gross {
 }
 
 /* ESWL: Antwort der Nachbarleitstelle als Benachrichtigung */
-.eswl-meldungen {
+/* ESWL- und IVENA-Meldungen stapeln sich über der Karte, damit Einsatzliste und Funk frei bleiben */
+.meldungen-stapel {
   position: fixed;
-  /* über der Karte, damit Einsatzliste und Funk frei bleiben */
   top: 56px;
   left: 50%;
   transform: translateX(-50%);
@@ -2367,6 +2367,11 @@ button.gross {
   gap: 8px;
   z-index: 25;
   width: min(380px, calc(100vw - 32px));
+}
+.eswl-meldungen {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .eswl-meldung {
   background: var(--toast-bg);

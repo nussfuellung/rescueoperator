@@ -90,3 +90,27 @@ describe('Patientenanmeldung per Telefon', () => {
     expect(u.speak?.kind).toBe('zielklinik');
   });
 });
+
+describe('IVENA-Ab- und Anmeldungen', () => {
+  it('melden Fachbereiche unregelmäßig und unterschiedlich lange ab', () => {
+    const scn = JSON.parse(gunzipSync(readFileSync('assets/ils-wuerzburg.json.gz')).toString()) as Scenario;
+    scn.settings.callsPerHour = 0;
+    scn.settings.bmaPerHour = 0;
+    const game = new Game(scn);
+    const g = game as unknown as { checkIvena(): void; ivena: { abmeldungen: { hospitalId: string; fach: string; seit?: number; bis: number }[] } };
+    const gesehen = new Map<string, { seit: number; bis: number }>();
+    for (let t = 0; t < 12 * 3600_000; t += 10_000) {
+      game.time = t;
+      g.checkIvena();
+      for (const a of g.ivena.abmeldungen) gesehen.set(`${a.hospitalId}:${a.fach}:${a.seit}`, { seit: a.seit!, bis: a.bis });
+    }
+    const spaeter = [...gesehen.values()].filter((a) => a.seit > 0);
+    expect(spaeter.length).toBeGreaterThan(10);
+    // Abmeldezeitpunkte liegen nicht im Minutenraster
+    expect(spaeter.some((a) => a.seit % 60_000 !== 0)).toBe(true);
+    const dauer = spaeter.map((a) => (a.bis - a.seit) / 60_000);
+    expect(Math.min(...dauer)).toBeGreaterThanOrEqual(10);
+    expect(Math.max(...dauer)).toBeLessThanOrEqual(240);
+    expect(Math.max(...dauer) - Math.min(...dauer)).toBeGreaterThan(60);
+  });
+});

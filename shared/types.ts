@@ -465,9 +465,18 @@ export interface PublicState {
   ivena?: IvenaState;
 }
 
+export interface IvenaAbmeldung {
+  hospitalId: string;
+  fach: string;
+  seit?: number;
+  bis: number;
+  grund: string;
+}
+
 /** IVENA: Abmeldungen der Kliniken je Fachbereich und erfolgte Zuweisungen */
 export interface IvenaState {
-  abmeldungen: { hospitalId: string; fach: string; bis: number; grund: string }[];
+  /** seit: Zeitpunkt der Abmeldung (Spielzeit), bis: voraussichtliches Ende */
+  abmeldungen: IvenaAbmeldung[];
   zuweisungen: { t: number; hospitalId: string; callsign: string; pzc?: string; nr?: string; trotzAbmeldung?: boolean }[];
 }
 
