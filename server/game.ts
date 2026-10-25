@@ -13,6 +13,7 @@ import type {
   Hospital,
   IncidentState,
   Player,
+  IvenaAbmeldung,
   PublicState,
   QuestionId,
   RadioMessage,
@@ -174,10 +175,11 @@ export class Game {
   private callTruth = new Map<string, Truth>();
   private incTruth = new Map<string, Truth>();
   /** IVENA: Abmeldungen je Klinik und Fachbereich, Zuweisungen */
-  private ivena: { abmeldungen: { hospitalId: string; fach: string; bis: number; grund: string }[]; zuweisungen: NonNullable<PublicState['ivena']>['zuweisungen']; nextCheck: number } = {
+  private ivena: { abmeldungen: IvenaAbmeldung[]; zuweisungen: NonNullable<PublicState['ivena']>['zuweisungen']; nextCheck: number; last: Record<string, number> } = {
     abmeldungen: [],
     zuweisungen: [],
     nextCheck: 0,
+    last: {},
   };
   private recentTpl: string[] = [];
   /** Dienstzeiten je Fahrzeug (nur Fahrzeuge mit Schichtplan) */
@@ -2251,7 +2253,9 @@ export class Game {
   private checkIvena() {
     if (this.time < this.ivena.nextCheck) return;
     const first = this.ivena.nextCheck === 0;
-    this.ivena.nextCheck = this.time + 60_000;
+    // Unregelmäßiger Takt, damit Ab- und Anmeldungen nicht im Minutenraster kommen
+    const schritt = this.rand(30, 90) * 1000;
+    this.ivena.nextCheck = this.time + schritt;
     this.ivena.abmeldungen = this.ivena.abmeldungen.filter((a) => a.bis > this.time);
     this.ivena.zuweisungen = this.ivena.zuweisungen.filter((z) => this.time - z.t < 3 * 3600_000);
     const hs = this.scn.hospitals;
@@ -2272,6 +2276,9 @@ export class Game {
       Psychiatrie: ['keine geschützten Betten frei', 'Station voll belegt'],
     };
     for (const h of hs) {
+      // Auslastung je Klinik schwankt als Zufallsbewegung zwischen 0,3 und 3: mal ruhige Phasen, mal Häufungen
+      const auslastung = Math.min(3, Math.max(0.3, (this.ivena.last[h.id] ?? this.rand(0.5, 1.5)) * Math.exp((this.rng() - 0.5) * 0.3)));
+      this.ivena.last[h.id] = auslastung;
       for (const fach of h.specialties) {
         if (this.abgemeldet(h.id, fach)) continue;
         // Mindestens eine weitere Klinik muss den Fachbereich angemeldet haben
@@ -2279,11 +2286,14 @@ export class Game {
         if (!andere) continue;
         const last = this.ivena.zuweisungen.filter((z) => z.hospitalId === h.id && this.time - z.t < 3600_000).length;
         const full = h.specialties.length >= 10;
-        // ca. 1 Abmeldung pro Klinik und Fachbereich alle 10 bis 30 Spielstunden, bei vielen Zuweisungen häufiger
-        const perMin = (full ? 1 / 1800 : 1 / 600) * (1 + Math.max(0, last - 2)) * (first ? 150 : 1);
+        // im Mittel ca. 1 Abmeldung pro Klinik und Fachbereich alle 10 bis 30 Spielstunden, je nach Auslastung und Zuweisungen
+        const perMin = (full ? 1 / 1800 : 1 / 600) * auslastung * (1 + Math.max(0, last - 2)) * (first ? 150 : schritt / 60_000);
         if (this.rng() < perMin) {
           const grund = last >= 4 ? 'Kapazität erschöpft' : this.pick(GRUND[fach] ?? ['keine Betten frei']);
-          this.ivena.abmeldungen.push({ hospitalId: h.id, fach, grund, bis: this.time + this.rand(30, 120) * 60_000 });
+          // Dauer meist 20 bis 90 min, gelegentlich nur eine Viertelstunde oder bis zu vier Stunden
+          const r = this.rng();
+          const min = r < 0.15 ? this.rand(10, 20) : r < 0.85 ? this.rand(20, 90) : this.rand(90, 240);
+          this.ivena.abmeldungen.push({ hospitalId: h.id, fach, grund, seit: this.time, bis: this.time + min * 60_000 });
         }
       }
     }
