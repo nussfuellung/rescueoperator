@@ -758,6 +758,14 @@ table.lib td.right button {
   font-family: Consolas, 'Cascadia Mono', monospace;
   min-height: 80px;
 }
+.radio-unread {
+  margin: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  background: var(--selected);
+  color: var(--text);
+}
 .radio-line {
   padding: 1px 0;
 }
