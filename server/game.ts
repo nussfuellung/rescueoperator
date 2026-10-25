@@ -112,6 +112,8 @@ interface Truth {
   erkundet?: boolean;
   /** Lageänderung während der Abarbeitung ist eingetreten */
   entwickelt?: boolean;
+  /** Anruf der Polizei: Funkrufname der Streife an der Einsatzstelle */
+  streife?: string;
   /** Ausgelöste Meldergruppe (BMA) */
   melder?: number;
   /** Laut Verlauf mehr Kräfte nötig als ursprünglich gemeldet */
@@ -303,6 +305,7 @@ export class Game {
       .replace(/\{er\}/g, m ? 'er' : 'sie')
       .replace(/\{ihn\}/g, m ? 'ihn' : 'sie')
       .replace(/\{objekt\}/g, t.objekt ?? 'Heim')
+      .replace(/\{streife\}/g, t.streife ?? 'Funkstreife')
       .replace(/\{phone\}/g, phone);
   }
 
@@ -410,6 +413,13 @@ export class Game {
       minutes: Math.round(this.rand(5, 40)),
       vorerkrankung: '',
     };
+    // Die Streife vor Ort nennt den Einsatzort genau, ohne Zögern
+    let streife: string | undefined;
+    if (tpl.polizeiVorOrt) {
+      const ort = nearestTown(this.scn.towns, loc.pos)?.name ?? 'Stadt';
+      streife = `${ort} ${Math.floor(this.rand(11, 19.99))}/${Math.floor(this.rand(1, 4.99))}`;
+      if (tpl.where !== 'ausserorts' && tpl.where !== 'autobahn') loc = { ...loc, spoken: `Einsatzort ist ${loc.address}.` };
+    }
     // Fahrzeugtypen, die im Szenario nicht existieren, ignorieren
     for (const k of Object.keys(needs)) if (!this.units.some((u) => this.typeOf(u)?.fills.includes(k))) delete needs[k];
     return {
@@ -431,6 +441,7 @@ export class Game {
       alter,
       facts,
       fake,
+      streife,
     };
   }
 
@@ -479,6 +490,23 @@ export class Game {
   }
 
   private ring(truth: Truth, again = false): CallState {
+    // Die Polizei ruft über das Diensthandy der Streife an, ohne Handyortung
+    if (truth.streife) {
+      const call: CallState = {
+        id: `c${++this.seq.call}`,
+        phone: `Polizei ${truth.streife}`,
+        kind: '112',
+        state: 'ringing',
+        ringStart: this.time,
+        transcript: again ? [{ from: 'system', text: 'Polizei ruft erneut an (vorheriger Anruf nicht angenommen).', t: this.time }] : [],
+        asked: [],
+        polizei: truth.streife,
+      };
+      truth.callStart ??= this.time;
+      this.calls.push(call);
+      this.callTruth.set(call.id, truth);
+      return call;
+    }
     // Heute kommen die meisten Notrufe vom Handy; moderne Smartphones senden fast immer eine AML-Ortung
     const mobile = this.rng() < 0.8;
     const phone = mobile
@@ -855,6 +883,13 @@ export class Game {
       return;
     }
     this.addScore(Math.max(0, Math.round(15 - waited / 4)), `Notruf nach ${Math.round(waited)} s angenommen`);
+    if (call.polizei) {
+      // Kollegen der Polizei melden sich mit Funkrufname, Lage und Einsatzort in einem Zug
+      call.transcript.push({ from: 'calltaker', text: `Integrierte Leitstelle ${this.scn.ilsName.replace(/^(ILS|Leitstelle)\s*/, '')}, grüß Gott.`, t: this.time });
+      truth.whereSaid = true;
+      this.callerSays(call, `${this.fill(this.pick(truth.tpl.opening), truth, call.phone)} ${truth.spokenWhere}`);
+      return;
+    }
     call.transcript.push({
       from: 'calltaker',
       text: 'Notruf Feuerwehr und Rettungsdienst. Wo genau ist der Notfallort?',
@@ -1041,6 +1076,12 @@ export class Game {
     } else {
       this.incTruth.set(inc.id, this.genericTruth(inc, 'Keine besondere Lage, Einsatzstelle erkundet.'));
     }
+    // Die Polizei hat selbst angerufen und ist schon an der Einsatzstelle
+    const lageTruth = this.incTruth.get(inc.id);
+    if (lageTruth?.tpl.polizeiVorOrt && !lageTruth.generic) {
+      inc.polizei = 'vor Ort';
+      this.log(inc, `Polizei bereits vor Ort (Streife ${lageTruth.streife})`);
+    } else if (a.polizei) this.requestPolice(player, inc.id);
     if (a.alarmUnitIds?.length) this.alarm(player, inc.id, a.alarmUnitIds);
     else if (a.alarmAao) this.alarm(player, inc.id, this.proposal(inc.id).map((p) => p.unitId));
   }

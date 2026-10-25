@@ -359,6 +359,8 @@ export interface CallState {
   kvb?: { text: string; x: number; y: number; address: string };
   /** An die KVB weiterverbunden */
   toKvb?: boolean;
+  /** Anruf der Polizei: Funkrufname der Streife, die schon an der Einsatzstelle ist */
+  polizei?: string;
   /** Besatzung meldet ihren Patienten telefonisch mit PZC an und erbittet eine Zielklinik */
   rtw?: { unitId: string; callsign: string; pzc: string; text: string };
 }

@@ -128,6 +128,8 @@ export type Action =
       alarmUnitIds?: string[];
       /** Direkt nach AAO alarmieren (Tablet ohne Straßennetz) */
       alarmAao?: boolean;
+      /** Polizei gleich mit dem Anlegen verständigen */
+      polizei?: boolean;
     }
   | { a: 'updateIncident'; incidentId: string; stichwort?: string; schlagwort?: string; note?: string; tmo?: string }
   | { a: 'setTmo'; unitIds: string[]; group: string }
