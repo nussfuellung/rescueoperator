@@ -318,10 +318,10 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
         <button
           onClick={() => setShowIvena(true)}
           title="IVENA: Patientenzuweisung nach PZC und An-/Abmeldestatus der Kliniken"
-          className={state.units.some((u) => u.task === 'awaitHospital' && !u.hospitalId) ? 'attention' : ''}
+          className={state.units.some((u) => u.task === 'awaitHospital' && !u.hospitalId && u.pzc) ? 'attention' : ''}
         >
           🏥 IVENA{(() => {
-            const n = state.units.filter((u) => u.task === 'awaitHospital' && !u.hospitalId).length;
+            const n = state.units.filter((u) => u.task === 'awaitHospital' && !u.hospitalId && u.pzc).length;
             return n ? ` (${n})` : '';
           })()}
         </button>

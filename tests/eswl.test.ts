@@ -42,9 +42,14 @@ describe('ESWL', () => {
     expect(u.callsign).toBe('Rotkreuz Nachbarhausen 71/1');
     expect(inc.unitIds).toContain(u.id);
     expect(u.fremd!.imBereich).toBe(false);
+    tickUntil(game, () => u.task === 'onScene' || !!u.speak);
+    // Einfahrt wird per Sprechwunsch angemeldet und erst nach Sprechaufforderung gesprochen
+    expect(u.speak?.kind).toBe('info');
+    expect(game.radio.some((m) => m.from === u.callsign && m.kind === 'voice')).toBe(false);
+    game.handle(p.id, { a: 'speakPermit', unitId: u.id });
     tickUntil(game, () => u.task === 'onScene');
     expect(u.task).toBe('onScene');
-    const ein = game.radio.find((m) => m.from === u.callsign && /in Ihren Bereich ein/.test(m.text));
+    const ein = game.radio.find((m) => m.from === u.callsign && /in Ihren Bereich ein/i.test(m.text));
     expect(ein?.group).toBeDefined();
     expect(scn.tmoGroups!.find((g) => g.id === ein!.group)?.use).toBe('RD');
     // Nicht für die eigene Disposition: kein Vorschlag, keine Alarmierung, keine Gebietsabsicherung
@@ -53,9 +58,11 @@ describe('ESWL', () => {
     u.incidentId = inc.id;
     u.hasPatient = false;
     expect(game.handle(p.id, { a: 'releaseUnit', unitId: u.id })).toBeUndefined();
+    tickUntil(game, () => !!u.speak && /verlassen Ihren Bereich/i.test(u.speak.text));
+    game.handle(p.id, { a: 'speakPermit', unitId: u.id });
     tickUntil(game, () => !game.units.includes(u));
     expect(game.units.includes(u)).toBe(false);
-    expect(game.radio.some((m) => m.from === u.callsign && /verlassen Ihren Bereich/.test(m.text) && m.group === ein!.group)).toBe(true);
+    expect(game.radio.some((m) => m.from === u.callsign && /verlassen Ihren Bereich/i.test(m.text) && m.group === ein!.group)).toBe(true);
   });
 
   it('lehnt ab, wenn die Nachbar-ILS kein Fahrzeug frei hat', () => {

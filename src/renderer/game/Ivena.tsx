@@ -65,7 +65,8 @@ export function IvenaModal({ ctx, onClose }: { ctx: GameCtx; onClose: () => void
   const [tab, setTab] = useState<'zuweisung' | 'uebersicht' | 'pzc'>('zuweisung');
   const [suche, setSuche] = useState('');
   const clock = (t: number) => formatClock(state.clockStart, t).slice(0, 5);
-  const offen = state.units.filter((u) => u.task === 'awaitHospital' && !u.hospitalId);
+  // Nur Patienten, deren PZC die Besatzung schon durchgegeben hat
+  const offen = state.units.filter((u) => u.task === 'awaitHospital' && !u.hospitalId && u.pzc);
   const rang = (f: string) => (SPECIALTIES.indexOf(f) + 1 || 99);
   const fachs = [...new Set(scn.hospitals.flatMap((h) => h.specialties))].sort((a, b) => rang(a) - rang(b));
   const zuw = [...(state.ivena?.zuweisungen ?? [])].reverse();
