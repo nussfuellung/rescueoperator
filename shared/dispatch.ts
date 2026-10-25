@@ -35,19 +35,45 @@ export function coverage(
   return left;
 }
 
-/** AAO-Vorschlag: für jede Anforderung das schnellste freie Fahrzeug */
+/** Restdauer der Übergabe nach Alarmierung aus Status 8: mindestens 1, höchstens 5 Minuten */
+export const UEBERGABE_MIN_S = 60;
+export const UEBERGABE_MAX_S = 300;
+/** Annahme, wenn die Restdauer unbekannt ist (Spielerbesatzung) */
+export const UEBERGABE_DEFAULT_S = 180;
+
+/** Fahrzeug in der Klinik (Status 8), das nach der Übergabe neu alarmiert werden kann */
+export function inUebergabe(u: UnitState): boolean {
+  return u.task === 'atHospital' && u.status !== 6 && !u.fremd;
+}
+
+/** Sekunden, bis ein Fahrzeug in Status 8 die Übergabe abgeschlossen hat und losfahren kann */
+export function uebergabeRest(u: UnitState, now: number): number {
+  const rest = u.timer !== undefined ? (u.timer - now) / 1000 : UEBERGABE_DEFAULT_S;
+  return Math.min(UEBERGABE_MAX_S, Math.max(UEBERGABE_MIN_S, rest));
+}
+
+export interface ProposalEntry {
+  unitId: string;
+  seconds: number;
+  need: string;
+  /** Fahrzeug steht noch in Status 8 an der Klinik, Zeit enthält den Rest der Übergabe */
+  s8?: boolean;
+}
+
+/** AAO-Vorschlag: für jede Anforderung das schnellste freie Fahrzeug, auch aus Status 8 nach der Übergabe */
 export function computeProposal(
   scn: Scenario,
   graph: RoadGraph,
   units: UnitState[],
   inc: IncidentState,
   aao: Record<string, number>,
-): { unitId: string; seconds: number; need: string }[] {
+  now = 0,
+): ProposalEntry[] {
   const types = new Map(scn.vehicleTypes.map((t) => [t.id, t]));
   const assigned = units.filter((u) => u.incidentId === inc.id);
   const left = coverage(aao, assigned, types);
-  const free = freeUnitTimes(scn, graph, units, inc);
-  const out: { unitId: string; seconds: number; need: string }[] = [];
+  const free = freeUnitTimes(scn, graph, units, inc, now);
+  const out: ProposalEntry[] = [];
   const taken = new Set<string>();
   // Exakte Typen zuerst, dann Ersatz
   for (const pass of [0, 1]) {
@@ -60,7 +86,7 @@ export function computeProposal(
         const ok = pass === 0 ? x.u.type === need : fills.includes(need);
         if (!ok) continue;
         taken.add(x.u.id);
-        out.push({ unitId: x.u.id, seconds: x.seconds, need });
+        out.push({ unitId: x.u.id, seconds: x.seconds, need, ...(x.s8 ? { s8: true } : {}) });
         n--;
       }
     }
@@ -68,11 +94,14 @@ export function computeProposal(
   return out;
 }
 
-/** Ausrück- plus Fahrzeit aller freien Fahrzeuge zu einem Punkt, schnellste zuerst */
-export function freeUnitTimes(scn: Scenario, graph: RoadGraph, units: UnitState[], pos: Vec): { u: UnitState; seconds: number }[] {
+/**
+ * Ausrück- plus Fahrzeit aller freien Fahrzeuge zu einem Punkt, schnellste zuerst.
+ * Fahrzeuge in Status 8 zählen mit: Sie fahren erst nach dem Rest der Übergabe von der Klinik los.
+ */
+export function freeUnitTimes(scn: Scenario, graph: RoadGraph, units: UnitState[], pos: Vec, now = 0): { u: UnitState; seconds: number; s8?: boolean }[] {
   const types = new Map(scn.vehicleTypes.map((t) => [t.id, t]));
   const start = graph.nearestNode(pos);
-  const candidates = units.filter((u) => !u.incidentId && !u.fremd && [1, 2].includes(u.baseStatus));
+  const candidates = units.filter((u) => (!u.incidentId && !u.fremd && [1, 2].includes(u.baseStatus)) || inUebergabe(u));
   const nodeOf = new Map(candidates.map((u) => [u.id, graph.nearestNode(u)]));
   const { time } = graph.dijkstra(start, true, nodeOf.values());
   const stations = new Map(scn.stations.map((s) => [s.id, s]));
@@ -82,6 +111,11 @@ export function freeUnitTimes(scn: Scenario, graph: RoadGraph, units: UnitState[
       const factor = 1.2 * (types.get(u.type)?.speedFactor ?? 1);
       const st = stations.get(u.stationId);
       const career = st?.career || types.get(u.type)?.org === 'RD';
+      if (inUebergabe(u)) {
+        const rest = uebergabeRest(u, now);
+        const fahrt = types.get(u.type)?.air ? Math.hypot(u.x - pos.x, u.y - pos.y) / AIR_SPEED : (n >= 0 ? time[n] : Infinity) / factor;
+        return { u, seconds: fahrt + rest, s8: true };
+      }
       if (types.get(u.type)?.air) return { u, seconds: Math.hypot(u.x - pos.x, u.y - pos.y) / AIR_SPEED + (u.baseStatus === 2 ? AIR_TURNOUT : 8) };
       const turnout = u.baseStatus === 2 ? (career ? 60 : 250) : 8;
       return { u, seconds: (n >= 0 ? time[n] : Infinity) / factor + turnout };

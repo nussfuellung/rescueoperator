@@ -2,11 +2,12 @@
 import { aaoMitSchlagwort, findSchlagwort } from '../../../shared/schlagworte';
 import { SchlagwortSelect } from './SchlagwortSelect';
 import { useEffect, useMemo, useState } from 'react';
-import { AIR_SPEED, AIR_TURNOUT, FMS_COLOR, FMS_TEXT, formatClock, formatDuration, shortCallsign } from '../../../shared/catalog';
-import { computeProposal } from '../../../shared/dispatch';
+import { FMS_COLOR, FMS_TEXT, formatClock, formatDuration, shortCallsign } from '../../../shared/catalog';
+import { computeProposal, freeUnitTimes } from '../../../shared/dispatch';
 import type { IncidentState, UnitState } from '../../../shared/types';
 import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
+import { S8Tag } from './S8Tag';
 
 const HIDE_DONE_KEY = 'lst.hideDoneIncidents';
 
@@ -144,20 +145,8 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
 
   // AAO-Vorschlag und Fahrzeiten aller freien Fahrzeuge
   const { proposal, free } = useMemo(() => {
-    const proposal = sw && !inc.firstArrival ? computeProposal(scn, graph, state.units, inc, aaoMitSchlagwort(sw.aao, inc.schlagwort)) : [];
-    const start = graph.nearestNode(inc);
-    const { time } = graph.dijkstra(start, true);
-    const free = state.units
-      .filter((u) => !u.incidentId && !u.fremd && [1, 2].includes(u.baseStatus))
-      .map((u) => {
-        const n = graph.nearestNode(u);
-        const t = types.get(u.type);
-        const st = scn.stations.find((s) => s.id === u.stationId);
-        if (t?.air) return { u, seconds: Math.hypot(u.x - inc.x, u.y - inc.y) / AIR_SPEED + (u.baseStatus === 2 ? AIR_TURNOUT : 8) };
-        const turnout = u.baseStatus === 2 ? (st?.career || t?.org === 'RD' ? 60 : 250) : 8;
-        return { u, seconds: (n >= 0 ? time[n] : Infinity) / (1.2 * (t?.speedFactor ?? 1)) + turnout };
-      })
-      .sort((a, b) => a.seconds - b.seconds);
+    const proposal = sw && !inc.firstArrival ? computeProposal(scn, graph, state.units, inc, aaoMitSchlagwort(sw.aao, inc.schlagwort), state.time) : [];
+    const free = freeUnitTimes(scn, graph, state.units, inc, state.time);
     return { proposal, free };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inc.id, inc.stichwort, inc.schlagwort, inc.x, inc.y, tick, assignedKey, !!inc.firstArrival]);
@@ -320,7 +309,7 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
             </select>
           </div>
           <div className="free-list">
-            {shownFree.slice(0, 40).map(({ u, seconds }) => {
+            {shownFree.slice(0, 40).map(({ u, seconds, s8 }) => {
               const prop = proposal.find((p) => p.unitId === u.id);
               return (
                 <label key={u.id} className={`free-row ${prop ? 'proposed' : ''}`}>
@@ -330,6 +319,7 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
                   </span>
                   <span className="cs">{u.callsign}</span>
                   <span className="muted small">{types.get(u.type)?.label}</span>
+                  {s8 && <S8Tag />}
                   <span className="eta">{isFinite(seconds) ? formatDuration(seconds * 1000) : '–'}</span>
                 </label>
               );

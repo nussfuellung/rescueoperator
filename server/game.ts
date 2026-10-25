@@ -3,7 +3,8 @@ import { AIR_SPEED, AIR_TURNOUT, FMS_TEXT, HILFSFRIST_MS, ensureStichworte, radi
 import { aaoMitSchlagwort, findSchlagwort, schlagwortByNr } from '../shared/schlagworte';
 import { RoadGraph, dist, nearestTown, reverseGeocode } from '../shared/geo';
 import { mulberry32 } from '../shared/mapgen';
-import { computeProposal, coverage } from '../shared/dispatch';
+import { computeProposal, coverage, inUebergabe, uebergabeRest } from '../shared/dispatch';
+import type { ProposalEntry } from '../shared/dispatch';
 import type { Action } from '../shared/protocol';
 import type {
   CallState,
@@ -1106,12 +1107,12 @@ export class Game {
   }
 
   /** Alarmierungsvorschlag nach AAO: nächstgelegene freie Fahrzeuge */
-  proposal(incidentId: string): { unitId: string; seconds: number; need: string }[] {
+  proposal(incidentId: string): ProposalEntry[] {
     const inc = this.incident(incidentId);
     if (!inc) return [];
     const sw = this.scn.stichworte.find((s) => s.code === inc.stichwort);
     if (!sw || inc.firstArrival) return [];
-    return computeProposal(this.scn, this.graph, this.units, inc, aaoMitSchlagwort(sw.aao, inc.schlagwort));
+    return computeProposal(this.scn, this.graph, this.units, inc, aaoMitSchlagwort(sw.aao, inc.schlagwort), this.time);
   }
 
   private alarm(player: Player, incidentId: string, unitIds: string[]): string | void {
@@ -1122,10 +1123,14 @@ export class Game {
     for (const id of unitIds) {
       const u = this.unit(id);
       if (!u) continue;
-      if (u.incidentId && u.incidentId !== inc.id) continue;
       if (u.incidentId === inc.id) continue;
+      // Status 8: Die Besatzung schließt die Übergabe ab und fährt dann von der Klinik los
+      const s8 = inUebergabe(u);
+      const rest = s8 ? uebergabeRest(u, this.time) : 0;
+      if (s8) this.uebergabeBeenden(u, inc);
+      if (u.incidentId && u.incidentId !== inc.id) continue;
       if (u.fremd) continue;
-      if (![1, 2].includes(u.baseStatus)) continue;
+      if (![1, 2].includes(u.baseStatus) && !s8) continue;
       // Eine noch offene Frei- oder Standortmeldung ist mit der Alarmierung überholt
       if (u.speak && !u.speak.answered && u.speak.kind === 'info') {
         u.speak = undefined;
@@ -1140,7 +1145,9 @@ export class Game {
       const air = this.typeOf(u)?.air;
       u.timer = u.crewPlayerId
         ? undefined
-        : this.time + (atStation ? (air ? this.rand(AIR_TURNOUT - 30, AIR_TURNOUT + 30) : career ? this.rand(40, 90) : this.rand(180, 330)) : this.rand(5, 12)) * 1000;
+        : s8
+          ? this.time + rest * 1000
+          : this.time + (atStation ? (air ? this.rand(AIR_TURNOUT - 30, AIR_TURNOUT + 30) : career ? this.rand(40, 90) : this.rand(180, 330)) : this.rand(5, 12)) * 1000;
       inc.unitIds.push(u.id);
       alarmed.push(shortCallsign(u.callsign));
       this.radioMsg(this.scn.ilsName, u.callsign, `Alarmierung: ${inc.schlagwort ?? inc.stichwort} – ${inc.address}${inc.sondersignal === false ? ' – ohne Sondersignal' : ''}${inc.tmo ? ` – Einsatzgruppe ${this.tmoName(inc.tmo)}` : ''}`, 'system');
@@ -2288,6 +2295,34 @@ export class Game {
   private patientOf(u: UnitState) {
     const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
     return inc ? this.incTruth.get(inc.id)?.patients.find((p) => p.unitId === u.id && !p.done) : undefined;
+  }
+
+  /**
+   * Alarmierung aus Status 8: Die Übergabe in der Klinik wird abgeschlossen, das Fahrzeug verlässt den alten
+   * Einsatz ohne Freimeldung und Rückfahrt, weil es gleich zum neuen Einsatz ausrückt.
+   */
+  private uebergabeBeenden(u: UnitState, neu: IncidentState) {
+    const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
+    const truth = inc ? this.incTruth.get(inc.id) : undefined;
+    truth?.patients.forEach((p) => {
+      if (p.unitId === u.id) p.done = true;
+    });
+    u.hasPatient = false;
+    u.pzc = undefined;
+    u.hospitalId = undefined;
+    u.begleitet = undefined;
+    u.timer = undefined;
+    if (u.speak && !u.speak.answered && u.speak.kind !== 'crew') {
+      u.speak = undefined;
+      u.status = u.baseStatus;
+    }
+    if (inc) {
+      inc.unitIds = inc.unitIds.filter((id) => id !== u.id);
+      if (inc.tmo && u.tmo === inc.tmo) u.tmo = this.station(u).tmo;
+      this.log(inc, `${shortCallsign(u.callsign)} Übergabe beendet, alarmiert zu ${neu.nr}`);
+    }
+    u.incidentId = undefined;
+    if (inc) this.checkClose(inc);
   }
 
   private finishHospital(u: UnitState) {

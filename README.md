@@ -66,7 +66,7 @@ Die Rolle wird beim Start gewählt und kann jederzeit oben rechts gewechselt wer
 - BMA-Auslösungen kommen ohne Anrufer mit Objekt und Adresse herein.
 
 **Disponent**
-- Einsatz in der Liste rechts wählen. Der AAO-Vorschlag ist vorausgewählt und nach Fahrzeit sortiert; weitere Fahrzeuge lassen sich dazu wählen. **Alarmieren**.
+- Einsatz in der Liste rechts wählen. Der AAO-Vorschlag ist vorausgewählt und nach Fahrzeit sortiert; weitere Fahrzeuge lassen sich dazu wählen. Fahrzeuge in Status 8 (Übergabe in der Klinik) kommen ebenfalls in Frage und sind mit „nach Übergabe“ markiert: Ihre Zeit rechnet die Restdauer der Übergabe (1 bis 5 Minuten) plus die Anfahrt von der Klinik. Werden sie alarmiert, schließen sie die Übergabe ab und fahren von dort los. **Alarmieren**.
 - Fahrzeuge melden FMS-Status (3 Einsatz übernommen, 4 am Einsatzort, 7 Patient aufgenommen, 8 am Ziel, 1/2 frei).
 - Status 5 heißt Sprechwunsch: mit `J` oder dem Button eine Sprechaufforderung geben. Dann kommt die Lagemeldung, eine Nachforderung oder die Bitte um eine Zielklinik.
 - Bei Status 1 melden sich die Fahrzeuge an der Einsatzstelle oder am Krankenhaus per Sprechfunk frei. Fahrzeuge mit Schichtplan melden sich bei Dienstbeginn per Sprechwunsch mit ihrem Dienstende an und bei Dienstschluss ab. Im Einsatz meldet sich niemand ab, das passiert erst nach der Rückkehr auf die Wache.
