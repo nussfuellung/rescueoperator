@@ -130,6 +130,8 @@ export type Action =
       alarmAao?: boolean;
       /** Terminfahrt: Abholzeit als Spielzeit; der Einsatz wird erst später disponiert */
       termin?: number;
+      /** Polizei gleich mit dem Anlegen verständigen */
+      polizei?: boolean;
     }
   /** termin: neue Abholzeit (Spielzeit), null hebt den Termin auf */
   | { a: 'updateIncident'; incidentId: string; stichwort?: string; schlagwort?: string; note?: string; tmo?: string; termin?: number | null }

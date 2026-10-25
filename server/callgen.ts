@@ -3,6 +3,7 @@ import type { MapObject, QuestionId, VehicleTypeId } from '../shared/types';
 import { ABEK_VORLAGEN } from './vorlagen-abek';
 import { FACH_VORLAGEN } from './vorlagen-fach';
 import { TERMIN_VORLAGEN } from './vorlagen-termin';
+import { POLIZEI_VORLAGEN } from './vorlagen-polizei';
 
 /** klinik: Abholung in einem Krankenhaus (Verlegung, Entlassung) */
 export type LocationKind = 'wohnung' | 'strasse' | 'ausserorts' | 'objekt' | 'autobahn' | 'klinik' | 'keine';
@@ -15,6 +16,8 @@ export interface IncidentTemplate {
   schlagwort?: string;
   /** Polizei muss verständigt werden (Verkehrsunfall, Wohnungsöffnung, Suizidgefahr, Absicherung) */
   polizei?: boolean;
+  /** Anruf kommt von einer Streife, die schon an der Einsatzstelle ist und den Rettungsdienst nachfordert */
+  polizeiVorOrt?: boolean;
   /** Fall für den ärztlichen Bereitschaftsdienst (116117): an die KVB weiterverbinden */
   kvb?: boolean;
   weight: number;
@@ -31,7 +34,7 @@ export interface IncidentTemplate {
   lage: string;
   workMin: [number, number];
   tcpr?: boolean;
-  /** Wer anruft: Patient selbst, Angehörige, Passanten oder Personal einer Einrichtung */
+  /** Wer anruft: Patient selbst, Angehörige, Passanten, Personal einer Einrichtung oder die Polizei */
   role?: CallerRole;
   /** Alter des Patienten (Standard 55–89) */
   age?: [number, number];
@@ -40,7 +43,7 @@ export interface IncidentTemplate {
   termin?: [number, number];
 }
 
-export type CallerRole = 'selbst' | 'angehoerig' | 'passant' | 'personal';
+export type CallerRole = 'selbst' | 'angehoerig' | 'passant' | 'personal' | 'polizei';
 
 /** Erfundene Einzelheiten zum Anruf, damit Nachfragen stimmig beantwortet werden */
 export interface CallerFacts {
@@ -1083,6 +1086,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   ...ABEK_VORLAGEN,
   ...FACH_VORLAGEN,
   ...TERMIN_VORLAGEN,
+  ...POLIZEI_VORLAGEN,
 ];
 
 /** Meldebilder, mit denen die KVB (116117) einen Einsatz an die ILS übergibt */
@@ -1237,6 +1241,21 @@ const STAFF: Partial<Record<QuestionId, string[]>> = {
   wer: ['Schwester {vorname} vom {objekt}.', 'Pfleger {vorname}, Station B.'],
 };
 
+const POLICE: Partial<Record<QuestionId, string[]>> = {
+  alter: ['Laut Ausweis {alter} Jahre.', 'Geschätzt {alterRund}, einen Ausweis hat {er} nicht dabei.'],
+  atmung: ['Ja, {er} atmet.', 'Atmung ist da, ja.'],
+  bewusstsein: ['{Er} ist ansprechbar.', 'Ja, {er} reagiert auf Ansprache.'],
+  vorerkrankung: ['Ist uns nicht bekannt.', 'Dazu können wir nichts sagen.'],
+  wer: ['Polizeiobermeister {nachname}, Streife {streife}.', 'Polizeihauptmeisterin {nachname}, Streife {streife}.'],
+  zugang: ['Unser Streifenwagen steht mit Blaulicht vor Ort, Sie sehen uns.', 'Wir weisen ein, ein Kollege steht an der Straße.'],
+  gefahr: ['Nein, die Lage ist sicher, wir bleiben vor Ort.'],
+  seitwann: ['Wir sind seit ein paar Minuten vor Ort.', 'Wir sind seit etwa {min} Minuten da.'],
+  rueckruf: ['Über unsere Einsatzzentrale oder direkt unter {phone}.', 'Über die Einsatzzentrale, die erreicht uns jederzeit über Funk.'],
+  ortbestaetigen: ['Korrekt.', 'Ja, richtig.', 'Ja, das passt.'],
+  beruhigen: ['Danke, wir haben das im Griff.', 'Alles gut, wir warten auf den RTW.'],
+  tcpr: ['Momentan nicht nötig, {er} atmet. Wir melden uns, wenn sich was ändert.'],
+};
+
 const NO_PATIENT: Partial<Record<QuestionId, string[]>> = {
   alter: ['Es ist doch niemand verletzt.', 'Wieso? Es geht doch um keinen Menschen.'],
   atmung: ['Verletzt ist niemand, zum Glück.'],
@@ -1256,7 +1275,7 @@ const BY_PLACE: Partial<Record<LocationKind, string[]>> = {
 export function fallbackAnswers(q: QuestionId, tpl: IncidentTemplate, role: CallerRole): string[] {
   const hasPatient = !!tpl.patients?.length || tpl.stichwort.startsWith('RD');
   if (!hasPatient && NO_PATIENT[q]) return NO_PATIENT[q]!;
-  const byRole = { selbst: SELF, angehoerig: RELATIVE, passant: BYSTANDER, personal: STAFF }[role];
+  const byRole = { selbst: SELF, angehoerig: RELATIVE, passant: BYSTANDER, personal: STAFF, polizei: POLICE }[role];
   if (byRole[q]) return byRole[q]!;
   if (q === 'zugang') return BY_PLACE[tpl.where] ?? ['Sie sehen uns, wir warten draußen.'];
   if (q === 'seitwann') {
