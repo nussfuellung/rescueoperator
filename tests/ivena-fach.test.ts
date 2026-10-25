@@ -72,9 +72,19 @@ describe('Patientenanmeldung per Telefon', () => {
     expect(game.handle(p.id, { a: 'createIncident', callId: rtw.id, stichwort: 'RD 1', address: 'x', x: 0, y: 0, note: '', patients: 1 })).toBeTruthy();
     const h = scn.hospitals.find((x) => x.specialties.includes('Urologie'))!;
     game.handle(p.id, { a: 'assignHospital', unitId: u!.id, hospitalId: h.id });
-    expect(rtw.state).toBe('ended');
-    expect(rtw.transcript.at(-1)!.text).toContain(h.name);
     expect(u!.hospitalId).toBe(h.id);
+    // Das Gespräch endet nicht sofort: Die Besatzung quittiert, dann legt der Calltaker auf
+    expect(rtw.state).toBe('active');
+    expect(rtw.transcript.at(-1)).toMatchObject({ from: 'calltaker' });
+    expect(rtw.transcript.at(-1)!.text).toContain(h.name);
+    for (let t = 0; t < 5000; t += 500) game.tick(500);
+    expect(rtw.transcript.at(-1)).toMatchObject({ from: 'caller' });
+    expect(rtw.transcript.at(-1)!.text).toMatch(/Verstanden.*tschüss/);
+    expect(game.handle(p.id, { a: 'endCall', callId: rtw.id })).toBeUndefined();
+    expect(rtw.state).toBe('ended');
+    // Mit Zielklinik aufgelegt: keine erneute Anfrage über Funk
+    for (let t = 0; t < 60_000; t += 1000) game.tick(1000);
+    expect(u!.speak?.kind).not.toBe('zielklinik');
   });
 
   it('meldet sich über Funk, wenn niemand abnimmt', () => {

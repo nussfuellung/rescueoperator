@@ -606,12 +606,23 @@ export class Game {
     if (!call) return false;
     const active = call.state === 'active';
     if (active) {
+      // Das Gespräch läuft weiter: Die Besatzung quittiert, aufgelegt wird vom Calltaker
       call.transcript.push({ from: 'calltaker', text: `Fahren Sie bitte ${h.name} an, die Klinik ist in IVENA informiert.`, t: this.time });
-      call.transcript.push({ from: 'caller', text: `Verstanden, wir fahren ${h.name} an. Danke, tschüss.`, t: this.time });
-    } else call.transcript.push({ from: 'system', text: `Zielklinik ${h.name} wurde inzwischen zugewiesen, Anrufer hat aufgelegt.`, t: this.time });
+      this.callerSays(call, `Verstanden, wir fahren ${h.name} an. Danke, tschüss.`, this.rand(1500, 2500));
+      // Legt der Calltaker nicht auf, beendet die Besatzung das Gespräch nach einer Weile selbst
+      this.after(25_000, () => {
+        if (call.state !== 'active') return;
+        call.transcript.push({ from: 'system', text: 'Die Besatzung hat aufgelegt.', t: this.time });
+        call.state = 'ended';
+        call.endedAt = this.time;
+        call.typing = false;
+      });
+      return true;
+    }
+    call.transcript.push({ from: 'system', text: `Zielklinik ${h.name} wurde inzwischen zugewiesen, Anrufer hat aufgelegt.`, t: this.time });
     call.state = 'ended';
     call.endedAt = this.time;
-    return active;
+    return false;
   }
 
   private transferKvb(player: Player, callId: string): string | void {
