@@ -69,7 +69,7 @@ export function ZubuchenDialog(props: {
       <span className="cs">{x.u.callsign}</span>
       <span className="typ muted">{types.get(x.u.type)?.label ?? x.u.type}</span>
       {!wache && <span className="wache muted">{stations.get(x.u.stationId)?.name ?? ''}</span>}
-      <span className="st" title={x.u.baseStatus === 2 ? 'Einsatzbereit auf Wache' : 'Einsatzbereit über Funk'}>
+      <span className="st" title={x.u.baseStatus === 2 ? 'Einsatzbereit auf Wache' : x.u.baseStatus === 8 ? 'Übergabe in der Klinik, fährt nach Abschluss von dort los' : 'Einsatzbereit über Funk'}>
         S{x.u.baseStatus}
       </span>
       {props.proposalIds.has(x.u.id) ? <span className="tag">AAO</span> : <span />}
