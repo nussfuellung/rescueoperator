@@ -609,12 +609,23 @@ export class Game {
     if (!call) return false;
     const active = call.state === 'active';
     if (active) {
+      // Das Gespräch läuft weiter: Die Besatzung quittiert, aufgelegt wird vom Calltaker
       call.transcript.push({ from: 'calltaker', text: `Fahren Sie bitte ${h.name} an, die Klinik ist in IVENA informiert.`, t: this.time });
-      call.transcript.push({ from: 'caller', text: `Verstanden, wir fahren ${h.name} an. Danke, tschüss.`, t: this.time });
-    } else call.transcript.push({ from: 'system', text: `Zielklinik ${h.name} wurde inzwischen zugewiesen, Anrufer hat aufgelegt.`, t: this.time });
+      this.callerSays(call, `Verstanden, wir fahren ${h.name} an. Danke, tschüss.`, this.rand(1500, 2500));
+      // Legt der Calltaker nicht auf, beendet die Besatzung das Gespräch nach einer Weile selbst
+      this.after(25_000, () => {
+        if (call.state !== 'active') return;
+        call.transcript.push({ from: 'system', text: 'Die Besatzung hat aufgelegt.', t: this.time });
+        call.state = 'ended';
+        call.endedAt = this.time;
+        call.typing = false;
+      });
+      return true;
+    }
+    call.transcript.push({ from: 'system', text: `Zielklinik ${h.name} wurde inzwischen zugewiesen, Anrufer hat aufgelegt.`, t: this.time });
     call.state = 'ended';
     call.endedAt = this.time;
-    return active;
+    return false;
   }
 
   private transferKvb(player: Player, callId: string): string | void {
@@ -835,6 +846,7 @@ export class Game {
       const u = this.unit(call.rtw!.unitId);
       const inc = u?.incidentId ? this.incident(u.incidentId) : undefined;
       if (inc) this.log(inc, `Telefon ${shortCallsign(call.rtw!.callsign)}: Patientenanmeldung, PZC ${call.rtw!.pzc}`);
+      if (u) u.pzc = call.rtw!.pzc;
       return;
     }
     if (call.kind === 'kvb') {
@@ -917,7 +929,7 @@ export class Game {
       const u = this.unit(call.rtw!.unitId);
       if (u && u.task === 'awaitHospital' && !u.hospitalId)
         this.after(30_000, () => {
-          if (u.task === 'awaitHospital' && !u.hospitalId) this.requestSpeak(u, 'zielklinik', `Patient transportbereit, PZC ${u.pzc}, erbitten Zielklinik.`);
+          if (u.task === 'awaitHospital' && !u.hospitalId) this.requestSpeak(u, 'zielklinik', `Patient transportbereit, PZC ${this.patientOf(u)?.pzc}, erbitten Zielklinik.`);
         });
       return;
     }
@@ -1062,6 +1074,11 @@ export class Game {
       if (u.incidentId === inc.id) continue;
       if (u.fremd) continue;
       if (![1, 2].includes(u.baseStatus)) continue;
+      // Eine noch offene Frei- oder Standortmeldung ist mit der Alarmierung überholt
+      if (u.speak && !u.speak.answered && u.speak.kind === 'info') {
+        u.speak = undefined;
+        u.status = u.baseStatus;
+      }
       u.incidentId = inc.id;
       u.cover = undefined;
       u.task = 'alarmed';
@@ -1271,9 +1288,7 @@ export class Game {
         return;
       }
       const ziel = inc ? `zum Einsatz ${inc.address}` : u.hasPatient ? 'mit Patient' : 'auf der Durchfahrt';
-      const text = `${u.callsign}, ${air ? 'fliegen' : 'fahren'} in Ihren Bereich ein, ${ziel}, Status ${u.status}, kommen.`;
-      this.radioMsg(u.callsign, this.scn.ilsName, text, 'voice', group);
-      this.events.speech?.(`${this.scn.ilsName} von ${text}`);
+      this.requestSpeak(u, 'info', `${air ? 'Fliegen' : 'Fahren'} in Ihren Bereich ein, ${ziel}, Status ${u.baseStatus}, kommen.`, group);
       return;
     }
     const group = u.tmo;
@@ -1282,9 +1297,7 @@ export class Game {
       u.hint = `Bereich der ${this.scn.ilsName} verlassen: abmelden und zurück zur ${f.ils}.`;
       return;
     }
-    const text = `${u.callsign}, verlassen Ihren Bereich, melden uns ab zur ${f.ils}, kommen.`;
-    this.radioMsg(u.callsign, this.scn.ilsName, text, 'voice', group);
-    this.events.speech?.(`${this.scn.ilsName} von ${text}`);
+    this.requestSpeak(u, 'info', `Verlassen Ihren Bereich, melden uns ab zur ${f.ils}, kommen.`, group);
   }
 
   /** FMS-Auftrag H: Fahren Sie Wache an. Beendet auch eine Gebietsabsicherung. */
@@ -1307,7 +1320,7 @@ export class Game {
     const u = this.unit(unitId);
     if (!u) return 'Fahrzeug nicht gefunden';
     if (u.hasPatient) return 'Fahrzeug hat einen Patienten an Bord';
-    if (freimelden && !u.crewPlayerId && ['onScene', 'awaitHospital', 'atHospital', 'toHospital'].includes(u.task)) this.freimeldung(u);
+    const frei = freimelden && !u.crewPlayerId && ['onScene', 'awaitHospital', 'atHospital', 'toHospital'].includes(u.task) ? this.freimeldung(u) : undefined;
     const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
     if (inc) {
       inc.unitIds = inc.unitIds.filter((id) => id !== u.id);
@@ -1331,16 +1344,15 @@ export class Game {
       return;
     }
     this.returnToStation(u);
+    if (frei) this.requestSpeak(u, 'info', frei);
     if (inc) this.checkClose(inc);
   }
 
-  /** Computer-Besatzung meldet sich beim Wechsel auf Status 1 per Sprechfunk frei */
+  /** Text der Freimeldung, die eine Computer-Besatzung beim Wechsel auf Status 1 nach Sprechwunsch durchgibt */
   private freimeldung(u: UnitState) {
     const hosp = u.task === 'atHospital' ? this.scn.hospitals.find((h) => h.id === u.hospitalId) : undefined;
     const ort = hosp ? `am ${hosp.name}` : 'an der Einsatzstelle';
-    const text = this.pick([`${u.callsign}, frei ${ort}, rücken ein, kommen.`, `${u.callsign} ist ${ort} wieder frei, Status 1, kommen.`]);
-    this.radioMsg(u.callsign, this.scn.ilsName, text, 'voice');
-    this.events.speech?.(`${this.scn.ilsName} von ${text}`);
+    return this.pick([`Frei ${ort}, rücken ein, kommen.`, `Sind ${ort} wieder frei, Status 1, kommen.`]);
   }
 
   /** Ende der laufenden Schicht als Uhrzeit, z. B. "19:00" */
@@ -1515,7 +1527,10 @@ export class Game {
     if (has(/\b(?:patient\w*|zustand|transportziel|zielklinik|klinik\w*|krankenhaus|wohin|an bord|pzc|verletzt\w*|verletzte|betroffene|transport\w*)\b/)) {
       const p = truth?.patients.find((x) => x.unitId === u.id && !x.done);
       if (u.task === 'toHospital' && hosp) return `Wir transportieren ${p ? p.desc : 'den Patienten'} in das ${hosp.name}, kommen.`;
-      if (u.task === 'awaitHospital' && p) return `Patient: ${p.desc}. PZC ${pzcSprech(p.pzc)}, erbitten Zielklinik, kommen.`;
+      if (u.task === 'awaitHospital' && p) {
+        u.pzc = p.pzc;
+        return `Patient: ${p.desc}. PZC ${pzcSprech(p.pzc)}, erbitten Zielklinik, kommen.`;
+      }
       if (u.hasPatient) return 'Patient ist stabil, wir sind transportbereit, kommen.';
       if (vorOrt && truth) return `${truth.lage} Kommen.`;
       return 'Wir haben keinen Patienten an Bord, kommen.';
@@ -1641,12 +1656,14 @@ export class Game {
     if (announce) this.radioMsg(u.callsign, this.scn.ilsName, `Status ${s} – ${FMS_TEXT[s]}`, 'fms');
   }
 
-  private requestSpeak(u: UnitState, kind: NonNullable<UnitState['speak']>['kind'], text: string) {
+  private requestSpeak(u: UnitState, kind: NonNullable<UnitState['speak']>['kind'], text: string, group?: string) {
     if (u.speak && !u.speak.answered) {
-      u.speak.text += ' ' + text;
+      // Dieselbe Meldung nicht mehrfach anhängen (z. B. wiederholte Erinnerung an fehlende Kräfte)
+      if (!u.speak.text.includes(text)) u.speak.text += ' ' + text;
+      if (group) u.speak.group ??= group;
       return;
     }
-    u.speak = { kind, text, since: this.time, answered: false };
+    u.speak = { kind, text, since: this.time, answered: false, ...(group ? { group } : {}) };
     if (u.status !== 5) u.baseStatus = u.status;
     u.status = 5;
     this.radioMsg(u.callsign, this.scn.ilsName, 'Status 5 – Sprechwunsch', 'fms');
@@ -1663,8 +1680,10 @@ export class Game {
       u.speak = undefined;
       return;
     }
+    // Erst mit der gesprochenen Meldung ist der PZC in der Leitstelle bekannt
+    if (u.task === 'awaitHospital' && u.speak.text.includes('PZC')) u.pzc = this.patientOf(u)?.pzc ?? u.pzc;
     const text = `${this.scn.ilsName} von ${u.callsign}: ${u.speak.text}`;
-    this.radioMsg(u.callsign, this.scn.ilsName, u.speak.text, 'voice');
+    this.radioMsg(u.callsign, this.scn.ilsName, u.speak.text, 'voice', u.speak.group);
     this.events.speech?.(text);
     const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
     if (inc) this.log(inc, `Funk ${shortCallsign(u.callsign)}: ${u.speak.text}`);
@@ -1793,7 +1812,7 @@ export class Game {
       return;
     }
     u.hint = undefined;
-    this.radioMsg(u.callsign, this.scn.ilsName, `Sind am Absicherungsstandort ${name} angekommen, stehen auf Status 1, kommen.`, 'voice');
+    this.requestSpeak(u, 'info', `Sind am Absicherungsstandort ${name} angekommen, stehen auf Status 1, kommen.`);
   }
 
   // ---------- Bewegung ----------
@@ -1999,6 +2018,9 @@ export class Game {
     truth.lage = lageZumStand(truth.verlauf, truth.lage, this.notarztStand(inc), inc.polizei === 'vor Ort' ? 'vorOrt' : inc.polizei ? 'angefordert' : 'ohne');
     inc.lage = truth.lage;
     this.log(inc, `Lage: ${truth.lage}`);
+    // Rettungsdienst meldet "Transport in …": Der Patient ist dann bald transportbereit, statt noch die volle Einsatzdauer vor Ort zu bleiben
+    if (truth.stichwort.startsWith('RD') && truth.patients.length && /\bTransport\b/i.test(truth.lage))
+      truth.workMs = Math.min(truth.workMs, (truth.progress ?? 0) + this.rand(3, 8) * 60_000);
     if (truth.verlauf?.erhoehung) this.log(inc, `Feuerwehr erhöht auf ${truth.verlauf.erhoehung}`);
     if (u.crewPlayerId) {
       u.hint = `Lage vor Ort: ${truth.lage} Bitte Lagemeldung an die Leitstelle geben (Status 5).`;
@@ -2162,15 +2184,17 @@ export class Game {
       p.unitId = carrier.id;
       carrier.hasPatient = true;
       carrier.task = 'awaitHospital';
-      carrier.pzc = p.pzc;
       // PZC mit Arztbegleitung: ein Notarzt von der Einsatzstelle fährt mit
       if (p.pzc.endsWith('1')) {
         const doc = onScene().find((d) => this.istNotarzt(d) && !d.begleitet && !d.crewPlayerId && !truth.released?.has(d.id));
         if (doc) doc.begleitet = carrier.id;
       }
       const text = `Patient transportbereit, PZC ${p.pzc}, erbitten Zielklinik.`;
-      if (carrier.crewPlayerId) carrier.hint = `${text} Zielklinik wählen oder bei der Leitstelle erfragen.`;
-      else {
+      // Der PZC wird erst sichtbar, wenn die Besatzung ihn per Funk oder Telefon durchgibt (Spielerbesatzungen kennen ihn selbst)
+      if (carrier.crewPlayerId) {
+        carrier.pzc = p.pzc;
+        carrier.hint = `${text} Zielklinik wählen oder bei der Leitstelle erfragen.`;
+      } else {
         // Ab und zu meldet die Besatzung den Patienten per Telefon statt über Funk an
         const phone = this.rng() < RTW_PHONE_SHARE;
         this.after(this.rand(5, 40) * 1000, () => {
@@ -2206,6 +2230,12 @@ export class Game {
       });
     }
     if (!inc.unitIds.length) this.checkClose(inc);
+  }
+
+  /** Patient, den das Fahrzeug gerade transportiert bzw. zum Transport übernommen hat */
+  private patientOf(u: UnitState) {
+    const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
+    return inc ? this.incTruth.get(inc.id)?.patients.find((p) => p.unitId === u.id && !p.done) : undefined;
   }
 
   private finishHospital(u: UnitState) {
@@ -2491,7 +2521,7 @@ export class Game {
         c.endedAt = this.time;
         c.transcript.push({ from: 'system', text: 'Nicht angenommen, die Besatzung meldet sich über Funk.', t: this.time });
         const u = this.unit(c.rtw!.unitId);
-        if (u && u.task === 'awaitHospital' && !u.hospitalId) this.requestSpeak(u, 'zielklinik', `Patient transportbereit, PZC ${u.pzc}, erbitten Zielklinik.`);
+        if (u && u.task === 'awaitHospital' && !u.hospitalId) this.requestSpeak(u, 'zielklinik', `Patient transportbereit, PZC ${this.patientOf(u)?.pzc}, erbitten Zielklinik.`);
         continue;
       }
       if (c.state === 'ringing' && c.kind === '112' && this.time - c.ringStart > MISSED_AFTER_MS) {
@@ -2562,14 +2592,16 @@ export class Game {
     }
 
     // Fremdfahrzeuge nach der Rückkehr an ihre Wache wieder an die Nachbar-ILS abgeben
-    if (this.units.some((u) => u.fremd && u.task === 'station')) {
-      for (const u of this.units.filter((x) => x.fremd && x.task === 'station')) {
+    // (erst nachdem ihre Abmeldung im Funk gesprochen ist)
+    const abgeben = (u: UnitState) => !!u.fremd && u.task === 'station' && !(u.speak && !u.speak.answered);
+    if (this.units.some(abgeben)) {
+      for (const u of this.units.filter(abgeben)) {
         const p = this.players.find((x) => x.unitId === u.id);
         if (p) p.unitId = undefined;
         this.fremdStations.delete(u.stationId);
         this.routeTimes.delete(u.id);
       }
-      this.units = this.units.filter((u) => !(u.fremd && u.task === 'station'));
+      this.units = this.units.filter((u) => !abgeben(u));
     }
 
     for (const inc of this.incidents) {

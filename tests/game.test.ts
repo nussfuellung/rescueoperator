@@ -48,7 +48,11 @@ describe('Simulation', () => {
     expect(inc.lage).toBeTruthy();
     game.handle(dp.id, { a: 'assignHospital', unitId: rtw.id, hospitalId: scn.hospitals[0].id });
     guard = 0;
-    while (rtw.task !== 'station' && guard++ < 40000) game.tick(500);
+    while ((rtw.task !== 'station' || rtw.speak) && guard++ < 40000) {
+      game.tick(500);
+      // Freimeldung kommt per Sprechwunsch
+      if (rtw.speak && !rtw.speak.answered) game.handle(dp.id, { a: 'speakPermit', unitId: rtw.id });
+    }
     expect(rtw.status).toBe(2);
     expect(inc.status).toBe('abgeschlossen');
     expect(game.score.points).toBeGreaterThan(0);

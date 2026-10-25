@@ -8,7 +8,7 @@ import type { GameCtx } from './GameScreen';
 export function RadioPanel({ ctx }: { ctx: GameCtx }) {
   const { state, scn } = ctx;
   const queue = state.units.filter((u) => u.speak && !u.speak.answered).sort((a, b) => a.speak!.since - b.speak!.since);
-  const waitingHospital = state.units.filter((u) => u.task === 'awaitHospital' && !u.hospitalId && !(u.speak && !u.speak.answered));
+  const waitingHospital = state.units.filter((u) => u.task === 'awaitHospital' && !u.hospitalId && u.pzc && !(u.speak && !u.speak.answered));
   const log = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   // Neue Funksprüche, während der Nutzer bewusst nach oben gescrollt hat

@@ -35,11 +35,15 @@ describe('Gebietsabsicherung', () => {
     const seen: number[] = [];
     for (let t = 0; t < 3_600_000 && u.task !== 'covering'; t += 1000) {
       game.tick(1000);
-      if (seen[seen.length - 1] !== u.status) seen.push(u.status);
+      if (seen[seen.length - 1] !== u.baseStatus) seen.push(u.baseStatus);
     }
     expect(seen).toEqual([2, 3, 1]);
     expect(u.task).toBe('covering');
     expect(Math.hypot(u.x - target.x, u.y - target.y)).toBeLessThan(400);
+    // Ankunft wird erst nach Sprechwunsch und Sprechaufforderung gemeldet
+    expect(game.radio.some((m) => m.from === u.callsign && m.kind === 'voice')).toBe(false);
+    expect(u.speak?.kind).toBe('info');
+    game.handle(p.id, { a: 'speakPermit', unitId: u.id });
     run(game, 600_000);
     expect(u.task).toBe('covering');
     expect(u.status).toBe(1);

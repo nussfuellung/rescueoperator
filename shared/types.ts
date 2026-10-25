@@ -267,6 +267,8 @@ export interface SpeakRequest {
   since: number;
   /** Sprechaufforderung erteilt, Meldung wurde gesprochen */
   answered: boolean;
+  /** Rufgruppe, in der die Meldung gesprochen wird (Standard: aktuelle Rufgruppe des Fahrzeugs) */
+  group?: string;
 }
 
 export interface UnitState {
