@@ -1301,11 +1301,11 @@ export class Game {
     if (!u.crewPlayerId && returning && this.rng() < 0.5) this.after(this.rand(2500, 5000), () => this.radioMsg(u.callsign, this.scn.ilsName, 'Verstanden, rücken ein.', 'voice'));
   }
 
-  private releaseUnit(unitId: string, byDispatcher: boolean): string | void {
+  private releaseUnit(unitId: string, byDispatcher: boolean, freimelden = true): string | void {
     const u = this.unit(unitId);
     if (!u) return 'Fahrzeug nicht gefunden';
     if (u.hasPatient) return 'Fahrzeug hat einen Patienten an Bord';
-    if (!u.crewPlayerId && ['onScene', 'awaitHospital', 'atHospital'].includes(u.task)) this.freimeldung(u);
+    if (freimelden && !u.crewPlayerId && ['onScene', 'awaitHospital', 'atHospital', 'toHospital'].includes(u.task)) this.freimeldung(u);
     const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
     if (inc) {
       inc.unitIds = inc.unitIds.filter((id) => id !== u.id);
@@ -1317,6 +1317,7 @@ export class Game {
     }
     u.incidentId = undefined;
     u.hospitalId = undefined;
+    u.begleitet = undefined;
     u.speak = undefined;
     u.hint = undefined;
     if (inc?.tmo && u.tmo === inc.tmo) u.tmo = this.station(u).tmo;
@@ -1415,6 +1416,13 @@ export class Game {
       if (has(/\brufgruppe\b/)) return 'Welche Rufgruppe, bitte wiederholen, kommen.';
     }
 
+    // Ist der Notarzt abkömmlich? An das NEF selbst oder an das RTW, in dem er mitfährt
+    const naWort = has(/\b(?:notarzt\w*|notärzt\w*|na|nef|doc|doktor|arzt|ärztin)\b/);
+    const abkoemmlich = has(/\b(?:abkömmlich|abkommen|entbehrlich|frei ?machen|freimachen|lösen|loseisen|freigeben|wieder frei|wieder einsatzbereit|wieder verfügbar|folgeeinsatz|zweiteinsatz|paralleleinsatz|anderen einsatz|neuen einsatz|weiteren einsatz|wann (?:\w+ )*frei)\b/);
+    if ((abkoemmlich && (naWort || this.istNotarzt(u))) || (this.istNotarzt(u) && frage && has(/\b(?:frei|verfügbar|einsatzbereit)\b/))) {
+      return this.notarztAbkoemmlich(u);
+    }
+
     // Einsatzabbruch
     if (has(/\b(?:abbruch|einsatzabbruch|abbrechen|brechen sie (?:\w+ )*ab|brecht (?:\w+ )*ab|abgebrochen|storniert|stornieren|nicht mehr (?:benötigt|gebraucht|erforderlich|notwendig)|werden nicht (?:mehr )?(?:benötigt|gebraucht)|aus dem einsatz|aus einsatz entlassen|entlassen|sie sind frei|seid frei|können einrücken|könnt einrücken|dürfen einrücken)\b/)) {
       if (!inc) {
@@ -1490,7 +1498,8 @@ export class Game {
       return missing.length ? `Ja, wir benötigen noch ${missing.map(([type, n]) => `${n} ${type}`).join(' und ')}, kommen.` : 'Nein, die Kräfte reichen aus, kommen.';
     }
     if (has(/\b(?:notarzt|notärztin|na|arzt|ärztin|nef|rth|hubschrauber)\b/)) {
-      if (u.type === 'NEF') return 'Ja, Notarzt ist an Bord, kommen.';
+      if (this.istNotarzt(u)) return 'Ja, Notarzt ist an Bord, kommen.';
+      if (this.units.some((d) => d.begleitet === u.id)) return 'Ja, Notarzt begleitet den Transport, kommen.';
       const doc = inc?.unitIds.map((id) => this.unit(id)).filter((x): x is UnitState => !!x && (x.type === 'NEF' || !!this.typeOf(x)?.air)) ?? [];
       if (doc.some((x) => x.task === 'onScene' || x.task === 'awaitHospital')) return 'Notarzt ist bei uns vor Ort, kommen.';
       if (doc.length) return 'Notarzt ist alarmiert, aber noch nicht vor Ort, kommen.';
@@ -1527,6 +1536,76 @@ export class Game {
       return this.pick(['Verstanden.', 'Verstanden, übernehmen.']);
     }
     return this.pick(['Verstanden.', 'Verstanden, kommen.', 'Habe verstanden.', 'Verstanden, wird gemacht.', 'Alles klar, verstanden.']);
+  }
+
+  /** Notarztmittel: NEF oder Rettungshubschrauber */
+  private istNotarzt(u: UnitState) {
+    return u.type === 'NEF' || !!this.typeOf(u)?.air;
+  }
+
+  /** Antwort auf "Ist der Notarzt abkömmlich?"; bei Ja wird er aus dem Einsatz entlassen und ist wieder frei */
+  private notarztAbkoemmlich(u: UnitState): string {
+    const doc = this.istNotarzt(u)
+      ? u
+      : this.units.find((d) => d.begleitet === u.id) ??
+        (u.incidentId ? this.units.find((d) => d.incidentId === u.incidentId && this.istNotarzt(d)) : undefined);
+    if (!doc) return 'Wir haben keinen Notarzt bei uns, kommen.';
+    const wir = doc === u ? 'wir' : 'der Notarzt';
+    const Wir = doc === u ? 'Wir' : 'Der Notarzt';
+    if (doc.crewPlayerId && doc !== u) return 'Bitte direkt beim Notarzt erfragen, kommen.';
+    const min = (ms: number) => Math.max(1, Math.round(ms / 60000));
+    const inc = doc.incidentId ? this.incident(doc.incidentId) : undefined;
+    const truth = inc ? this.incTruth.get(inc.id) : undefined;
+    const hosp = doc.hospitalId ? this.scn.hospitals.find((h) => h.id === doc.hospitalId) : undefined;
+    const frei = () => {
+      const err = this.releaseUnit(doc.id, false, false);
+      if (err) return `Negativ, ${err}, kommen.`;
+      return doc === u ? 'Ja, Notarzt ist abkömmlich. Sind frei über Funk, Status 1, kommen.' : `Ja, Notarzt ist abkömmlich, ${shortCallsign(doc.callsign)} ist frei, Status 1, kommen.`;
+    };
+    if (!inc) {
+      if (doc.status === 6) return `Negativ, ${wir === 'wir' ? 'wir sind' : `${shortCallsign(doc.callsign)} ist`} außer Dienst, kommen.`;
+      if (doc.task === 'covering' || doc.task === 'toCover') return `Ja, einsatzbereit zur Gebietsabsicherung${doc.cover ? ` in ${doc.cover.name}` : ''}, Status ${doc.status}, kommen.`;
+      return `Ja, Notarzt ist frei, Status ${doc.baseStatus ?? doc.status}, kommen.`;
+    }
+    switch (doc.task) {
+      case 'alarmed':
+      case 'toScene': {
+        const eta = doc.eta ? `, Eintreffen in etwa ${min(doc.eta - this.time)} Minuten` : '';
+        return `${Wir} ${wir === 'wir' ? 'sind' : 'ist'} auf der Anfahrt zum Einsatz ${inc.address}${eta}. Bei Bedarf bitte umdisponieren, kommen.`;
+      }
+      case 'toHospital': {
+        const eta = doc.eta ? min(doc.eta - this.time) : 5;
+        return `Negativ, ${wir} ${wir === 'wir' ? 'begleiten' : 'begleitet'} den Patienten ins ${hosp?.name ?? 'Krankenhaus'}, Eintreffen in etwa ${eta} Minuten, abkömmlich nach der Übergabe in etwa ${eta + 5} Minuten, kommen.`;
+      }
+      case 'atHospital': {
+        const rest = doc.timer !== undefined ? doc.timer - this.time : 0;
+        if (rest <= 3 * 60_000) {
+          doc.timer = undefined;
+          return frei().replace('Ja, Notarzt ist abkömmlich', 'Ja, Übergabe ist abgeschlossen');
+        }
+        return `Negativ, Übergabe im ${hosp?.name ?? 'Krankenhaus'} läuft noch, abkömmlich in etwa ${min(rest)} Minuten, kommen.`;
+      }
+      case 'onScene': {
+        if (!truth) return frei();
+        if (!truth.erkundet) return 'Negativ, Erstversorgung läuft noch, wir melden uns, kommen.';
+        const offen = truth.patients.filter((p) => !p.done && (!p.unitId || p.unitId === doc.begleitet));
+        if (doc.begleitet || offen.some((p) => p.pzc.endsWith('1'))) {
+          const carrier = doc.begleitet ? this.unit(doc.begleitet) : undefined;
+          const ziel = carrier?.hospitalId ? this.scn.hospitals.find((h) => h.id === carrier.hospitalId)?.name : undefined;
+          return `Negativ, Patient ist notarztpflichtig, ${wir} ${wir === 'wir' ? 'begleiten' : 'begleitet'} den Transport${ziel ? ` ins ${ziel}` : ''}. Abkömmlich nach der Übergabe in der Klinik, kommen.`;
+        }
+        if (!truth.workDone && offen.length && truth.needs[doc.type]) {
+          const rest = Math.max(60_000, truth.workMs - (truth.progress ?? 0));
+          return `Negativ, Patient wird noch notärztlich versorgt, abkömmlich in etwa ${min(rest)} Minuten, kommen.`;
+        }
+        // Notarzt wird nicht mehr gebraucht: Patient bleibt beim Rettungsdienst
+        if (truth.needs[doc.type]) truth.needs[doc.type] = Math.max(0, truth.needs[doc.type] - 1);
+        (truth.released ??= new Set()).add(doc.id);
+        return frei();
+      }
+      default:
+        return `${Wir} ${wir === 'wir' ? 'sind' : 'ist'} Status ${doc.status}, kommen.`;
+    }
   }
 
   private tmoName(id?: string) {
@@ -1630,6 +1709,14 @@ export class Game {
     u.task = 'toHospital';
     this.setStatus(u, 7);
     this.startRoute(u, h, true);
+    // Begleitender Notarzt fährt im RTW mit, sein Fahrzeug folgt zur Klinik
+    for (const d of this.units) {
+      if (d.begleitet !== u.id || d.task !== 'onScene') continue;
+      d.task = 'toHospital';
+      d.hospitalId = h.id;
+      this.setStatus(d, 7);
+      this.startRoute(d, h, true);
+    }
   }
 
   private crewStatus(player: Player, s: FmsStatus): string | void {
@@ -2066,6 +2153,11 @@ export class Game {
       carrier.hasPatient = true;
       carrier.task = 'awaitHospital';
       carrier.pzc = p.pzc;
+      // PZC mit Arztbegleitung: ein Notarzt von der Einsatzstelle fährt mit
+      if (p.pzc.endsWith('1')) {
+        const doc = onScene().find((d) => this.istNotarzt(d) && !d.begleitet && !d.crewPlayerId && !truth.released?.has(d.id));
+        if (doc) doc.begleitet = carrier.id;
+      }
       const text = `Patient transportbereit, PZC ${p.pzc}, erbitten Zielklinik.`;
       if (carrier.crewPlayerId) carrier.hint = `${text} Zielklinik wählen oder bei der Leitstelle erfragen.`;
       else {
@@ -2093,7 +2185,7 @@ export class Game {
       }
     }
     for (const u of remaining) {
-      if (u === keep || truth.released?.has(u.id)) continue;
+      if (u === keep || u.begleitet || truth.released?.has(u.id)) continue;
       if (u.crewPlayerId) {
         u.hint = 'Einsatzstelle abgearbeitet. Status 1 drücken, um einsatzbereit zu werden.';
         continue;
