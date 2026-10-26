@@ -1452,6 +1452,10 @@ export class Game {
       const st = this.scn.stations.find((s) => s.id === a.stationId);
       if (!st) return 'Wache nicht gefunden';
       target = { name: st.name, x: st.x, y: st.y, stationId: st.id };
+    } else if (a.raumId) {
+      const br = this.scn.bereitstellungsraeume?.find((r) => r.id === a.raumId);
+      if (!br) return 'Bereitstellungsraum nicht gefunden';
+      target = { name: br.name, x: br.x, y: br.y, raumId: br.id };
     } else if (a.x !== undefined && a.y !== undefined && isFinite(a.x) && isFinite(a.y)) {
       const hit = reverseGeocode(this.scn, { x: a.x, y: a.y });
       const name = a.name?.trim().slice(0, 80) || (hit && hit.distance < 300 ? `${hit.street}${hit.town && !hit.street.includes(hit.town) ? `, ${hit.town}` : ''}` : `bei ${nearestTown(this.scn.towns, { x: a.x, y: a.y })?.name ?? 'Kartenpunkt'}`);
