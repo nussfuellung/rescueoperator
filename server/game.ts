@@ -3276,6 +3276,19 @@ export class Game {
       const other = active.get(u.callsign);
       if (on && other && other !== u) on = false;
       if (on && !other) active.set(u.callsign, u);
+      // Dienstende während einer Gebietsabsicherung: Absicherung beenden und einrücken, abgemeldet wird auf der Wache
+      if (!on && u.cover && !u.incidentId && !u.crewPlayerId) {
+        if (u.task === 'alarmed' && u.baseStatus === 2) {
+          u.task = 'station';
+          u.cover = undefined;
+          u.timer = undefined;
+          u.hint = undefined;
+        } else if (u.task === 'toCover' || u.task === 'covering') {
+          this.returnToStation(u);
+          if (melden) this.requestSpeak(u, 'info', 'Dienstende, beenden die Gebietsabsicherung und rücken ein.');
+          continue;
+        }
+      }
       // Im Einsatz kann sich niemand abmelden: das passiert erst nach der Rückkehr auf die Wache
       if (u.task !== 'station' || u.incidentId || u.crewPlayerId || u.desinfektion) continue;
       const st = sprechStatus(u.status) ? u.baseStatus : u.status;

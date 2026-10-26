@@ -101,4 +101,24 @@ describe('Gebietsabsicherung', () => {
     expect(u.task).toBe('covering');
     expect(u.baseStatus).toBe(1);
   });
+
+  it('beendet die Absicherung zum Dienstende und meldet sich auf der Wache ab', () => {
+    const scn = quiet();
+    const start = scn.settings.startClock;
+    const st = scn.stations.find((x) => x.vehicles.length)!;
+    const v = st.vehicles[0];
+    v.dienst = [{ von: (start - 60 + 1440) % 1440, bis: (start + 90) % 1440 }];
+    const target = scn.stations.filter((x) => x.id !== st.id).sort((a, b) => Math.hypot(a.x - st.x, a.y - st.y) - Math.hypot(b.x - st.x, b.y - st.y))[0];
+    const game = new Game(scn, { seed: 5 });
+    const p = game.addPlayer('D', 'dispatcher');
+    game.handle(p.id, { a: 'start' });
+    const u = game.units.find((x) => x.id === v.id)!;
+    expect(game.handle(p.id, { a: 'cover', unitIds: [u.id], stationId: target.id })).toBeUndefined();
+    for (let t = 0; t < 80 * 60_000 && u.task !== 'covering'; t += 1000) game.tick(1000);
+    expect(u.task).toBe('covering');
+    for (let t = 0; t < 4 * 3_600_000 && !(u.task === 'station' && u.baseStatus === 6); t += 1000) game.tick(1000);
+    expect(u.cover).toBeUndefined();
+    expect(u.task).toBe('station');
+    expect(u.baseStatus).toBe(6);
+  });
 });
