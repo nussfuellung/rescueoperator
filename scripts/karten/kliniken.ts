@@ -49,9 +49,33 @@ const NEU: { id: string; name: string; lat?: number; lon?: number; street?: stri
 ];
 
 /** Schwerbrandverletztenzentren außerhalb der Karte: am westlichen Kartenrand auf der A 3 (wie die Uniklinik in generierten Karten) */
-const AUSSERHALB: { id: string; name: string; specialties: string[] }[] = [
-  { id: 'h_bgu_frankfurt', name: 'BG Unfallklinik Frankfurt (außerhalb, über A 3)', specialties: ['Verbrennungen'] },
-  { id: 'h_offenbach', name: 'Sana Klinikum Offenbach (außerhalb, über A 3)', specialties: ['Verbrennungen'] },
+// Kliniken außerhalb der Karte: sitzen am Kartenrand auf der Autobahn, über die man sie erreicht;
+// ausserhalbMin ist die Fahrzeit vom Kartenrand bis zur Klinik
+const AUSSERHALB: { id: string; name: string; ueber: 'A 3' | 'A 7'; ausserhalbMin: number; specialties: string[] }[] = [
+  { id: 'h_bgu_frankfurt', name: 'BG Unfallklinik Frankfurt (außerhalb, über A 3)', ueber: 'A 3', ausserhalbMin: 45, specialties: ['Verbrennungen'] },
+  { id: 'h_offenbach', name: 'Sana Klinikum Offenbach (außerhalb, über A 3)', ueber: 'A 3', ausserhalbMin: 40, specialties: ['Verbrennungen'] },
+  // Quelle: klinikradar.de und kliniken.de (Fachabteilungen), Stand Oktober 2026
+  {
+    id: 'h_aschaffenburg',
+    name: 'Klinikum Aschaffenburg-Alzenau (außerhalb, über A 3)',
+    ueber: 'A 3',
+    ausserhalbMin: 20,
+    specialties: ['Innere Medizin', 'Chirurgie', 'Unfallchirurgie', 'Kardiologie (HKL)', 'Stroke Unit', 'Pädiatrie', 'Urologie', 'Gynäkologie', 'Geburtshilfe'],
+  },
+  {
+    id: 'h_leopoldina',
+    name: 'Leopoldina-Krankenhaus Schweinfurt (außerhalb, über A 7)',
+    ueber: 'A 7',
+    ausserhalbMin: 12,
+    specialties: ['Innere Medizin', 'Chirurgie', 'Unfallchirurgie', 'Kardiologie (HKL)', 'Stroke Unit', 'Pädiatrie', 'Urologie', 'Gynäkologie', 'Geburtshilfe', 'HNO', 'Augenheilkunde'],
+  },
+  {
+    id: 'h_bad_neustadt',
+    name: 'Rhön-Klinikum Campus Bad Neustadt (außerhalb, über A 7)',
+    ueber: 'A 7',
+    ausserhalbMin: 35,
+    specialties: ['Innere Medizin', 'Chirurgie', 'Unfallchirurgie', 'Kardiologie (HKL)', 'Stroke Unit', 'Gynäkologie', 'Geburtshilfe', 'HNO'],
+  },
 ];
 
 for (const h of scn.hospitals) if (FACH[h.name]) h.specialties = FACH[h.name];
@@ -71,12 +95,19 @@ for (const n of NEU) {
   scn.hospitals.push(h);
 }
 
-const a3 = scn.roads.filter((r) => r.type === 'autobahn' && r.name === 'A 3').flatMap((r) => [byId.get(r.a)!, byId.get(r.b)!]);
-const west = a3.reduce((best, n) => (n.x < best.x ? n : best));
-AUSSERHALB.forEach((k, i) => {
+const knoten = (name: string) => scn.roads.filter((r) => r.type === 'autobahn' && r.name === name).flatMap((r) => [byId.get(r.a)!, byId.get(r.b)!]);
+// A 3: westlicher Kartenrand Richtung Aschaffenburg/Frankfurt; A 7 (E 45): nördliches Ende Richtung Schweinfurt
+const anker = {
+  'A 3': knoten('A 3').reduce((best, n) => (n.x < best.x ? n : best)),
+  'A 7': knoten('E 45').reduce((best, n) => (n.y < best.y ? n : best)),
+};
+const zaehler = { 'A 3': 0, 'A 7': 0 };
+for (const k of AUSSERHALB) {
   scn.hospitals = scn.hospitals.filter((h) => h.id !== k.id);
-  scn.hospitals.push({ id: k.id, name: k.name, x: Math.round(west.x), y: Math.round(west.y + i * 60), specialties: k.specialties });
-});
+  const a = anker[k.ueber];
+  const i = zaehler[k.ueber]++;
+  scn.hospitals.push({ id: k.id, name: k.name, x: Math.round(a.x), y: Math.round(a.y + i * 60), specialties: k.specialties, ausserhalbMin: k.ausserhalbMin });
+}
 
 writeFileSync(f, gzipSync(JSON.stringify(scn), { level: 9 }));
 for (const h of scn.hospitals) console.log(h.name.padEnd(32), h.specialties.join(', '));

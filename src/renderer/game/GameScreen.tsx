@@ -319,10 +319,10 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
         <button
           onClick={() => setShowIvena(true)}
           title="IVENA: Patientenzuweisung nach PZC und An-/Abmeldestatus der Kliniken"
-          className={state.units.some((u) => u.task === 'awaitHospital' && !u.hospitalId && u.pzc) ? 'attention' : ''}
+          className={state.units.some((u) => (u.task === 'awaitHospital' && !u.hospitalId && u.pzc) || (u.voranmeldung && u.voranmeldung.t === undefined)) ? 'attention' : ''}
         >
           🏥 IVENA{(() => {
-            const n = state.units.filter((u) => u.task === 'awaitHospital' && !u.hospitalId && u.pzc).length;
+            const n = state.units.filter((u) => (u.task === 'awaitHospital' && !u.hospitalId && u.pzc) || (u.voranmeldung && u.voranmeldung.t === undefined)).length;
             return n ? ` (${n})` : '';
           })()}
         </button>

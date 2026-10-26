@@ -32,6 +32,7 @@ import { findeKlinik, findeRufgruppe, istFrage, istQuittung, zerlegeFunkspruch }
 import { inDienst } from '../shared/lstsim';
 import { HAEUFIGKEIT_STUNDEN, dateForSeason, seasonOf, tageszeitFaktor, type Haeufigkeit, type Season } from '../shared/jahreszeit';
 import { infektionstransport, pzcFachbereich, pzcFuer, pzcSprech, zielFach } from '../shared/pzc';
+import { aufnahmepflicht, klinikKm, voranmeldungFuer } from '../shared/ivena';
 import {
   BMA_TEMPLATE,
   FIRST_NAMES,
@@ -133,6 +134,8 @@ interface Truth {
   termin?: number;
   /** Terminfahrt: Transportziel, das der Anrufer nennt */
   ziel?: string;
+  /** Verlegung oder Terminfahrt in eine Klinik: vereinbarte Zielklinik */
+  zielId?: string;
   /** Fahrzeug war vor der Abholzeit da, Wartezeit ist eingerechnet */
   wartet?: boolean;
   /** Rückruf zu einer bestellten Terminfahrt (gehört zu main): Absage oder neue Abholzeit */
@@ -202,12 +205,21 @@ export class Game {
   private callTruth = new Map<string, Truth>();
   private incTruth = new Map<string, Truth>();
   /** IVENA: Abmeldungen je Klinik und Fachbereich, Zuweisungen */
-  private ivena: { abmeldungen: IvenaAbmeldung[]; zuweisungen: NonNullable<PublicState['ivena']>['zuweisungen']; nextCheck: number; last: Record<string, number> } = {
+  private ivena: {
+    abmeldungen: IvenaAbmeldung[];
+    zuweisungen: NonNullable<PublicState['ivena']>['zuweisungen'];
+    nextCheck: number;
+    last: Record<string, number>;
+    wartezeit: Record<string, number>;
+  } = {
     abmeldungen: [],
     zuweisungen: [],
     nextCheck: 0,
     last: {},
+    wartezeit: {},
   };
+  /** Fahrzeuge auf dem Weg zu einer Klinik außerhalb der Karte: Klinik und Ankunftszeit nach dem Kartenrand */
+  private ausserhalb = new Map<string, { hospitalId: string; bis: number }>();
   private recentTpl: string[] = [];
   /** Dienstzeiten je Fahrzeug (nur Fahrzeuge mit Schichtplan) */
   private dienst = new Map<string, Dienstzeit[]>();
@@ -373,8 +385,10 @@ export class Game {
     };
     const objs = this.scn.objects.filter((o) => !tpl.objectKinds || tpl.objectKinds.includes(o.kind));
     if (tpl.where === 'klinik' && this.scn.hospitals.length) {
-      // Abholung auf Station: Verlegung oder Entlassung
-      const h = this.pick(this.scn.hospitals);
+      // Abholung auf Station: Verlegung oder Entlassung (nur Kliniken auf der Karte)
+      const pool = tpl.verlegung ? this.verlegungsKliniken(tpl).von : this.scn.hospitals.filter((h) => !h.ausserhalbMin);
+      if (!pool.length) return null;
+      const h = this.pick(pool);
       const hit = reverseGeocode(this.scn, h);
       const address = hit && hit.distance < 300 ? hit.text : nearestTown(this.scn.towns, h)?.name ?? '';
       return { pos: { x: h.x, y: h.y }, address: `${h.name}, ${address}`, spoken: `Im ${h.name}, ${address}.`, objekt: h.name };
@@ -478,9 +492,22 @@ export class Game {
         ziel = heime.length ? this.pick(heime).name : 'Pflegeheim';
       }
     }
+    // Notfallverlegung: Die nächste geeignete Klinik hat zugesagt (bevorzugt eine, die in IVENA angemeldet ist)
+    let zielId: string | undefined;
+    if (tpl.verlegung) {
+      const von = this.scn.hospitals.find((h) => h.name === loc!.objekt);
+      const { fach } = this.verlegungsKliniken(tpl);
+      const nach = this.scn.hospitals
+        .filter((h) => h.specialties.includes(fach) && h.id !== von?.id)
+        .sort((a, b) => Number(!!this.abgemeldet(a.id, fach)) - Number(!!this.abgemeldet(b.id, fach)) || klinikKm(a, loc!.pos) - klinikKm(b, loc!.pos));
+      if (!nach.length) return null;
+      ziel = nach[0].name;
+      zielId = nach[0].id;
+    } else if (ziel) zielId = this.scn.hospitals.find((h) => h.name === ziel)?.id;
     return {
       termin,
       ziel,
+      zielId,
       tpl,
       stichwort: tpl.stichwort,
       pos: loc.pos,
@@ -514,6 +541,16 @@ export class Game {
     return this.ring(truth);
   }
 
+  /** Notfallverlegung: Kliniken auf der Karte mit Notaufnahme, denen der Fachbereich des Patienten fehlt */
+  private verlegungsKliniken(tpl: IncidentTemplate): { von: Hospital[]; fach: string } {
+    const fach = zielFach(tpl.patients?.[0]?.specialty ?? 'Innere Medizin', this.scn.hospitals);
+    const ziele = this.scn.hospitals.filter((h) => h.specialties.includes(fach));
+    const von = this.scn.hospitals.filter(
+      (h) => !h.ausserhalbMin && !h.specialties.includes(fach) && h.specialties.some((f) => ['Innere Medizin', 'Chirurgie', 'Unfallchirurgie'].includes(f)),
+    );
+    return { von: ziele.length ? von : [], fach };
+  }
+
   private weightedTemplate(): IncidentTemplate {
     const season = this.season();
     const hour = Math.floor((((this.gameMinute() % 1440) + 1440) % 1440) / 60);
@@ -525,7 +562,8 @@ export class Game {
     const usable = pool.filter(
       (t) =>
         (t.where !== 'objekt' || this.scn.objects.some((o) => !t.objectKinds || t.objectKinds.includes(o.kind))) &&
-        (t.where !== 'klinik' || this.scn.hospitals.length >= 2),
+        (t.where !== 'klinik' || this.scn.hospitals.length >= 2) &&
+        (!t.verlegung || this.verlegungsKliniken(t).von.length > 0),
     );
     // Kürzlich gespielte Vorlagen seltener, damit sich Einsätze nicht ständig wiederholen
     const w = (t: IncidentTemplate) => {
@@ -689,7 +727,13 @@ export class Game {
         unitId: u.id,
         callsign: u.callsign,
         pzc: p.pzc,
-        text: `Hier ${radioName(u.callsign)}, ich möchte einen Patienten anmelden. PZC ${pzcSprech(p.pzc)}. ${p.desc}. Welche Klinik können wir anfahren?`,
+        text: `Hier ${radioName(u.callsign)}, ich möchte einen Patienten anmelden. PZC ${pzcSprech(p.pzc)}. ${p.desc}.${
+          voranmeldungFuer(p.pzc) ? ` Bitte ${voranmeldungFuer(p.pzc)} voranmelden.` : ''
+        } ${
+          u.verlegungNach
+            ? `Transport wie vereinbart ins ${this.scn.hospitals.find((h) => h.id === u.verlegungNach)?.name ?? 'Zielkrankenhaus'}, passt das?`
+            : 'Welche Klinik können wir anfahren?'
+        }`,
       },
     };
     this.calls.push(call);
@@ -910,6 +954,8 @@ export class Game {
         return this.speakPermit(action.unitId);
       case 'assignHospital':
         return this.assignHospital(action.unitId, action.hospitalId);
+      case 'voranmelden':
+        return this.voranmelden(action.unitId);
       case 'radio': {
         const u = this.unit(action.unitId);
         if (!u) return 'Fahrzeug nicht gefunden';
@@ -1086,7 +1132,7 @@ export class Game {
       const u = this.unit(call.rtw!.unitId);
       if (u && u.task === 'awaitHospital' && !u.hospitalId)
         this.after(30_000, () => {
-          if (u.task === 'awaitHospital' && !u.hospitalId) this.requestSpeak(u, 'zielklinik', `Patient transportbereit, PZC ${this.patientOf(u)?.pzc}, erbitten Zielklinik.`);
+          if (u.task === 'awaitHospital' && !u.hospitalId) this.requestSpeak(u, 'zielklinik', this.zielklinikText(u, this.patientOf(u)?.pzc ?? ''));
         });
       return;
     }
@@ -1900,23 +1946,58 @@ export class Game {
     const truth = inc ? this.incTruth.get(inc.id) : undefined;
     const pat = truth?.patients.find((p) => p.unitId === u.id && !p.done);
     let trotz = false;
+    let pflicht = false;
     if (pat && inc) {
       const fach = zielFach(pzcFachbereich(pat.pzc), this.scn.hospitals);
       const ab = this.abgemeldet(h.id, fach);
       const alternative = this.scn.hospitals.some((o) => o.id !== h.id && o.specialties.includes(fach) && !this.abgemeldet(o.id, fach));
-      if (!h.specialties.includes(fach)) this.addScore(-10, `${inc.nr}: ${h.name} hat keine ${fach}`);
-      else if (ab && alternative) {
+      const vereinbart = truth?.zielId ? this.scn.hospitals.find((o) => o.id === truth.zielId) : undefined;
+      if (vereinbart) {
+        // Verlegung: Die Zielklinik ist zwischen den Ärzten abgesprochen, eine Abmeldung in IVENA spielt keine Rolle
+        if (vereinbart.id === h.id) this.addScore(10, `${inc.nr}: vereinbarte Zielklinik ${h.name}`);
+        else this.addScore(-10, `${inc.nr}: Zielklinik war mit ${vereinbart.name} vereinbart`);
+      } else if (!h.specialties.includes(fach)) this.addScore(-10, `${inc.nr}: ${h.name} hat keine ${fach}`);
+      else if (ab && alternative && aufnahmepflicht(pat.pzc, u, h, this.scn.hospitals, (id, f) => !!this.abgemeldet(id, f))) {
+        // Vitale Bedrohung: Die nächste geeignete Klinik muss trotz Abmeldung aufnehmen
+        pflicht = true;
+        this.addScore(10, `${inc.nr}: Aufnahmepflicht bei vitaler Bedrohung (${h.name})`);
+      } else if (ab && alternative) {
         trotz = true;
         this.addScore(-10, `${inc.nr}: ${h.name} hat ${fach} in IVENA abgemeldet (${ab.grund})`);
       } else this.addScore(10, `${inc.nr}: passende Zielklinik (${fach})`);
-      this.log(inc, `${shortCallsign(u.callsign)} Transport nach ${h.name}${pat.pzc ? `, PZC ${pat.pzc}` : ''}${trotz ? ' (trotz Abmeldung)' : ''}`);
+      this.log(
+        inc,
+        `${shortCallsign(u.callsign)} Transport nach ${h.name}${pat.pzc ? `, PZC ${pat.pzc}` : ''}${pflicht ? ' (Aufnahmepflicht trotz Abmeldung)' : trotz ? ' (trotz Abmeldung)' : ''}`,
+      );
+      const art = voranmeldungFuer(pat.pzc);
+      if (art) u.voranmeldung = { art, hospitalId: h.id };
     }
-    this.ivena.zuweisungen.push({ t: this.time, hospitalId: h.id, callsign: u.callsign, pzc: u.pzc, nr: inc?.nr, ...(trotz ? { trotzAbmeldung: true } : {}) });
+    this.ivena.zuweisungen.push({
+      t: this.time,
+      hospitalId: h.id,
+      callsign: u.callsign,
+      pzc: u.pzc,
+      nr: inc?.nr,
+      ...(trotz ? { trotzAbmeldung: true } : {}),
+      ...(pflicht ? { aufnahmepflicht: true } : {}),
+    });
     if (u.crewPlayerId) {
-      u.hint = `Zielklinik: ${h.name}. Status 7 drücken, sobald der Patient aufgenommen ist.`;
+      u.hint = `Zielklinik: ${h.name}.${u.voranmeldung ? ` Die Leitstelle meldet ${u.voranmeldung.art} voran.` : ''} Status 7 drücken, sobald der Patient aufgenommen ist.`;
       return;
     }
     this.after(this.rand(60, 150) * 1000, () => this.departToHospital(u));
+  }
+
+  /** Tracerdiagnose: Patient in der Zielklinik voranmelden (Schockraum, Herzkatheterlabor, Stroke Unit) */
+  private voranmelden(unitId: string): string | void {
+    const u = this.unit(unitId);
+    const v = u?.voranmeldung;
+    if (!u || !v) return 'Für diesen Patienten ist keine Voranmeldung nötig';
+    if (v.t !== undefined) return 'Patient ist bereits vorangemeldet';
+    const h = this.scn.hospitals.find((x) => x.id === v.hospitalId);
+    v.t = this.time;
+    const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
+    if (inc) this.log(inc, `${v.art} im ${h?.name ?? 'Zielkrankenhaus'} vorangemeldet (${shortCallsign(u.callsign)}${u.pzc ? `, PZC ${u.pzc}` : ''})`);
   }
 
   private departToHospital(u: UnitState) {
@@ -2404,7 +2485,8 @@ export class Game {
         const doc = onScene().find((d) => this.istNotarzt(d) && !d.begleitet && !d.crewPlayerId && !truth.released?.has(d.id));
         if (doc) doc.begleitet = carrier.id;
       }
-      const text = `Patient transportbereit, PZC ${p.pzc}${carrier.infektion ? ', Infektionstransport' : ''}, erbitten Zielklinik.`;
+      if (truth.zielId) carrier.verlegungNach = truth.zielId;
+      const text = this.zielklinikText(carrier, p.pzc);
       // Der PZC wird erst sichtbar, wenn die Besatzung ihn per Funk oder Telefon durchgibt (Spielerbesatzungen kennen ihn selbst)
       if (carrier.crewPlayerId) {
         carrier.pzc = p.pzc;
@@ -2445,6 +2527,16 @@ export class Game {
       });
     }
     if (!inc.unitIds.length) this.checkClose(inc);
+  }
+
+  /** Funkspruch zur Patientenanmeldung: PZC, ggf. Infektion, Voranmeldung und vereinbartes Verlegungsziel */
+  private zielklinikText(u: UnitState, pzc: string) {
+    const art = voranmeldungFuer(pzc);
+    const ziel = u.verlegungNach ? this.scn.hospitals.find((h) => h.id === u.verlegungNach)?.name : undefined;
+    const zusatz = `${u.infektion ? ', Infektionstransport' : ''}${art ? `, bitte ${art} voranmelden` : ''}`;
+    return ziel
+      ? `Patient übernommen, PZC ${pzc}${zusatz}. Transport wie vereinbart ins ${ziel}, erbitten Bestätigung.`
+      : `Patient transportbereit, PZC ${pzc}${zusatz}, erbitten Zielklinik.`;
   }
 
   /** Patient, den das Fahrzeug gerade transportiert bzw. zum Transport übernommen hat */
@@ -2497,6 +2589,40 @@ export class Game {
     if (inc) this.checkClose(inc);
   }
 
+  /** Ankunft an der Klinik: Status 8, Voranmeldung prüfen, Übergabedauer nach Wartezeit der Notaufnahme */
+  private arriveHospital(u: UnitState) {
+    u.task = 'atHospital';
+    this.setStatus(u, 8);
+    const h = this.scn.hospitals.find((x) => x.id === u.hospitalId);
+    const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
+    const v = u.voranmeldung;
+    let schockraum = false;
+    let verzoegert = 0;
+    if (v && h && v.hospitalId === h.id) {
+      if (v.t !== undefined) {
+        schockraum = true;
+        this.addScore(5, `${inc?.nr ?? shortCallsign(u.callsign)}: ${v.art} im ${h.name} rechtzeitig vorangemeldet`);
+      } else {
+        verzoegert = this.rand(3, 8);
+        this.addScore(-10, `${inc?.nr ?? shortCallsign(u.callsign)}: ${h.name} nicht vorangemeldet (${v.art})`);
+        if (inc) this.log(inc, `${shortCallsign(u.callsign)} am ${h.name}: ${v.art} war nicht vorangemeldet, Übergabe verzögert`);
+      }
+    }
+    u.voranmeldung = undefined;
+    if (u.crewPlayerId) {
+      u.hint = 'Patient übergeben? Dann Status 1 drücken.';
+      return;
+    }
+    // Übergabe: Wartezeit der Notaufnahme; vorangemeldete Tracerpatienten übernimmt das Schockraumteam sofort
+    const warte = h ? this.ivena.wartezeit[h.id] ?? 7 : 7;
+    let min = schockraum ? this.rand(4, 7) : warte * this.rand(0.7, 1.3) + verzoegert;
+    const trotz = [...this.ivena.zuweisungen].reverse().find((z) => z.callsign === u.callsign && z.hospitalId === h?.id)?.trotzAbmeldung;
+    if (trotz) min += this.rand(5, 15);
+    // Klinik außerhalb: Rückfahrt bis zum Kartenrand
+    min += h?.ausserhalbMin ?? 0;
+    u.timer = this.time + Math.max(3, min) * 60_000;
+  }
+
   private finishHospital(u: UnitState) {
     const inc = u.incidentId ? this.incident(u.incidentId) : undefined;
     const truth = inc ? this.incTruth.get(inc.id) : undefined;
@@ -2505,6 +2631,8 @@ export class Game {
     });
     u.hasPatient = false;
     u.pzc = undefined;
+    u.verlegungNach = undefined;
+    u.voranmeldung = undefined;
     if (!u.infektion) {
       this.releaseUnit(u.id, false);
       return;
@@ -2691,6 +2819,13 @@ export class Game {
       // Auslastung je Klinik schwankt als Zufallsbewegung zwischen 0,3 und 3: mal ruhige Phasen, mal Häufungen
       const auslastung = Math.min(3, Math.max(0.3, (this.ivena.last[h.id] ?? this.rand(0.5, 1.5)) * Math.exp((this.rng() - 0.5) * 0.3)));
       this.ivena.last[h.id] = auslastung;
+      // Wartezeit in der Notaufnahme: Größe der Klinik, Zuweisungen der letzten Stunde, Tageszeit und Auslastung
+      const stunde = Math.floor((((this.gameMinute() % 1440) + 1440) % 1440) / 60);
+      const tageszeit = (stunde >= 10 && stunde < 14) || (stunde >= 17 && stunde < 22) ? 1.3 : stunde < 6 ? 0.7 : 1;
+      const basis = h.specialties.length >= 10 ? 9 : h.specialties.length >= 4 ? 6 : 4;
+      const zuw = this.ivena.zuweisungen.filter((z) => z.hospitalId === h.id && this.time - z.t < 3600_000).length;
+      const warte = Math.min(60, Math.max(3, Math.round((basis + 2 * zuw) * tageszeit * (0.6 + 0.4 * auslastung))));
+      this.ivena.wartezeit[h.id] = warte;
       for (const fach of h.specialties) {
         if (this.abgemeldet(h.id, fach)) continue;
         // Mindestens eine weitere Klinik muss den Fachbereich angemeldet haben
@@ -2905,7 +3040,7 @@ export class Game {
         c.endedAt = this.time;
         c.transcript.push({ from: 'system', text: 'Nicht angenommen, die Besatzung meldet sich über Funk.', t: this.time });
         const u = this.unit(c.rtw!.unitId);
-        if (u && u.task === 'awaitHospital' && !u.hospitalId) this.requestSpeak(u, 'zielklinik', `Patient transportbereit, PZC ${this.patientOf(u)?.pzc}, erbitten Zielklinik.`);
+        if (u && u.task === 'awaitHospital' && !u.hospitalId) this.requestSpeak(u, 'zielklinik', this.zielklinikText(u, this.patientOf(u)?.pzc ?? ''));
         continue;
       }
       if (c.state === 'ringing' && c.kind === '112' && this.time - c.ringStart > MISSED_AFTER_MS) {
@@ -2946,10 +3081,10 @@ export class Game {
         if (arrived) {
           if (u.task === 'toScene') this.arrive(u);
           else if (u.task === 'toHospital') {
-            u.task = 'atHospital';
-            this.setStatus(u, 8);
-            if (u.crewPlayerId) u.hint = 'Patient übergeben? Dann Status 1 drücken.';
-            else u.timer = this.time + this.rand(5, 10) * 60_000;
+            // Klinik außerhalb der Karte: Am Kartenrand beginnt die restliche Fahrt bis zur Klinik
+            const h = this.scn.hospitals.find((x) => x.id === u.hospitalId);
+            if (h?.ausserhalbMin) this.ausserhalb.set(u.id, { hospitalId: h.id, bis: this.time + h.ausserhalbMin * 60_000 });
+            else this.arriveHospital(u);
           } else if (u.task === 'toCover') this.arriveCover(u);
           else if (u.task === 'returning' && u.fremd) u.task = 'station';
           else if (u.task === 'returning') {
@@ -2972,6 +3107,12 @@ export class Game {
         u.hint = undefined;
         this.setStatus(u, 2);
         if (!u.crewPlayerId) this.requestSpeak(u, 'info', 'Desinfektion abgeschlossen, Fahrzeug wieder einsatzbereit auf der Wache, kommen.');
+      }
+      const aw = this.ausserhalb.get(u.id);
+      if (aw && (u.task !== 'toHospital' || u.hospitalId !== aw.hospitalId)) this.ausserhalb.delete(u.id);
+      else if (aw && !u.route && this.time >= aw.bis) {
+        this.ausserhalb.delete(u.id);
+        this.arriveHospital(u);
       }
       if (u.task === 'atHospital' && !u.crewPlayerId && u.timer !== undefined && this.time >= u.timer) {
         u.timer = undefined;
@@ -3036,7 +3177,7 @@ export class Game {
       units: this.units.map((u) => ({ ...u, route: u.route ? [u.route[u.route.length - 1]] : undefined })),
       radio: this.radio.slice(-120),
       score: this.score,
-      ivena: { abmeldungen: this.ivena.abmeldungen, zuweisungen: this.ivena.zuweisungen.slice(-40) },
+      ivena: { abmeldungen: this.ivena.abmeldungen, zuweisungen: this.ivena.zuweisungen.slice(-40), wartezeit: this.ivena.wartezeit },
     };
   }
 }

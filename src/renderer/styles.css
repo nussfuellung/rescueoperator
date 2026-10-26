@@ -2689,3 +2689,20 @@ button.gross {
   color: var(--warn-text, inherit);
   white-space: nowrap;
 }
+
+/* IVENA: Voranmeldung von Tracerdiagnosen */
+.ivena-voran {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+}
+.ok-text {
+  color: var(--ok);
+}
+.ivena-kliniken > div {
+  flex-basis: 100%;
+}

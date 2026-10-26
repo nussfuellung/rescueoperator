@@ -2,6 +2,7 @@
 import type { MapObject, QuestionId, VehicleTypeId } from '../shared/types';
 import { ABEK_VORLAGEN } from './vorlagen-abek';
 import { FACH_VORLAGEN } from './vorlagen-fach';
+import { VERLEGUNG_VORLAGEN } from './vorlagen-verlegung';
 import { TERMIN_VORLAGEN } from './vorlagen-termin';
 import { POLIZEI_VORLAGEN } from './vorlagen-polizei';
 
@@ -39,6 +40,8 @@ export interface IncidentTemplate {
   /** Alter des Patienten (Standard 55–89) */
   age?: [number, number];
   sex?: 'm' | 'w';
+  /** Notfallverlegung: Abholung in einer Klinik ohne den Fachbereich des Patienten, Ziel ist die nächste geeignete Klinik */
+  verlegung?: boolean;
   /** Terminfahrt über die 19222: gewünschte Abholzeit so viele Minuten nach dem Anruf (von, bis) */
   termin?: [number, number];
 }
@@ -1085,6 +1088,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   },
   ...ABEK_VORLAGEN,
   ...FACH_VORLAGEN,
+  ...VERLEGUNG_VORLAGEN,
   ...TERMIN_VORLAGEN,
   ...POLIZEI_VORLAGEN,
 ];
