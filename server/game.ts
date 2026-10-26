@@ -31,7 +31,7 @@ import { ensureTmo } from '../shared/fleet';
 import { findeKlinik, findeRufgruppe, istFrage, istQuittung, zerlegeFunkspruch } from '../shared/funkspruch';
 import { inDienst } from '../shared/lstsim';
 import { HAEUFIGKEIT_STUNDEN, dateForSeason, seasonOf, tageszeitFaktor, type Haeufigkeit, type Season } from '../shared/jahreszeit';
-import { pzcFachbereich, pzcFuer, pzcSprech, zielFach } from '../shared/pzc';
+import { infektionstransport, pzcFachbereich, pzcFuer, pzcSprech, zielFach } from '../shared/pzc';
 import {
   BMA_TEMPLATE,
   FIRST_NAMES,
@@ -1254,6 +1254,7 @@ export class Game {
       // Status 8: Die Besatzung schließt die Übergabe ab und fährt dann von der Klinik los
       const s8 = inUebergabe(u);
       const rest = s8 ? uebergabeRest(u, this.time) : 0;
+      const klinik = s8 ? this.scn.hospitals.find((h) => h.id === u.hospitalId)?.name : undefined;
       if (s8) this.uebergabeBeenden(u, inc);
       if (u.incidentId && u.incidentId !== inc.id) continue;
       if (u.fremd) continue;
@@ -1279,6 +1280,8 @@ export class Game {
       alarmed.push(shortCallsign(u.callsign));
       this.radioMsg(this.scn.ilsName, u.callsign, `Alarmierung: ${inc.schlagwort ?? inc.stichwort} – ${inc.address}${inc.sondersignal === false ? ' – ohne Sondersignal' : ''}${inc.tmo ? ` – Einsatzgruppe ${this.tmoName(inc.tmo)}` : ''}`, 'system');
       if (inc.tmo) u.tmo = inc.tmo;
+      // Aus Status 8 meldet die Besatzung, wann sie nach der Übergabe losfahren kann
+      if (s8 && !u.crewPlayerId) this.after(this.rand(3000, 6000), () => this.s8Rueckmeldung(u, inc, rest, klinik));
     }
     if (!alarmed.length) return 'Keine verfügbaren Fahrzeuge ausgewählt';
     this.log(inc, `Alarmiert (${player.name}): ${alarmed.join(', ')}`);
@@ -1832,7 +1835,7 @@ export class Game {
     const st = this.station(u);
     u.cover = undefined;
     u.task = 'returning';
-    this.setStatus(u, 1);
+    this.setStatus(u, u.desinfektion ? 6 : 1);
     this.startRoute(u, st, false);
   }
 
@@ -1933,6 +1936,7 @@ export class Game {
   private crewStatus(player: Player, s: FmsStatus): string | void {
     const u = player.unitId ? this.unit(player.unitId) : undefined;
     if (!u) return 'Kein Fahrzeug besetzt';
+    if (u.desinfektion && (s === 1 || s === 2)) return 'Fahrzeug muss erst desinfiziert werden';
     switch (s) {
       case 3:
         if (u.task !== 'alarmed') return 'Kein offener Einsatzauftrag';
@@ -2392,12 +2396,13 @@ export class Game {
       p.unitId = carrier.id;
       carrier.hasPatient = true;
       carrier.task = 'awaitHospital';
+      if (infektionstransport(p.pzc)) carrier.infektion = true;
       // PZC mit Arztbegleitung: ein Notarzt von der Einsatzstelle fährt mit
       if (p.pzc.endsWith('1')) {
         const doc = onScene().find((d) => this.istNotarzt(d) && !d.begleitet && !d.crewPlayerId && !truth.released?.has(d.id));
         if (doc) doc.begleitet = carrier.id;
       }
-      const text = `Patient transportbereit, PZC ${p.pzc}, erbitten Zielklinik.`;
+      const text = `Patient transportbereit, PZC ${p.pzc}${carrier.infektion ? ', Infektionstransport' : ''}, erbitten Zielklinik.`;
       // Der PZC wird erst sichtbar, wenn die Besatzung ihn per Funk oder Telefon durchgibt (Spielerbesatzungen kennen ihn selbst)
       if (carrier.crewPlayerId) {
         carrier.pzc = p.pzc;
@@ -2446,6 +2451,22 @@ export class Game {
     return inc ? this.incTruth.get(inc.id)?.patients.find((p) => p.unitId === u.id && !p.done) : undefined;
   }
 
+  /** Funkrückmeldung nach Alarmierung aus Status 8: Übergabe läuft noch, Abfahrt in etwa … Minuten */
+  private s8Rueckmeldung(u: UnitState, inc: IncidentState, rest: number, klinik?: string) {
+    if (u.incidentId !== inc.id || u.task !== 'alarmed') return;
+    const min = Math.max(1, Math.round(rest / 60));
+    const ort = klinik ? ` im ${klinik}` : '';
+    this.radioMsg(
+      u.callsign,
+      this.scn.ilsName,
+      this.pick([
+        `Verstanden, ${inc.address}. Übergabe${ort} läuft noch, sind in etwa ${min} ${min === 1 ? 'Minute' : 'Minuten'} unterwegs, kommen.`,
+        `Alarmierung verstanden. Wir übergeben noch${ort}, Abfahrt in etwa ${min} ${min === 1 ? 'Minute' : 'Minuten'}, kommen.`,
+      ]),
+      'voice',
+    );
+  }
+
   /**
    * Alarmierung aus Status 8: Die Übergabe in der Klinik wird abgeschlossen, das Fahrzeug verlässt den alten
    * Einsatz ohne Freimeldung und Rückfahrt, weil es gleich zum neuen Einsatz ausrückt.
@@ -2482,7 +2503,16 @@ export class Game {
     });
     u.hasPatient = false;
     u.pzc = undefined;
-    this.releaseUnit(u.id, false);
+    if (!u.infektion) {
+      this.releaseUnit(u.id, false);
+      return;
+    }
+    // Nach einem Infektionstransport fährt das Fahrzeug außer Dienst zur Desinfektion auf die Wache
+    u.infektion = undefined;
+    u.desinfektion = {};
+    this.releaseUnit(u.id, false, false);
+    u.hint = 'Infektionstransport: Wache zur Desinfektion anfahren, Fahrzeug bleibt bis dahin in Status 6.';
+    if (!u.crewPlayerId) this.requestSpeak(u, 'info', 'Patient übergeben, Infektionstransport. Fahren zur Desinfektion auf die Wache, Status 6, kommen.');
   }
 
   private checkClose(inc: IncidentState) {
@@ -2682,7 +2712,7 @@ export class Game {
       if (on && other && other !== u) on = false;
       if (on && !other) active.set(u.callsign, u);
       // Im Einsatz kann sich niemand abmelden: das passiert erst nach der Rückkehr auf die Wache
-      if (u.task !== 'station' || u.incidentId || u.crewPlayerId) continue;
+      if (u.task !== 'station' || u.incidentId || u.crewPlayerId || u.desinfektion) continue;
       const st = u.status === 5 ? u.baseStatus : u.status;
       if (!on && st === 2) {
         u.status = 6;
@@ -2908,10 +2938,21 @@ export class Game {
             const st = this.station(u);
             u.x = st.x;
             u.y = st.y;
-            this.setStatus(u, 2);
-            u.hint = undefined;
+            if (u.desinfektion) {
+              u.desinfektion.bis = this.time + this.rand(30, 60) * 60_000;
+              u.hint = 'Fahrzeug wird desinfiziert, danach wieder Status 2.';
+            } else {
+              this.setStatus(u, 2);
+              u.hint = undefined;
+            }
           }
         }
+      }
+      if (u.desinfektion?.bis !== undefined && this.time >= u.desinfektion.bis) {
+        u.desinfektion = undefined;
+        u.hint = undefined;
+        this.setStatus(u, 2);
+        if (!u.crewPlayerId) this.requestSpeak(u, 'info', 'Desinfektion abgeschlossen, Fahrzeug wieder einsatzbereit auf der Wache, kommen.');
       }
       if (u.task === 'atHospital' && !u.crewPlayerId && u.timer !== undefined && this.time >= u.timer) {
         u.timer = undefined;

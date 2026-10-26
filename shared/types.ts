@@ -315,6 +315,10 @@ export interface UnitState {
   cover?: { name: string; x: number; y: number; stationId?: string; /** Spielzeit der Verlegung */ since?: number; raumId?: string };
   /** Notarztbegleitung: Notarzt fährt im Transportfahrzeug mit dieser id mit, das Fahrzeug folgt zur Klinik */
   begleitet?: string;
+  /** Patient an Bord ist infektiös: nach der Übergabe muss das Fahrzeug zur Desinfektion */
+  infektion?: boolean;
+  /** Desinfektion nach Infektionstransport: Fahrzeug fährt in Status 6 zur Wache, bis = Spielzeit, zu der sie fertig ist */
+  desinfektion?: { bis?: number };
   /** Über die ESWL von einer Nachbar-ILS entsandt: gehört nicht zum eigenen Bereich und fährt danach heim */
   fremd?: { nachbarId: string; ils: string; wache: string; imBereich: boolean };
 }
