@@ -1,9 +1,10 @@
 // Hilfen für die Spracherkennung mit Whisper: Modelle, WAV-Aufbereitung, Vorgabetext und Filter für typische Fehlerkennungen.
 
 export const WHISPER_MODELLE = {
-  base: { name: 'Schnell', datei: 'ggml-base-q5_1.bin', mb: 60 },
-  small: { name: 'Genau', datei: 'ggml-small-q5_1.bin', mb: 190 },
-  turbo: { name: 'Sehr genau (schneller PC)', datei: 'ggml-large-v3-turbo-q5_0.bin', mb: 550 },
+  // Zeiten auf einem Rechner mit 4 Kernen je Funkspruch: base ~2 s, small ~7 s, turbo über 30 s (Workflow „Whisper“)
+  base: { name: 'Schnell, empfohlen', datei: 'ggml-base-q5_1.bin', mb: 60 },
+  small: { name: 'Genau (schneller PC)', datei: 'ggml-small-q5_1.bin', mb: 190 },
+  turbo: { name: 'Sehr genau (sehr langsam)', datei: 'ggml-large-v3-turbo-q5_0.bin', mb: 550 },
 } as const;
 export type WhisperModell = keyof typeof WHISPER_MODELLE;
 

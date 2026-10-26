@@ -42,7 +42,7 @@ const DEFAULTS: Settings = {
   sttEnabled: false,
   sttMode: 'ptt',
   sttEngine: 'auto',
-  whisperModell: 'small',
+  whisperModell: 'base',
   pttKey: 'F4',
   micDeviceId: '',
   mapTiles: true,
