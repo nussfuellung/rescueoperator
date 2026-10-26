@@ -147,3 +147,40 @@ export function findeRufgruppe<G extends { id: string; name: string }>(text: str
   });
   return hits.sort((a, b) => kurz(b.name).length - kurz(a.name).length)[0];
 }
+
+const ADRESS_GENERISCH = new Set(['straße', 'strasse', 'str', 'weg', 'platz', 'gasse', 'allee', 'ring', 'höhe', 'bei', 'nach', 'zwischen', 'richtung', 'und', 'der', 'die', 'das', 'am', 'an', 'im', 'in', 'auf', 'ortsteil']);
+
+/**
+ * Im Funkspruch genannter Einsatz: über Einsatznummer, Straße oder Ort der Adresse und Stichwort.
+ * Bei Gleichstand keiner; ohne jeden Hinweis nur, wenn es genau einen Kandidaten gibt.
+ */
+export function findeEinsatz<I extends { nr: string; address: string; stichwort: string; label?: string; schlagwort?: string }>(text: string, incidents: I[]): I | undefined {
+  const words = text.split(' ').filter(Boolean);
+  const joined = words.map(kurz).join('');
+  let best: I | undefined;
+  let bestScore = 0;
+  let tie = false;
+  for (const inc of incidents) {
+    let score = 0;
+    // Einsatznummer "E-000123": "einsatz 123" oder "nummer 123"
+    const nr = inc.nr.replace(/\D/g, '').replace(/^0+/, '');
+    if (nr && words.includes(nr)) score += 20;
+    for (const w of inc.address.split(/[\s,/()-]+/)) {
+      const k = kurz(w);
+      if (k.length < 4 || ADRESS_GENERISCH.has(w.toLowerCase()) || /^\d/.test(k)) continue;
+      // "Hauptstraße" passt auch zu gesprochenem "haupt straße"
+      const stamm = k.replace(/(?:strasse|str|weg|platz|gasse|allee|ring)$/, '');
+      if (joined.includes(k)) score += k.length;
+      else if (stamm.length >= 4 && joined.includes(stamm)) score += stamm.length;
+    }
+    const sw = funkNorm(inc.stichwort);
+    if (sw && new RegExp(`(?:^|\\s)${sw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*')}(?:\\s|$)`).test(text)) score += 3;
+    if (score > bestScore) {
+      best = inc;
+      bestScore = score;
+      tie = false;
+    } else if (score && score === bestScore) tie = true;
+  }
+  if (bestScore === 0) return incidents.length === 1 ? incidents[0] : undefined;
+  return tie ? undefined : best;
+}

@@ -670,7 +670,7 @@ export function MapView(props: Props) {
         ctx.font = 'bold 10px "Segoe UI", sans-serif';
         const tw = ctx.measureText(text).width + 16;
         const sel = p.data?.selectedUnitId === u.id || p.data?.highlightUnitIds?.includes(u.id);
-        const blink = u.status === 5 && pulse > 0.5;
+        const blink = (u.status === 5 || u.status === 0) && pulse > 0.5;
         ctx.fillStyle = blink ? '#ffffff' : FMS_COLOR[u.status] ?? '#333';
         roundRect(ctx, x - tw / 2, y - 8, tw, 16, 4);
         ctx.fill();

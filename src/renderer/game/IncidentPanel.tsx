@@ -9,35 +9,68 @@ import { conn } from '../net';
 import type { GameCtx } from './GameScreen';
 import { TerminListe, TerminZeile, istGeplant } from './TerminListe';
 import { S8Tag } from './S8Tag';
+import { Einsatzarchiv } from './Einsatzarchiv';
 
-const HIDE_DONE_KEY = 'lst.hideDoneIncidents';
+const HIDE_DONE_KEY = 'lst.hideDoneAfter';
+const HIDE_DONE_OLD_KEY = 'lst.hideDoneIncidents';
+/** Abgeschlossene Einsätze: nie, sofort oder nach so vielen Minuten ausblenden (der Server archiviert sie nach 10 min) */
+type HideDone = 'nie' | '0' | '2' | '5';
+const HIDE_DONE_LABEL: Record<HideDone, string> = {
+  nie: 'Abgeschl. zeigen',
+  '0': 'Abgeschl. ausblenden',
+  '2': 'Abgeschl. nach 2 min aus',
+  '5': 'Abgeschl. nach 5 min aus',
+};
+/** Dispositionszeit ab Notrufannahme: ab 90 s gelb, ab 180 s rot (wie die Wertung der Alarmierung) */
+const DISPO_WARN_S = 90;
+const DISPO_ALARM_S = 180;
+const BADGE_TEXT: Partial<Record<IncidentState['status'], string>> = { abgeschlossen: 'abgeschl.' };
+
+function loadHideDone(): HideDone {
+  try {
+    const v = localStorage.getItem(HIDE_DONE_KEY);
+    if (v && v in HIDE_DONE_LABEL) return v as HideDone;
+    return localStorage.getItem(HIDE_DONE_OLD_KEY) === '1' ? '0' : 'nie';
+  } catch {
+    return 'nie';
+  }
+}
+
+/** Noch nicht alarmierter Einsatz über der Dispositionszeit (Terminfahrten ausgenommen, wieder eröffnete ab dem Wiedereröffnen) */
+function dispoVerzug(state: GameCtx['state'], i: IncidentState) {
+  if (i.status !== 'offen' || i.termin !== undefined) return undefined;
+  if (i.alarmedAt !== undefined && i.wiedereroeffnetAt === undefined) return undefined;
+  const call = i.callId ? state.calls.find((c) => c.id === i.callId) : undefined;
+  const sec = (state.time - (i.wiedereroeffnetAt ?? call?.answeredAt ?? i.createdAt)) / 1000;
+  if (sec < DISPO_WARN_S) return undefined;
+  return { sec, cls: sec >= DISPO_ALARM_S ? 'dispo-alarm' : 'dispo-warn' };
+}
 
 export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
   const { state } = ctx;
   // Noch nicht disponierte Terminfahrten stehen getrennt in der Terminliste
   const geplant = state.incidents.filter(istGeplant).length;
   // Abgeschlossene Einsätze ausblenden (Einstellung bleibt gespeichert, gilt auch im ausgelagerten Fenster)
-  const [hideDone, setHideDone] = useState(() => {
+  const [hideDone, setHideDoneState] = useState(loadHideDone);
+  const setHideDone = (v: HideDone) => {
+    setHideDoneState(v);
     try {
-      return localStorage.getItem(HIDE_DONE_KEY) === '1';
-    } catch {
-      return false;
-    }
-  });
-  const toggleHideDone = () => {
-    const n = !hideDone;
-    setHideDone(n);
-    try {
-      localStorage.setItem(HIDE_DONE_KEY, n ? '1' : '0');
+      localStorage.setItem(HIDE_DONE_KEY, v);
     } catch {
       /* egal */
     }
   };
-  const doneCount = state.incidents.filter((i) => i.status === 'abgeschlossen').length;
-  const list = [...state.incidents]
-    .filter((i) => !istGeplant(i))
+  const [archivOffen, setArchivOffen] = useState(false);
+  const versteckt = (i: IncidentState) =>
+    hideDone !== 'nie' &&
+    i.status === 'abgeschlossen' &&
     // der gerade gewählte Einsatz bleibt sichtbar, auch wenn er abgeschlossen ist
-    .filter((i) => !hideDone || i.status !== 'abgeschlossen' || i.id === ctx.selectedIncident)
+    i.id !== ctx.selectedIncident &&
+    state.time - (i.closedAt ?? 0) >= Number(hideDone) * 60_000;
+  const hiddenCount = state.incidents.filter(versteckt).length;
+  const archivCount = state.incidents.filter((i) => i.status === 'abgeschlossen').length + (state.archiv?.length ?? 0);
+  const list = [...state.incidents]
+    .filter((i) => !istGeplant(i) && !versteckt(i))
     .sort((a, b) => {
       const order = { offen: 0, alarmiert: 1, laufend: 2, abgeschlossen: 3 };
       return order[a.status] - order[b.status] || b.createdAt - a.createdAt;
@@ -60,23 +93,38 @@ export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
   return (
     <div className="panel incidents">
       <div className="panel-title">
-        <span>
+        <span className="incidents-title">
           Einsätze ({state.incidents.filter((i) => i.status !== 'abgeschlossen' && !istGeplant(i)).length} aktiv
           {geplant > 0 ? `, ${geplant} ${geplant === 1 ? 'Terminfahrt' : 'Terminfahrten'}` : ''}
           {covers.length > 0 ? `, ${covers.length} ${covers.length === 1 ? 'Gebietsabsicherung' : 'Gebietsabsicherungen'}` : ''})
         </span>
-        <button
-          className={`small-btn hide-done ${hideDone ? 'on' : ''}`}
-          title={hideDone ? 'Abgeschlossene Einsätze wieder anzeigen' : 'Abgeschlossene Einsätze in der Liste ausblenden'}
-          onClick={toggleHideDone}
-        >
-          {hideDone ? `${doneCount} abgeschlossene ausgeblendet` : 'Abgeschlossene ausblenden'}
-        </button>
+        <span className="row list-tools">
+          <select
+            className={`hide-done ${hideDone !== 'nie' ? 'on' : ''}`}
+            title={`Abgeschlossene Einsätze in der Liste ausblenden${hiddenCount ? ` (${hiddenCount} ausgeblendet)` : ''}`}
+            value={hideDone}
+            onChange={(e) => setHideDone(e.target.value as HideDone)}
+          >
+            {(Object.keys(HIDE_DONE_LABEL) as HideDone[]).map((k) => (
+              <option key={k} value={k}>
+                {HIDE_DONE_LABEL[k]}
+              </option>
+            ))}
+          </select>
+          <button
+            className={`small-btn archiv-btn ${archivOffen ? 'on' : ''}`}
+            title="Einsatzarchiv: abgeschlossene Einsätze suchen und wieder eröffnen"
+            onClick={() => setArchivOffen(!archivOffen)}
+          >
+            Archiv ({archivCount})
+          </button>
+        </span>
       </div>
+      {archivOffen && <Einsatzarchiv ctx={ctx} onClose={() => setArchivOffen(false)} />}
       <div className="incident-list">
         <TerminListe ctx={ctx} />
         {list.length === 0 && !covers.length && !geplant && (
-          <div className="muted small pad">{hideDone && doneCount > 0 ? 'Keine offenen Einsätze.' : 'Keine Einsätze.'}</div>
+          <div className="muted small pad">{hiddenCount > 0 ? 'Keine offenen Einsätze.' : 'Keine Einsätze.'}</div>
         )}
         {covers.map((c) => (
           <div
@@ -119,21 +167,28 @@ export function IncidentPanel({ ctx }: { ctx: GameCtx }) {
         {list.map((i) => (
           <div
             key={i.id}
-            className={`incident-row ${i.status} ${i.id === ctx.selectedIncident ? 'selected' : ''}`}
+            className={`incident-row ${i.status} ${dispoVerzug(state, i)?.cls ?? ''} ${i.id === ctx.selectedIncident ? 'selected' : ''}`}
+            title={dispoVerzug(state, i) && `Noch nicht alarmiert: ${Math.floor(dispoVerzug(state, i)!.sec)} s seit Notrufannahme`}
             onClick={() => {
               ctx.setSelectedIncident(i.id);
               ctx.focus(i);
             }}
           >
-            <span className={`badge ${i.status}`}>{i.status}</span>
+            <span className={`badge ${i.status}`} title={i.status}>
+              {BADGE_TEXT[i.status] ?? i.status}
+            </span>
             <span className="inc-sw">
               <b>{i.stichwort}</b>
               {findSchlagwort(i.schlagwort) && <span className="muted small">{findSchlagwort(i.schlagwort)!.kat}</span>}
             </span>
             <span className="addr">{i.address}</span>
-            <span className="muted small">
-              {i.unitIds.length} Fz · {formatDuration(state.time - i.createdAt)}
-            </span>
+            {dispoVerzug(state, i) ? (
+              <span className="small dispo-zeit">⚠ {formatDuration(dispoVerzug(state, i)!.sec * 1000)} ohne Alarm</span>
+            ) : (
+              <span className="muted small">
+                {i.unitIds.length} Fz · {formatDuration(state.time - i.createdAt)}
+              </span>
+            )}
           </div>
         ))}
       </div>
@@ -350,6 +405,19 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
             </button>
           </div>
         </>
+      )}
+
+      {inc.status === 'abgeschlossen' && (
+        <div className="row">
+          <button
+            title="Einsatz wieder eröffnen, z. B. zur Nachalarmierung"
+            onClick={() => {
+              if (confirm(`Einsatz ${inc.nr} wieder eröffnen?`)) conn.send({ a: 'reopenIncident', incidentId: inc.id });
+            }}
+          >
+            Wiedereröffnen
+          </button>
+        </div>
       )}
 
       {((scn.nachbarn ?? []).length > 0 || (inc.eswl ?? []).length > 0) && <EswlBox ctx={ctx} inc={inc} />}

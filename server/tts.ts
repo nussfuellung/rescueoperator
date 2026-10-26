@@ -3,6 +3,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { piperText } from '../shared/aussprache';
 
 export interface Stimme {
   id: string;
@@ -21,10 +22,10 @@ const NAMEN: Record<string, [string, 'm' | 'w']> = {
   pavoque: ['Pavoque', 'm'],
 };
 
-const PLATFORM = `${process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux'}-${process.arch}`;
+export const PLATFORM = `${process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux'}-${process.arch}`;
 
 /** Sucht einen Ordner ab den Startpunkten aufwärts (Entwicklung, entpacktes Programm, macOS-App) */
-function findUp(starts: string[], rel: string, depth = 6): string | undefined {
+export function findUp(starts: string[], rel: string, depth = 6): string | undefined {
   for (const s of starts) {
     let d = s;
     for (let i = 0; i <= depth; i++) {
@@ -86,7 +87,7 @@ export class Piper {
   async synth(text: string, stimme: string, tempo = 1): Promise<Buffer> {
     const v = this.stimmen.find((s) => s.id === stimme) ?? this.stimmen[0];
     if (!this.exe || !v) throw new Error('Piper nicht verfügbar');
-    const clean = text.replace(/\s+/g, ' ').trim().slice(0, 600);
+    const clean = piperText(text.replace(/\s+/g, ' ').trim()).slice(0, 600);
     const key = `${v.id}|${tempo}|${clean}`;
     const hit = this.cache.get(key);
     if (hit) return hit;
