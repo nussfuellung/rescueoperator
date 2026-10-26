@@ -134,6 +134,7 @@ export class GameServer {
   stop(): Promise<void> {
     this.timers.forEach(clearInterval);
     this.timers = [];
+    this.piper?.stop();
     for (const ws of this.clients.keys()) ws.close();
     return new Promise((resolve) => {
       this.wss?.close();
