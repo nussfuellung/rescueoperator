@@ -142,7 +142,9 @@ const FUGEN = [
   'stelle', 'stoff', 'stich', 'hilfe', 'spur', 'arzt', 'bild', 'heim', 'fall',
 ];
 /** Wortanfänge, die espeak-ng schon richtig liest oder die durch die Trennung falsch würden */
-const NICHT_TRENNEN = ['notarzt', 'verunfall', 'erstversorgung'];
+const NICHT_TRENNEN = ['notarzt', 'erstversorgung', 'leitstelle'];
+/** Vorsilben, nach denen nicht getrennt wird ("ver-unfallt" würde espeak-ng mit langem e lesen) */
+const VORSILBEN = ['ver', 'zer', 'ent'];
 const FUGE = new RegExp(`(?<=[${L}]{3})(?<![Gg]e(?=fall))(${FUGEN.join('|')})(?=[a-zäöüß]*(?![${L}]))`, 'gi');
 
 /** Ganze Wörter oder Wortanfänge, die espeak-ng falsch betont oder liest, in Lautschreibung */
@@ -152,6 +154,8 @@ const PIPER_WOERTER: [RegExp, string][] = [
   [wort('Malteser'), 'Malltéeser'],
   [wort('Samariter'), 'Sama-riter'],
   [wort('Hemiparese'), 'Hemipa-rese'],
+  // Zu kurz für die Wortfugen-Regel
+  [wort('Ölspur(en)?'), 'Öl-spur$1'],
   [wort('Stroke Unit'), 'Strook Junit'],
   [/(?<![A-Za-zÄÖÜäöüß])([Aa])llgemein/g, '$1ll-gemein'],
   [/(?<![A-Za-zÄÖÜäöüß])([Aa])tem(?=[a-zäöüß]{3})/g, '$1tem-'],
@@ -168,6 +172,40 @@ export function piperText(text: string): string {
     if (all[off - 1] === '-') return teil;
     const start = all.slice(0, off).search(new RegExp(`[${L}]+$`));
     const w = all.slice(start).toLowerCase();
+    if (VORSILBEN.includes(all.slice(start, off).toLowerCase())) return teil;
     return NICHT_TRENNEN.some((n) => w.startsWith(n)) ? teil : `-${teil}`;
   });
+}
+
+// ---------- Gefühlslage der Anrufer für thorsten_emotional ----------
+
+/** Gefühlslage je Anrufer: wer panisch anfängt, behält bis zum Gesprächsende die emotionale Stimme */
+const stilJeSprecher = new Map<string, string>();
+const PANISCH = /schreit|weint|schluchzt|stockend|hektisch|aufgelöst|panisch/i;
+const BERUHIGT = /ruhiger|tief durch/i;
+/** Regieanweisung -> Stil von thorsten_emotional */
+const STILE: [RegExp, string][] = [
+  [/flüstert/i, 'whisper'],
+  [/lallt|betrunken/i, 'drunk'],
+  [/aufgebracht|wütend|brüllt|schimpft/i, 'angry'],
+  [PANISCH, 'surprised'],
+];
+const stilAus = (regie: string) => STILE.find(([re]) => re.test(regie))?.[1];
+
+/** Sprechstil aus den Regieanweisungen eines Anrufersatzes ("(schreit) …", "(atmet tief durch) …") */
+export function stilFuer(speaker: string, roh: string): string | undefined {
+  const regie = (roh.match(/\([^)]*\)/g) ?? []).join(' ');
+  const bisher = stilJeSprecher.get(speaker);
+  // Nur wer schon im ersten Satz panisch ist, wechselt die Stimme; später bliebe sie sonst nicht dieselbe
+  if (bisher === undefined) {
+    stilJeSprecher.set(speaker, stilAus(regie) ?? '');
+    return stilJeSprecher.get(speaker) || undefined;
+  }
+  if (!bisher) return undefined;
+  if (BERUHIGT.test(regie)) stilJeSprecher.set(speaker, 'neutral');
+  else {
+    const neu = stilAus(regie);
+    if (neu) stilJeSprecher.set(speaker, neu);
+  }
+  return stilJeSprecher.get(speaker);
 }

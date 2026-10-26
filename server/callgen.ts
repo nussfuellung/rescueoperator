@@ -5,6 +5,7 @@ import { FACH_VORLAGEN } from './vorlagen-fach';
 import { VERLEGUNG_VORLAGEN } from './vorlagen-verlegung';
 import { TERMIN_VORLAGEN } from './vorlagen-termin';
 import { POLIZEI_VORLAGEN } from './vorlagen-polizei';
+import { STIMMUNG_VORLAGEN } from './vorlagen-stimmung';
 
 /** klinik: Abholung in einem Krankenhaus (Verlegung, Entlassung) */
 export type LocationKind = 'wohnung' | 'strasse' | 'ausserorts' | 'objekt' | 'autobahn' | 'klinik' | 'keine';
@@ -44,6 +45,8 @@ export interface IncidentTemplate {
   sex?: 'm' | 'w';
   /** Notfallverlegung: Abholung in einer Klinik ohne den Fachbereich des Patienten, Ziel ist die nächste geeignete Klinik */
   verlegung?: boolean;
+  /** Hörbare Gefühlslage des Anrufers, steht als Regieanweisung vor jedem seiner Sätze (für die Sprachausgabe) */
+  stimmung?: 'flüstert' | 'lallt' | 'aufgebracht';
   /** Terminfahrt über die 19222: gewünschte Abholzeit so viele Minuten nach dem Anruf (von, bis) */
   termin?: [number, number];
 }
@@ -62,7 +65,27 @@ export interface CallerFacts {
   vorerkrankung: string;
 }
 
+/** Vornamen abwechselnd weiblich (gerade Stelle) und männlich (ungerade Stelle) */
 export const FIRST_NAMES = ['Anna', 'Josef', 'Maria', 'Thomas', 'Sabine', 'Michael', 'Stefanie', 'Franz', 'Katharina', 'Andreas', 'Monika', 'Florian', 'Theresa', 'Sebastian', 'Lena', 'Georg'];
+/** Geschlecht des Anrufers aus seinem ersten Satz ("mein Mann" spricht eine Frau); sonst unbekannt */
+export function anruferAusText(text: string): 'm' | 'w' | undefined {
+  if (/\bmein(em)? (Ehe)?mann\b/i.test(text)) return 'w';
+  if (/\bmeine[r]? (Ehe)?frau\b/i.test(text)) return 'm';
+  return undefined;
+}
+
+/** Vorname passend zum Geschlecht: in FIRST_NAMES steht der Partnername direkt daneben */
+export function vornameFuer(vorname: string, sex: 'm' | 'w'): string {
+  const i = FIRST_NAMES.indexOf(vorname);
+  if (i < 0 || (i % 2 === 0 ? 'w' : 'm') === sex) return vorname;
+  return FIRST_NAMES[i ^ 1];
+}
+
+export function geschlechtVon(vorname: string): 'm' | 'w' | undefined {
+  const i = FIRST_NAMES.indexOf(vorname);
+  return i < 0 ? undefined : i % 2 === 0 ? 'w' : 'm';
+}
+
 export const LAST_NAMES = ['Huber', 'Maier', 'Gruber', 'Bauer', 'Wimmer', 'Schmid', 'Hofmann', 'Brunner', 'Wagner', 'Fischer', 'Eder', 'Moser', 'Lechner', 'Steiner', 'Reiter', 'Kraus'];
 
 export const TEMPLATES: IncidentTemplate[] = [
@@ -1094,6 +1117,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   ...VERLEGUNG_VORLAGEN,
   ...TERMIN_VORLAGEN,
   ...POLIZEI_VORLAGEN,
+  ...STIMMUNG_VORLAGEN,
 ];
 
 /** Meldebilder, mit denen die KVB (116117) einen Einsatz an die ILS übergibt */

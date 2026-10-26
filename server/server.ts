@@ -83,7 +83,8 @@ export class GameServer {
       return;
     }
     try {
-      const wav = await this.piper.synth(text, url.searchParams.get('stimme') ?? '', Math.max(0.6, Math.min(1.6, Number(url.searchParams.get('tempo')) || 1)));
+      const tempo = Math.max(0.6, Math.min(1.6, Number(url.searchParams.get('tempo')) || 1));
+      const wav = await this.piper.synth(text, url.searchParams.get('stimme') ?? '', tempo, url.searchParams.get('stil') ?? undefined);
       res.writeHead(200, { ...head, 'content-type': 'audio/wav', 'content-length': wav.length });
       res.end(wav);
     } catch {
