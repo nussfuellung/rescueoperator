@@ -102,6 +102,14 @@ export function pzcText(pzc: string): string {
   return `${d.eintrag?.text ?? 'unbekannter Code'}, ${alter}, ${DRINGLICHKEIT[d.dringlichkeit]}`;
 }
 
+/** Rückmeldeindikationen, nach denen das Transportmittel vor dem nächsten Einsatz desinfiziert werden muss */
+const INFEKT_CODES = ['371', '372', '375', '376', '377', '378'];
+
+/** Infektionstransport: Fahrzeug muss nach der Übergabe zur Desinfektion */
+export function infektionstransport(pzc?: string): boolean {
+  return !!pzc && INFEKT_CODES.includes(pzc.replace(/\s/g, '').slice(0, 3));
+}
+
 /** PZC zu einer Patientenbeschreibung des Simulators (erste passende Regel) */
 const REGELN: [RegExp, string, 1 | 2 | 3][] = [
   // Geplante Transporte (Terminfahrten) vor den Krankheitsbildern, "Herzkatheter" sonst als Urologie
@@ -109,6 +117,11 @@ const REGELN: [RegExp, string, 1 | 2 | 3][] = [
   [/geplante[nmr]? ct\b/i, '604', 3],
   [/geplante[nmrs]? mrt\b/i, '605', 3],
   [/ambulante[nmr]? (termin|kontrolle|untersuchung)/i, '601', 3],
+  // Infektionen vor den Krankheitsbildern, "Liegendtransport, Noro" ist ein Infektionstransport
+  [/meningitis|meningokokken/i, '371', 1],
+  [/tuberkulose|\btbc\b/i, '372', 2],
+  [/covid|corona|sars-cov/i, '376', 2],
+  [/noro|clostridi|mrsa|mrgn|multiresistent|isolationspflichtig/i, '378', 2],
   [/reanimation|rosc/i, '132', 1],
   [/schlaganfall|stroke/i, '421', 1],
   [/stemi|herzinfarkt/i, '332', 1],
