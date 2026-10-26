@@ -1,4 +1,5 @@
 // Sprachausgabe mit Warteschlange: Piper-Stimmen vom Spielserver, Browser-Stimmen (Web Speech) oder Systemstimme über Electron.
+import { sprechText } from '../../../shared/aussprache';
 import { conn } from '../net';
 import { getSettings } from '../settings';
 import { audio, isMuted } from '../sound';
@@ -271,7 +272,7 @@ export function lastTtsResult() {
 export function say(text: string, voice: Voice = 'radio', force = false, speaker?: string) {
   const s = getSettings();
   if (!force && (!s.ttsEnabled || isMuted())) return;
-  const clean = text.replace(/\s+/g, ' ').trim();
+  const clean = sprechText(text.replace(/\s+/g, ' ').trim());
   if (!clean) return;
   // Bei Rückstau alte Funksprüche verwerfen, damit die Ausgabe aktuell bleibt
   if (queue.length > 4) queue.splice(0, queue.length - 4);
