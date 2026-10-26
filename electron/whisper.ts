@@ -81,7 +81,8 @@ export function removeWhisper(m: WhisperModell) {
   return whisperInfo();
 }
 
-let server: { proc: ChildProcess; port: number; modell: WhisperModell; ready: Promise<void> } | null = null;
+type Server = { proc: ChildProcess; port: number; modell: WhisperModell; ready: Promise<void> };
+let server: Server | null = null;
 
 function freierPort() {
   return new Promise<number>((resolve, reject) => {
@@ -94,8 +95,20 @@ function freierPort() {
   });
 }
 
-async function starte(m: WhisperModell) {
-  if (server?.modell === m && server.proc.exitCode === null) return server;
+/** Start, der gerade läuft: Vorabstart und erste Äußerung kommen oft gleichzeitig und sollen sich keinen zweiten Server starten */
+let startet: { modell: WhisperModell; s: Promise<Server> } | null = null;
+
+function starte(m: WhisperModell) {
+  if (server?.modell === m && server.proc.exitCode === null) return Promise.resolve(server);
+  if (startet?.modell === m) return startet.s;
+  const s = neuStarten(m).finally(() => {
+    if (startet?.s === s) startet = null;
+  });
+  startet = { modell: m, s };
+  return s;
+}
+
+async function neuStarten(m: WhisperModell): Promise<Server> {
   stopWhisper();
   const bin = whisperExe();
   if (!bin) throw new Error('whisper-server fehlt in dieser Installation');
@@ -106,9 +119,13 @@ async function starte(m: WhisperModell) {
     stdio: 'ignore',
     windowsHide: true,
   });
+  // Ohne Handler würde ein Startfehler (z. B. fehlende Ausführungsrechte) den Hauptprozess beenden
+  let fehler: Error | undefined;
+  proc.once('error', (e) => (fehler = e));
   const ready = (async () => {
     const bis = Date.now() + 60000;
     while (Date.now() < bis) {
+      if (fehler) throw new Error(`whisper-server startet nicht: ${fehler.message}`);
       if (proc.exitCode !== null) throw new Error(`whisper-server beendet (Code ${proc.exitCode})`);
       try {
         if ((await fetch(`http://127.0.0.1:${port}/`)).ok) return;
@@ -123,6 +140,10 @@ async function starte(m: WhisperModell) {
   server = s;
   proc.once('exit', () => {
     if (server === s) server = null;
+  });
+  // Startet er nicht, beim nächsten Versuch neu anfangen statt auf den hängenden Prozess zu warten
+  ready.catch(() => {
+    if (server === s) stopWhisper();
   });
   return s;
 }
