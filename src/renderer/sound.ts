@@ -52,6 +52,11 @@ export function beep() {
   tone(900, 0.16, 0.12, 0.06);
 }
 
+/** Schneller Dreifachton für Status 0 / priorisierter Sprechwunsch */
+export function prioTone() {
+  for (let i = 0; i < 3; i++) tone(1400, i * 0.14, 0.09, 0.08);
+}
+
 /** Alarmton bei BMA */
 export function alarmTone() {
   tone(880, 0, 0.25, 0.07);

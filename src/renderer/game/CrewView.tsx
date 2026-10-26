@@ -8,13 +8,13 @@ import type { GameCtx } from './GameScreen';
 import { useSpeechTarget } from '../audio/stt';
 import { MicButton } from '../audio/SpeechUi';
 
-const KEYS: FmsStatus[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+const KEYS: FmsStatus[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
 
-const NUMBER_WORDS: Record<string, FmsStatus> = { eins: 1, zwei: 2, drei: 3, vier: 4, fünf: 5, sechs: 6, sieben: 7, acht: 8, neun: 9 };
+const NUMBER_WORDS: Record<string, FmsStatus> = { null: 0, eins: 1, zwei: 2, drei: 3, vier: 4, fünf: 5, sechs: 6, sieben: 7, acht: 8, neun: 9 };
 
 /** Erkennt "Status vier" oder "Status 4" als reine Statusmeldung */
 export function spokenStatus(text: string): FmsStatus | null {
-  const m = text.toLowerCase().trim().match(/^(?:status|staatus)\s+(\d|eins|zwei|drei|vier|fünf|sechs|sieben|acht|neun)$/);
+  const m = text.toLowerCase().trim().match(/^(?:status|staatus)\s+(\d|null|eins|zwei|drei|vier|fünf|sechs|sieben|acht|neun)$/);
   if (!m) return null;
   return (NUMBER_WORDS[m[1]] ?? Number(m[1])) as FmsStatus;
 }
@@ -32,7 +32,7 @@ export function CrewView({ ctx }: { ctx: GameCtx }) {
     u
       ? (spoken) => {
           const st = spokenStatus(spoken);
-          if (st) conn.send({ a: 'crewStatus', status: st });
+          if (st !== null) conn.send({ a: 'crewStatus', status: st });
           else conn.send({ a: 'crewRadio', text: spoken });
         }
       : null,

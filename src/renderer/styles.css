@@ -789,6 +789,21 @@ table.lib td.right button {
 .radio-line.system {
   color: var(--alert-text);
 }
+/* Status 0: priorisierter Sprechwunsch, rot hervorgehoben */
+.radio-line.prio {
+  color: #fff;
+  background: var(--danger);
+  font-weight: bold;
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+.speak-row.prio {
+  color: var(--danger);
+  font-weight: bold;
+}
+.speak-row.prio .blink-dot {
+  animation-duration: 0.4s;
+}
 
 /* Fahrzeugtableau */
 .unitboard {
@@ -867,6 +882,10 @@ table.lib td.right button {
 }
 .tile.speak {
   animation: blink 0.8s infinite;
+}
+.tile.speak.prio {
+  animation-duration: 0.4s;
+  outline: 2px solid var(--danger);
 }
 
 /* Modale */

@@ -269,6 +269,8 @@ export interface SpeakRequest {
   answered: boolean;
   /** Rufgruppe, in der die Meldung gesprochen wird (Standard: aktuelle Rufgruppe des Fahrzeugs) */
   group?: string;
+  /** Status 0: priorisierter (dringender) Sprechwunsch, geht in der Warteschlange vor */
+  prio?: boolean;
 }
 
 export interface UnitState {
