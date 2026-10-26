@@ -306,3 +306,24 @@ describe('Status 0', () => {
     expect(game.radio.some((m) => m.from === b.callsign && /bedroht/.test(m.text))).toBe(true);
   });
 });
+
+describe('Sprechwunsch und Abbruch auf der Wache', () => {
+  it('alarmiertes Fahrzeug mit offenem Sprechwunsch bleibt beim Abbruch auf der Wache', () => {
+    const scn = generateScenario({ seed: 4711, towns: 8 });
+    scn.settings.callsPerHour = 0;
+    scn.settings.bmaPerHour = 0;
+    const game = new Game(scn, { seed: 7 });
+    const dp = game.addPlayer('Disponent', 'dispatcher');
+    game.handle(dp.id, { a: 'start' });
+    const t = scn.towns[1];
+    game.handle(dp.id, { a: 'createIncident', stichwort: 'RD 1', address: `Hauptstraße 5, ${t.name}`, x: t.x, y: t.y, note: '', patients: 0 });
+    const inc = game.incidents[0];
+    const u = game.units.find((x) => x.type === 'RTW' && x.status === 2)!;
+    game.handle(dp.id, { a: 'alarm', incidentId: inc.id, unitIds: [u.id] });
+    (game as unknown as { requestSpeak: (u: unknown, k: string, t: string, g?: string, p?: boolean) => void }).requestSpeak(u, 'info', 'Wir werden bedroht.', undefined, true);
+    expect(u.status).toBe(0);
+    game.handle(dp.id, { a: 'releaseUnit', unitId: u.id });
+    expect(u.task).toBe('station');
+    expect(u.status).toBe(2);
+  });
+});

@@ -1765,7 +1765,8 @@ export class Game {
     u.speak = undefined;
     u.hint = undefined;
     if (inc?.tmo && u.tmo === inc.tmo) u.tmo = this.station(u).tmo;
-    if (u.task === 'alarmed' && u.status === 2) {
+    // Noch auf der Wache: auch mit offenem Sprechwunsch (Status 5/0) zählt der Status dahinter
+    if (u.task === 'alarmed' && (sprechStatus(u.status) ? u.baseStatus : u.status) === 2) {
       u.task = 'station';
       u.baseStatus = 2;
       u.status = 2;
