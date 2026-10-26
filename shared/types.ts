@@ -110,6 +110,8 @@ export interface Hospital {
   x: number;
   y: number;
   specialties: string[];
+  /** Klinik außerhalb der Karte: Fahrzeit vom Kartenrand bis zur Klinik in Minuten (je Richtung) */
+  ausserhalbMin?: number;
 }
 
 export interface MapObject {
@@ -269,6 +271,8 @@ export interface SpeakRequest {
   answered: boolean;
   /** Rufgruppe, in der die Meldung gesprochen wird (Standard: aktuelle Rufgruppe des Fahrzeugs) */
   group?: string;
+  /** Status 0: priorisierter (dringender) Sprechwunsch, geht in der Warteschlange vor */
+  prio?: boolean;
 }
 
 export interface UnitState {
@@ -309,6 +313,10 @@ export interface UnitState {
   desinfektion?: { bis?: number };
   /** Über die ESWL von einer Nachbar-ILS entsandt: gehört nicht zum eigenen Bereich und fährt danach heim */
   fremd?: { nachbarId: string; ils: string; wache: string; imBereich: boolean };
+  /** Tracerdiagnose: Voranmeldung in der Zielklinik (Schockraum, Herzkatheterlabor, Stroke Unit); t = erfolgt um */
+  voranmeldung?: { art: string; hospitalId: string; t?: number };
+  /** Verlegung: zwischen den Ärzten vereinbarte Zielklinik */
+  verlegungNach?: string;
 }
 
 export interface CallLine {
@@ -405,6 +413,9 @@ export interface IncidentState {
   firstArrival?: number;
   alarmedAt?: number;
   closedAt?: number;
+  /** Wie oft der Einsatz nach dem Abschluss wieder eröffnet wurde */
+  wiedereroeffnet?: number;
+  wiedereroeffnetAt?: number;
   /** Zusatz zum Einsatzort, z. B. Stockwerk, Hinterhaus */
   zusatz?: string;
   objekt?: string;
@@ -465,6 +476,19 @@ export interface ScoreBoard {
   events: { t: number; text: string; points: number }[];
 }
 
+export interface ArchivEintrag {
+  id: string;
+  nr: string;
+  stichwort: string;
+  label: string;
+  schlagwort?: string;
+  address: string;
+  x: number;
+  y: number;
+  createdAt: number;
+  closedAt?: number;
+}
+
 export interface PublicState {
   running: boolean;
   started: boolean;
@@ -480,6 +504,8 @@ export interface PublicState {
   players: Player[];
   calls: CallState[];
   incidents: IncidentState[];
+  /** Abgeschlossene Einsätze, die schon aus der Einsatzliste gefallen sind (nur Eckdaten, neueste zuletzt) */
+  archiv?: ArchivEintrag[];
   units: UnitState[];
   radio: RadioMessage[];
   score: ScoreBoard;
@@ -498,7 +524,9 @@ export interface IvenaAbmeldung {
 export interface IvenaState {
   /** seit: Zeitpunkt der Abmeldung (Spielzeit), bis: voraussichtliches Ende */
   abmeldungen: IvenaAbmeldung[];
-  zuweisungen: { t: number; hospitalId: string; callsign: string; pzc?: string; nr?: string; trotzAbmeldung?: boolean }[];
+  zuweisungen: { t: number; hospitalId: string; callsign: string; pzc?: string; nr?: string; trotzAbmeldung?: boolean; aufnahmepflicht?: boolean }[];
+  /** Geschätzte Übergabedauer in der Notaufnahme je Klinik in Minuten */
+  wartezeit?: Record<string, number>;
 }
 
 export type WetterArt = 'gewitter' | 'sturm' | 'starkregen' | 'glatteis' | 'schnee' | 'hitze';

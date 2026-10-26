@@ -584,13 +584,82 @@ table.lib td.right button {
 .incident-row.abgeschlossen {
   opacity: 0.5;
 }
-.panel-title .hide-done {
-  font-weight: normal;
+.panel-title .incidents-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.panel-title .hide-done.on {
+.panel-title .list-tools {
+  margin: 0;
+  font-weight: normal;
+  white-space: nowrap;
+  min-width: 0;
+}
+.panel-title .hide-done {
+  font-size: 11px;
+  padding: 1px 4px;
+  max-width: 150px;
+}
+.panel-title .hide-done.on,
+.panel-title .archiv-btn.on {
   border-color: var(--accent);
   color: var(--accent);
+}
+/* Noch nicht alarmiert: Dispositionszeit überschritten */
+.incident-row.dispo-warn {
+  background: var(--warn-bg);
+}
+.incident-row.dispo-alarm {
+  background: var(--danger-bg);
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+.incident-row .dispo-zeit {
+  color: var(--accent);
+  white-space: nowrap;
+}
+.incident-row.dispo-alarm .dispo-zeit {
+  color: var(--alert-text);
+  animation: blink 1.6s infinite;
+}
+/* Einsatzarchiv */
+.einsatzarchiv {
+  display: flex;
+  flex-direction: column;
+  max-height: 45%;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel2);
+}
+.einsatzarchiv .archiv-head {
+  margin: 0;
+  padding: 6px 8px;
+}
+.einsatzarchiv .archiv-list {
+  overflow: auto;
+}
+.archiv-row {
+  display: grid;
+  grid-template-columns: 76px 1fr 1fr auto;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 8px;
+  border-top: 1px solid var(--line-soft);
+  cursor: pointer;
+}
+.archiv-row:hover {
+  background: var(--hover);
+}
+.archiv-row.selected {
+  background: var(--selected);
+}
+.archiv-row .row {
+  margin: 0;
+}
+.archiv-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .incident-row .inc-sw {
   display: flex;
@@ -614,6 +683,9 @@ table.lib td.right button {
   padding: 1px 4px;
   border-radius: 3px;
   text-align: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   background: #333;
   color: #fff;
 }
@@ -789,6 +861,21 @@ table.lib td.right button {
 .radio-line.system {
   color: var(--alert-text);
 }
+/* Status 0: priorisierter Sprechwunsch, rot hervorgehoben */
+.radio-line.prio {
+  color: #fff;
+  background: var(--danger);
+  font-weight: bold;
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+.speak-row.prio {
+  color: var(--danger);
+  font-weight: bold;
+}
+.speak-row.prio .blink-dot {
+  animation-duration: 0.4s;
+}
 
 /* Fahrzeugtableau */
 .unitboard {
@@ -867,6 +954,10 @@ table.lib td.right button {
 }
 .tile.speak {
   animation: blink 0.8s infinite;
+}
+.tile.speak.prio {
+  animation-duration: 0.4s;
+  outline: 2px solid var(--danger);
 }
 
 /* Modale */
@@ -2616,4 +2707,21 @@ button.gross {
   border: 1px solid var(--warn-line, currentColor);
   color: var(--warn-text, inherit);
   white-space: nowrap;
+}
+
+/* IVENA: Voranmeldung von Tracerdiagnosen */
+.ivena-voran {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+}
+.ok-text {
+  color: var(--ok);
+}
+.ivena-kliniken > div {
+  flex-basis: 100%;
 }
