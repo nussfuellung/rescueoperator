@@ -31,7 +31,7 @@ import { ensureTmo } from '../shared/fleet';
 import { findeEinsatz, findeKlinik, findeRufgruppe, istFrage, istQuittung, zerlegeFunkspruch } from '../shared/funkspruch';
 import { inDienst } from '../shared/lstsim';
 import { HAEUFIGKEIT_STUNDEN, dateForSeason, seasonOf, tageszeitFaktor, type Haeufigkeit, type Season } from '../shared/jahreszeit';
-import { infektionstransport, pzcFachbereich, pzcFuer, pzcSprech, zielFach } from '../shared/pzc';
+import { decodePzc, infektionstransport, pzcFachbereich, pzcFuer, pzcSprech, zielFach } from '../shared/pzc';
 import { aufnahmepflicht, klinikKm, voranmeldungFuer } from '../shared/ivena';
 import {
   BMA_TEMPLATE,
@@ -62,6 +62,7 @@ import {
   type CallerFacts,
   type IncidentTemplate,
 } from './callgen';
+import { WEITERVERLEGUNG } from './vorlagen-verlegung';
 import {
   ALLE_VORLAGEN,
   GSL_TEMPLATES,
@@ -169,6 +170,8 @@ const RTW_PHONE_SHARE = 0.3;
 /** Nach so langer Zeit ohne Annahme meldet sich die Besatzung doch über Funk */
 const RTW_PHONE_GIVEUP_MS = 75_000;
 const SPEAK_PENALTY_MS = 180_000;
+/** Weiterverlegung nach Aufnahmepflicht: Anruf der Klinik so viele Minuten nach der Übergabe (Erstversorgung) */
+const WEITERVERLEGUNG_MIN: [number, number] = [30, 90];
 /** Status 0 (priorisierter Sprechwunsch) muss deutlich schneller beantwortet werden */
 const PRIO_PENALTY_MS = 45_000;
 /** Gefahr für die Einsatzkräfte: immer Status 0 */
@@ -406,7 +409,7 @@ export class Game {
   }
 
   // ---------- Notrufgenerierung ----------
-  private randomLocation(tpl: IncidentTemplate): { pos: Vec; address: string; spoken: string; objekt?: string } | null {
+  private randomLocation(tpl: IncidentTemplate, vonId?: string): { pos: Vec; address: string; spoken: string; objekt?: string } | null {
     const nodeById = new Map(this.scn.nodes.map((n) => [n.id, n]));
     const roadsOf = (types: string[]) => this.scn.roads.filter((r) => types.includes(r.type));
     const pointOn = (types: string[]) => {
@@ -421,7 +424,11 @@ export class Game {
     const objs = this.scn.objects.filter((o) => !tpl.objectKinds || tpl.objectKinds.includes(o.kind));
     if (tpl.where === 'klinik' && this.scn.hospitals.length) {
       // Abholung auf Station: Verlegung oder Entlassung (nur Kliniken auf der Karte)
-      const pool = tpl.verlegung ? this.verlegungsKliniken(tpl).von : this.scn.hospitals.filter((h) => !h.ausserhalbMin);
+      const pool = vonId
+        ? this.scn.hospitals.filter((h) => h.id === vonId)
+        : tpl.verlegung
+          ? this.verlegungsKliniken(tpl).von
+          : this.scn.hospitals.filter((h) => !h.ausserhalbMin);
       if (!pool.length) return null;
       const h = this.pick(pool);
       const hit = reverseGeocode(this.scn, h);
@@ -480,13 +487,14 @@ export class Game {
     return { pos: hit.point, address: hit.text, spoken };
   }
 
-  private buildTruth(tpl: IncidentTemplate): Truth | null {
+  /** vonId: Abholung in genau dieser Klinik (Weiterverlegung nach Aufnahmepflicht) */
+  private buildTruth(tpl: IncidentTemplate, vonId?: string): Truth | null {
     const fake = !tpl.stichwort;
     let loc: { pos: Vec; address: string; spoken: string; objekt?: string } | null;
     if (fake) {
       const town = this.pick(this.scn.towns);
       loc = { pos: { x: town.x, y: town.y }, address: '', spoken: 'Das sag ich doch, es ist kein Notfall.' };
-    } else loc = this.randomLocation(tpl);
+    } else loc = this.randomLocation(tpl, vonId);
     if (!loc) return null;
     const sw = this.scn.stichworte.find((s) => s.code === tpl.stichwort);
     const needs = { ...(tpl.needs ?? sw?.aao ?? {}) };
@@ -580,6 +588,31 @@ export class Game {
     truth.panik = opts.panik ?? (templateId ? undefined : this.rollPanik(truth));
     truth.erneut = opts.erneut ? 'immer' : templateId ? undefined : 'zufall';
     return this.ring(truth);
+  }
+
+  /**
+   * Nach einer Aufnahme trotz Abmeldung (Aufnahmepflicht): Die Klinik versorgt den Patienten erst, hat aber keine
+   * Kapazität und meldet nach der Erstversorgung eine Notfallverlegung mit Notarzt in eine aufnahmebereite Klinik an.
+   */
+  private weiterverlegung(h: Hospital, pat: { pzc: string; desc: string }) {
+    const fach = zielFach(pzcFachbereich(pat.pzc), this.scn.hospitals);
+    if (!this.started || h.ausserhalbMin) return;
+    if (!this.scn.hospitals.some((o) => o.id !== h.id && o.specialties.includes(fach))) return;
+    const alter = decodePzc(pat.pzc)?.alter ?? 60;
+    const grund = this.abgemeldet(h.id, fach)?.grund ?? 'keine Kapazität';
+    const tpl: IncidentTemplate = {
+      ...WEITERVERLEGUNG,
+      age: [alter, alter],
+      patients: [{ specialty: fach, desc: `${pat.desc.replace(/,? ?(Notfall)?[Vv]erlegung.*$/, '')}, Weiterverlegung nach Erstversorgung` }],
+      answers: {
+        ...WEITERVERLEGUNG.answers,
+        was: [
+          `Den Patienten haben Sie uns vorhin trotz Abmeldung gebracht, wir haben ihn erstversorgt. Wir haben aber keine Kapazität, ${grund}. Er muss weiter ins {ziel}.`,
+        ],
+      },
+    };
+    const truth = this.buildTruth(tpl, h.id);
+    if (truth) this.ring(truth);
   }
 
   /** Wie oft ein Anrufer beruhigt werden muss (0 = gefasst); Angehörige bei schweren Notfällen öfter panisch */
@@ -2799,6 +2832,16 @@ export class Game {
       }
     }
     u.voranmeldung = undefined;
+    // Aufnahme trotz Abmeldung: Nach der Erstversorgung meldet die Klinik meist eine Weiterverlegung an
+    const zuw = [...this.ivena.zuweisungen].reverse().find((z) => z.callsign === u.callsign && z.hospitalId === h?.id);
+    const pat = this.patientOf(u);
+    if (h && pat && zuw?.aufnahmepflicht) {
+      const fach = zielFach(pzcFachbereich(pat.pzc), this.scn.hospitals);
+      const p = { pzc: pat.pzc, desc: pat.desc };
+      this.after(this.rand(WEITERVERLEGUNG_MIN[0], WEITERVERLEGUNG_MIN[1]) * 60_000, () => {
+        if (this.abgemeldet(h.id, fach) || this.rng() < 0.5) this.weiterverlegung(h, p);
+      });
+    }
     if (u.crewPlayerId) {
       u.hint = 'Patient übergeben? Dann Status 1 drücken.';
       return;
@@ -2806,8 +2849,7 @@ export class Game {
     // Übergabe: Wartezeit der Notaufnahme; vorangemeldete Tracerpatienten übernimmt das Schockraumteam sofort
     const warte = h ? this.ivena.wartezeit[h.id] ?? 7 : 7;
     let min = schockraum ? this.rand(4, 7) : warte * this.rand(0.7, 1.3) + verzoegert;
-    const trotz = [...this.ivena.zuweisungen].reverse().find((z) => z.callsign === u.callsign && z.hospitalId === h?.id)?.trotzAbmeldung;
-    if (trotz) min += this.rand(5, 15);
+    if (zuw?.trotzAbmeldung) min += this.rand(5, 15);
     // Klinik außerhalb: Rückfahrt bis zum Kartenrand
     min += h?.ausserhalbMin ?? 0;
     u.timer = this.time + Math.max(3, min) * 60_000;

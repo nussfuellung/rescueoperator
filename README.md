@@ -149,7 +149,7 @@ Ab und zu meldet eine Besatzung ihren Patienten nicht über Funk, sondern per Te
 
 **Voranmeldung:** Tracerdiagnosen mit Notfallversorgung (Polytrauma und andere Schockraumpatienten, STEMI, kardiogener Schock, Reanimation, Schlaganfall) meldet die Leitstelle nach der Zuweisung in der Zielklinik voran, über IVENA, die Anrufzeile oder die Funkleiste („Schockraum voranmelden“). Ohne Voranmeldung gibt es Punktabzug und die Übergabe dauert länger; vorangemeldete Patienten übernimmt das Schockraumteam sofort.
 
-**Aufnahmepflicht:** Bei vitaler Bedrohung (Dringlichkeit 1) muss die nächstgelegene geeignete Klinik auch dann aufnehmen, wenn sie den Fachbereich abgemeldet hat, sofern die nächste aufnahmebereite Klinik mehr als 10 km weiter weg ist. IVENA markiert das; eine solche Zuweisung kostet keine Punkte.
+**Aufnahmepflicht:** Bei vitaler Bedrohung (Dringlichkeit 1) muss die nächstgelegene geeignete Klinik auch dann aufnehmen, wenn sie den Fachbereich abgemeldet hat, sofern die nächste aufnahmebereite Klinik mehr als 10 km weiter weg ist. IVENA markiert das; eine solche Zuweisung kostet keine Punkte. Die zwangsbelegte Klinik versorgt den Patienten nur erst: 30 bis 90 Minuten nach der Übergabe ruft sie in der Leitstelle an und meldet eine Notfallverlegung mit Notarzt in eine aufnahmebereite Klinik an (sicher, solange sie noch abgemeldet ist, sonst in der Hälfte der Fälle).
 
 **Übergabe:** Wie lange ein Fahrzeug in Status 8 an der Klinik steht, hängt von der Wartezeit der Notaufnahme ab: Größe der Klinik, Zuweisungen der letzten Stunde, Tageszeit (mittags und abends voller, nachts ruhiger) und Auslastung. IVENA zeigt die geschätzte Übergabedauer je Klinik.
 
