@@ -4,7 +4,7 @@ import { RoadGraph } from '../../../shared/geo';
 import type { PublicState, Role, Scenario, UnitState, Vec } from '../../../shared/types';
 import { conn, useNet } from '../net';
 import { MapView, type Hit } from '../MapView';
-import { alarmTone, beep, isMuted, ring, setMuted } from '../sound';
+import { alarmTone, beep, isMuted, prioTone, ring, setMuted } from '../sound';
 import { EswlMeldungen } from './EswlMeldungen';
 import { IvenaMeldungen } from './IvenaMeldungen';
 import { CallPanel, IncidentFormPanel } from './CallPanel';
@@ -637,10 +637,11 @@ export function useSounds(state?: PublicState, only: { calls?: boolean; radio?: 
     if (!state) return;
     for (const u of state.units) {
       if (u.speak && !u.speak.answered) {
-        const k = `${u.id}:${u.speak.since}`;
+        // Wird ein Sprechwunsch zu Status 0 hochgestuft, gibt es den dringenden Ton nachträglich
+        const k = `${u.id}:${u.speak.since}:${u.speak.prio ? 0 : 5}`;
         if (!seenSpeak.current.has(k)) {
           seenSpeak.current.add(k);
-          if (onlyRef.current.radio) beep();
+          if (onlyRef.current.radio) (u.speak.prio ? prioTone : beep)();
         }
       }
     }

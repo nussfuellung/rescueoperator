@@ -3,7 +3,7 @@ import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { Game } from '../server/game';
 import { generateScenario } from '../shared/mapgen';
-import { findeKlinik, findeRufgruppe, istFrage, istQuittung, zerlegeFunkspruch } from '../shared/funkspruch';
+import { findeEinsatz, findeKlinik, findeRufgruppe, istFrage, istQuittung, zerlegeFunkspruch } from '../shared/funkspruch';
 import { postProcess } from '../shared/speechfix';
 import type { Scenario } from '../shared/types';
 
@@ -230,5 +230,79 @@ describe('Notarzt abkömmlich', () => {
     expect(game.radioReply(nef, 'notarzt abkömmlich')).toMatch(/Übergabe ist abgeschlossen/);
     expect(nef.status).toBe(1);
     expect(nef.incidentId).toBeUndefined();
+  });
+});
+
+describe('Alarmieren und Umdisponieren per Sprechfunk', () => {
+  it('findet den genannten Einsatz', () => {
+    const incs = [
+      { nr: 'E-000101', address: 'Hauptstraße 5, Arnstein', stichwort: 'RD 1' },
+      { nr: 'E-000102', address: 'Bahnhofstraße 7, Karlstadt', stichwort: 'B 2' },
+    ];
+    expect(findeEinsatz('übernehmen sie den einsatz hauptstraße', incs)?.nr).toBe('E-000101');
+    expect(findeEinsatz(gesprochen('fahren sie zum einsatz in der bahnhof straße'), incs)?.nr).toBe('E-000102');
+    expect(findeEinsatz('übernehmen sie einsatz 102', incs)?.nr).toBe('E-000102');
+    expect(findeEinsatz('übernehmen sie den b 2 in karlstadt', incs)?.nr).toBe('E-000102');
+    expect(findeEinsatz('übernehmen sie den einsatz', incs)).toBeUndefined();
+    expect(findeEinsatz('übernehmen sie den einsatz', incs.slice(0, 1))?.nr).toBe('E-000101');
+  });
+
+  it('alarmiert ein freies Fahrzeug per Funk und disponiert es auf der Anfahrt um', () => {
+    const scn = generateScenario({ seed: 4711, towns: 8 });
+    scn.settings.callsPerHour = 0;
+    scn.settings.bmaPerHour = 0;
+    const game = new Game(scn, { seed: 7 });
+    const dp = game.addPlayer('Disponent', 'dispatcher');
+    game.handle(dp.id, { a: 'start' });
+    const [t1, t2] = [scn.towns[1], scn.towns[2]];
+    game.handle(dp.id, { a: 'createIncident', stichwort: 'RD 1', address: `Hauptstraße 5, ${t1.name}`, x: t1.x, y: t1.y, note: '', patients: 0 });
+    game.handle(dp.id, { a: 'createIncident', stichwort: 'RD 1', address: `Bahnhofstraße 7, ${t2.name}`, x: t2.x, y: t2.y, note: '', patients: 0 });
+    const [inc1, inc2] = game.incidents;
+    const u = game.units.find((x) => x.type === 'RTW' && x.status === 2)!;
+
+    expect(game.radioReply(u, `${u.callsign} von Leitstelle, übernehmen Sie den Einsatz Hauptstraße, kommen`, dp)).toMatch(/übernehmen RD 1 Hauptstraße|verstanden, rücken aus/);
+    expect(u.incidentId).toBe(inc1.id);
+    expect(inc1.log.some((l) => /per Sprechfunk alarmiert/.test(l.text))).toBe(true);
+    let guard = 0;
+    while (u.task !== 'toScene' && guard++ < 1000) game.tick(500);
+    expect(u.status).toBe(3);
+
+    // Auf der Anfahrt (Status 3) zu einem anderen Einsatz umdisponieren
+    expect(game.radioReply(u, gesprochen('brechen sie ab und übernehmen sie den einsatz in der bahnhof straße'), dp)).toMatch(/Bahnhofstraße/);
+    expect(u.incidentId).toBe(inc2.id);
+    expect(inc1.unitIds).not.toContain(u.id);
+    expect(inc1.log.some((l) => /umdisponiert/.test(l.text))).toBe(true);
+    guard = 0;
+    while (u.task !== 'toScene' && guard++ < 1000) game.tick(500);
+    expect(u.status).toBe(3);
+
+    // Mit Patient an Bord geht es nicht, ohne erkennbaren Einsatz wird nachgefragt
+    expect(game.radioReply(u, 'übernehmen sie den einsatz', dp)).toMatch(/Hauptstraße|Welcher Einsatz/);
+  });
+});
+
+describe('Status 0', () => {
+  it('dringender Sprechwunsch: Status 0, geht vor und muss schnell beantwortet werden', () => {
+    const game = new Game(wue(), { seed: 2 });
+    game.started = game.running = true;
+    const [a, b] = game.units.filter((x) => x.type === 'RTW' && x.status === 2);
+    const g = game as unknown as { requestSpeak: (u: unknown, kind: string, text: string, group?: string, prio?: boolean) => void };
+    g.requestSpeak(a, 'info', 'Melden uns zum Dienst an.');
+    expect(a.status).toBe(5);
+    g.requestSpeak(b, 'nachforderung', 'Wir werden bedroht, brauchen sofort Polizei.', undefined, true);
+    expect(b.status).toBe(0);
+    expect(b.baseStatus).toBe(2);
+    expect(game.radio.at(-1)?.text).toBe('Status 0 – Priorisierter Sprechwunsch');
+    // Ein offener Status 5 wird zu Status 0 hochgestuft
+    g.requestSpeak(a, 'nachforderung', 'Patient reanimationspflichtig, Notarzt nachgefordert.', undefined, true);
+    expect(a.status).toBe(0);
+    expect(a.speak?.prio).toBe(true);
+    const punkte = game.score.points;
+    for (let i = 0; i < 50; i++) game.tick(1000);
+    expect(game.score.points).toBeLessThanOrEqual(punkte - 20);
+    expect(game.score.events.some((e) => /Status 0/.test(e.text))).toBe(true);
+    game.handle(game.addPlayer('D', 'dispatcher').id, { a: 'speakPermit', unitId: b.id });
+    expect(b.status).toBe(2);
+    expect(game.radio.some((m) => m.from === b.callsign && /bedroht/.test(m.text))).toBe(true);
   });
 });

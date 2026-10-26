@@ -28,7 +28,7 @@ import type {
   VehicleType,
 } from '../shared/types';
 import { ensureTmo } from '../shared/fleet';
-import { findeKlinik, findeRufgruppe, istFrage, istQuittung, zerlegeFunkspruch } from '../shared/funkspruch';
+import { findeEinsatz, findeKlinik, findeRufgruppe, istFrage, istQuittung, zerlegeFunkspruch } from '../shared/funkspruch';
 import { inDienst } from '../shared/lstsim';
 import { HAEUFIGKEIT_STUNDEN, dateForSeason, seasonOf, tageszeitFaktor, type Haeufigkeit, type Season } from '../shared/jahreszeit';
 import { infektionstransport, pzcFachbereich, pzcFuer, pzcSprech, zielFach } from '../shared/pzc';
@@ -152,6 +152,22 @@ const RTW_PHONE_SHARE = 0.3;
 /** Nach so langer Zeit ohne Annahme meldet sich die Besatzung doch über Funk */
 const RTW_PHONE_GIVEUP_MS = 75_000;
 const SPEAK_PENALTY_MS = 180_000;
+/** Status 0 (priorisierter Sprechwunsch) muss deutlich schneller beantwortet werden */
+const PRIO_PENALTY_MS = 45_000;
+/** Gefahr für die Einsatzkräfte: immer Status 0 */
+const GEWALT = /bedroh|angriff|angegriffen|aggressiv|gewalt|waffe|messer|schläger/i;
+/** Lebensgefahr: Status 0, wenn dafür noch Kräfte fehlen */
+const LEBENSGEFAHR = /reanimation|\brea\b|atemstillstand|kreislaufstillstand|eingeklemmt|explosion|einsturz|eingestürzt|vermisst|untergegangen/i;
+
+/** Status 5 oder 0: Sprechwunsch offen, der eigentliche Status steht in baseStatus */
+const sprechStatus = (s: FmsStatus) => s === 5 || s === 0;
+
+/** Drückt die Besatzung für diese Meldung Status 0 statt Status 5? */
+function dringend(text: string, missing: string[]): boolean {
+  if (GEWALT.test(text)) return true;
+  if (missing.some((m) => /\b(?:NEF|RTH|Notarzt)\b/i.test(m))) return true;
+  return missing.length > 0 && LEBENSGEFAHR.test(text);
+}
 /** Großschadenslagen frühestens nach so viel Spielzeit, Unwetter frühestens nach 15 Minuten */
 const GSL_MIN_MS = 45 * 60_000;
 const UNWETTER_MIN_MS = 15 * 60_000;
@@ -964,7 +980,7 @@ export class Game {
         this.radioMsg(this.scn.ilsName, u.callsign, text, 'voice');
         if (!u.crewPlayerId) {
           this.after(this.rand(2500, 5000), () => {
-            const reply = this.radioReply(u, text);
+            const reply = this.radioReply(u, text, player);
             if (reply) this.radioMsg(u.callsign, this.scn.ilsName, reply, 'voice');
           });
         }
@@ -1294,7 +1310,7 @@ export class Game {
     return computeProposal(this.scn, this.graph, this.units, inc, aaoMitSchlagwort(sw.aao, inc.schlagwort), this.time);
   }
 
-  private alarm(player: Player, incidentId: string, unitIds: string[]): string | void {
+  private alarm(player: { name: string }, incidentId: string, unitIds: string[]): string | void {
     const inc = this.incident(incidentId);
     if (!inc) return 'Einsatz nicht gefunden';
     if (inc.status === 'abgeschlossen') return 'Einsatz ist abgeschlossen';
@@ -1610,7 +1626,7 @@ export class Game {
   }
 
   /** Antwort einer computergesteuerten Besatzung auf einen Funkspruch der Leitstelle */
-  radioReply(u: UnitState, raw: string): string | null {
+  radioReply(u: UnitState, raw: string, von: { name: string } = { name: 'Funk' }): string | null {
     const f = zerlegeFunkspruch(raw, u.callsign, this.scn.ilsName);
     const t = f.text;
     const has = (re: RegExp) => re.test(t);
@@ -1643,7 +1659,7 @@ export class Game {
     })();
 
     // Nur Anruf ("Rotkreuz Arnstein 71/1 von Leitstelle, kommen") oder Sprechaufforderung
-    const anruf = !t || /^(?:(?:bitte|jetzt|ja|leitstelle hört|hört|ich höre|wir hören|melden sie sich|meldet euch|sprechen sie|sprecht|sprechaufforderung|ihr sprechwunsch|euer sprechwunsch|sprechwunsch|status 5|was gibt es|was gibts|was liegt an|was haben sie|was habt ihr|für sie|für euch|mit ihnen|ihre meldung|eure meldung)\s*)+$/.test(t);
+    const anruf = !t || /^(?:(?:bitte|jetzt|ja|leitstelle hört|hört|ich höre|wir hören|melden sie sich|meldet euch|sprechen sie|sprecht|sprechaufforderung|ihr sprechwunsch|euer sprechwunsch|sprechwunsch|status 5|status 0|was gibt es|was gibts|was liegt an|was haben sie|was habt ihr|für sie|für euch|mit ihnen|ihre meldung|eure meldung)\s*)+$/.test(t);
     if (anruf && !(f.ende && !t)) {
       if (sprechwunsch) {
         this.speakPermit(u.id, true);
@@ -1669,6 +1685,12 @@ export class Game {
         return `In ${g.name}.`;
       }
       if (has(/\brufgruppe\b/)) return 'Welche Rufgruppe, bitte wiederholen.';
+    }
+
+    // Alarmieren oder Umdisponieren per Sprechfunk: "Übernehmen Sie den Einsatz Hauptstraße"
+    if (!frage && has(/(?:^|\s)(?:übernehmen sie|übernehmt|übernimm|alarmier\w*|umdisponier\w*|(?:fahren|fahrt|begeben) (?:sie |ihr )?(?:\w+ )*(?:zum|zu dem|zur|in den) einsatz|neue[nr]? einsatz|einsatz für (?:sie|euch)|zu einem anderen einsatz|stattdessen|statt dessen)\b/)) {
+      const r = this.funkAlarm(u, t, von);
+      if (r) return r;
     }
 
     // Ist der Notarzt abkömmlich? An das NEF selbst oder an das RTW, in dem er mitfährt
@@ -1700,7 +1722,7 @@ export class Game {
       if (h) {
         if (u.task === 'awaitHospital') {
           if (sprechwunsch) u.speak = undefined;
-          if (u.status === 5) u.status = u.baseStatus;
+          if (sprechStatus(u.status)) u.status = u.baseStatus;
           const err = this.assignHospital(u.id, h.id, false, true);
           return err ? 'Bitte wiederholen.' : this.pick([`Verstanden, fahren ${h.name} an.`, `Verstanden, Transport ins ${h.name}.`, `${h.name}, verstanden.`]);
         }
@@ -1796,6 +1818,38 @@ export class Game {
     return this.pick(['Verstanden.', 'Habe verstanden.', 'Verstanden, wird gemacht.', 'Alles klar, verstanden.']);
   }
 
+  /** Alarmierung oder Umdisponierung per Sprechfunk; null, wenn kein passender Einsatz genannt wurde */
+  private funkAlarm(u: UnitState, t: string, von: { name: string }): string | null {
+    const offen = this.incidents.filter((i) => i.status !== 'abgeschlossen' && i.id !== u.incidentId);
+    if (!offen.length) return u.incidentId ? null : 'Verstanden, erwarten die Alarmierung.';
+    const inc = findeEinsatz(t, offen);
+    if (!inc) return 'Welcher Einsatz, bitte Einsatzort wiederholen.';
+    const ziel = `${inc.stichwort} ${inc.address}`;
+    if (u.hasPatient) return `Negativ, wir haben einen Patienten an Bord und können ${ziel} nicht übernehmen.`;
+    if (u.fremd) return `Negativ, wir sind Fremdfahrzeug der ${u.fremd.ils}, bitte über die ESWL anfordern.`;
+    if (u.status === 6 || u.baseStatus === 6) return 'Negativ, wir sind außer Dienst.';
+    const s8 = inUebergabe(u);
+    const alt = u.incidentId && !s8 ? this.incident(u.incidentId) : undefined;
+    if (alt) {
+      // Umdisponieren: aus dem bisherigen Einsatz lösen, dann neu alarmieren
+      if (!['alarmed', 'toScene', 'onScene'].includes(u.task)) return `Negativ, wir sind noch im Einsatz ${alt.address} gebunden.`;
+      this.releaseUnit(u.id, true, false);
+      this.log(alt, `${shortCallsign(u.callsign)} per Funk umdisponiert zu ${inc.nr} ${inc.address}`);
+      // Übergabe in der Klinik schließt alarm() selbst ab
+    } else if (!s8 && ![1, 2].includes(u.baseStatus)) return `Negativ, wir sind derzeit nicht einsatzbereit, Status ${u.baseStatus}.`;
+    if (sprechStatus(u.status) && u.speak && !u.speak.answered && u.speak.kind === 'info') {
+      u.speak = undefined;
+      u.status = u.baseStatus;
+    }
+    const err = this.alarm(von, inc.id, [u.id]);
+    if (err) return `Negativ, ${err}.`;
+    this.log(inc, `${shortCallsign(u.callsign)} per Sprechfunk alarmiert`);
+    const air = this.typeOf(u)?.air;
+    return alt
+      ? this.pick([`Verstanden, brechen ab und übernehmen ${ziel}.`, `Verstanden, drehen ab zu ${ziel}.`])
+      : this.pick([`Verstanden, übernehmen ${ziel}.`, `${ziel}, verstanden, ${air ? 'fliegen' : 'rücken'} aus.`]);
+  }
+
   /** Notarztmittel: NEF oder Rettungshubschrauber */
   private istNotarzt(u: UnitState) {
     return u.type === 'NEF' || !!this.typeOf(u)?.air;
@@ -1888,7 +1942,7 @@ export class Game {
   }
 
   private setStatus(u: UnitState, s: FmsStatus, announce = true) {
-    if (u.speak && !u.speak.answered && s !== 5) {
+    if (u.speak && !u.speak.answered && !sprechStatus(s)) {
       u.baseStatus = s;
     } else {
       u.status = s;
@@ -1897,17 +1951,24 @@ export class Game {
     if (announce) this.radioMsg(u.callsign, this.scn.ilsName, `Status ${s} – ${FMS_TEXT[s]}`, 'fms');
   }
 
-  private requestSpeak(u: UnitState, kind: NonNullable<UnitState['speak']>['kind'], text: string, group?: string) {
+  /** Sprechwunsch (Status 5) oder mit prio dringender Sprechwunsch (Status 0) */
+  private requestSpeak(u: UnitState, kind: NonNullable<UnitState['speak']>['kind'], text: string, group?: string, prio = false) {
     if (u.speak && !u.speak.answered) {
       // Dieselbe Meldung nicht mehrfach anhängen (z. B. wiederholte Erinnerung an fehlende Kräfte)
       if (!u.speak.text.includes(text)) u.speak.text += ' ' + text;
       if (group) u.speak.group ??= group;
+      // Offener Sprechwunsch wird dringend: Status 0 nachschieben
+      if (prio && !u.speak.prio) {
+        u.speak.prio = true;
+        u.status = 0;
+        this.radioMsg(u.callsign, this.scn.ilsName, `Status 0 – ${FMS_TEXT[0]}`, 'fms');
+      }
       return;
     }
-    u.speak = { kind, text, since: this.time, answered: false, ...(group ? { group } : {}) };
-    if (u.status !== 5) u.baseStatus = u.status;
-    u.status = 5;
-    this.radioMsg(u.callsign, this.scn.ilsName, 'Status 5 – Sprechwunsch', 'fms');
+    u.speak = { kind, text, since: this.time, answered: false, ...(group ? { group } : {}), ...(prio ? { prio } : {}) };
+    if (!sprechStatus(u.status)) u.baseStatus = u.status;
+    u.status = prio ? 0 : 5;
+    this.radioMsg(u.callsign, this.scn.ilsName, prio ? `Status 0 – ${FMS_TEXT[0]}` : 'Status 5 – Sprechwunsch', 'fms');
   }
 
   /** Sprechaufforderung; viaFunk: die Leitstelle hat das Fahrzeug schon selbst angesprochen */
@@ -2032,6 +2093,9 @@ export class Game {
         return;
       case 5:
         this.requestSpeak(u, 'crew', '(Sprechwunsch der Besatzung)');
+        return;
+      case 0:
+        this.requestSpeak(u, 'crew', '(Dringender Sprechwunsch der Besatzung)', undefined, true);
         return;
       case 7:
         if (u.task !== 'awaitHospital' || !u.hospitalId) return 'Erst eine Zielklinik festlegen';
@@ -2340,7 +2404,7 @@ export class Game {
             : pol || sagtSchon || truth.nachgefordert
               ? ''
               : ' Weitere Kräfte nicht erforderlich.') + (pol ? ' Bitte Polizei verständigen.' : '');
-      this.requestSpeak(u, missing.length || pol ? 'nachforderung' : 'lage', `Lagemeldung: ${truth.lage}${req}`);
+      this.requestSpeak(u, missing.length || pol ? 'nachforderung' : 'lage', `Lagemeldung: ${truth.lage}${req}`, undefined, dringend(truth.lage, missing));
       truth.lastRequest = this.time;
       // Nicht mehr benötigte Kräfte an der Einsatzstelle melden sich frei
       for (const x of ueber) {
@@ -2401,7 +2465,7 @@ export class Game {
     const crew = inc.unitIds.map((id) => this.unit(id)!).find((x) => x && x.task === 'onScene' && x.crewPlayerId);
     if (u) {
       const missing = this.missingNeeds(inc, truth, false);
-      this.requestSpeak(u, missing.length ? 'nachforderung' : 'info', `Lageänderung: ${e.text}${missing.length ? ` Wir fordern nach: ${missing.join(', ')}.` : ''}`);
+      this.requestSpeak(u, missing.length ? 'nachforderung' : 'info', `Lageänderung: ${e.text}${missing.length ? ` Wir fordern nach: ${missing.join(', ')}.` : ''}`, undefined, dringend(e.text, missing));
     } else if (crew) crew.hint = `Lageänderung: ${e.text} Bitte an die Leitstelle melden (Status 5).`;
   }
 
@@ -2867,7 +2931,7 @@ export class Game {
       if (on && !other) active.set(u.callsign, u);
       // Im Einsatz kann sich niemand abmelden: das passiert erst nach der Rückkehr auf die Wache
       if (u.task !== 'station' || u.incidentId || u.crewPlayerId || u.desinfektion) continue;
-      const st = u.status === 5 ? u.baseStatus : u.status;
+      const st = sprechStatus(u.status) ? u.baseStatus : u.status;
       if (!on && st === 2) {
         u.status = 6;
         u.baseStatus = 6;
@@ -3118,11 +3182,12 @@ export class Game {
         u.timer = undefined;
         this.finishHospital(u);
       }
-      if (u.speak && !u.speak.answered && this.time - u.speak.since > SPEAK_PENALTY_MS) {
+      if (u.speak && !u.speak.answered && this.time - u.speak.since > (u.speak.prio ? PRIO_PENALTY_MS : SPEAK_PENALTY_MS)) {
         const key = `${u.id}:${u.speak.since}`;
         if (!this.penalized.has(key)) {
           this.penalized.add(key);
-          this.addScore(-5, `Sprechwunsch von ${shortCallsign(u.callsign)} seit 3 min unbeantwortet`);
+          if (u.speak.prio) this.addScore(-10, `Status 0 von ${shortCallsign(u.callsign)} nicht sofort beantwortet`);
+          else this.addScore(-5, `Sprechwunsch von ${shortCallsign(u.callsign)} seit 3 min unbeantwortet`);
         }
       }
     }
