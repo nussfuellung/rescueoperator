@@ -147,6 +147,8 @@ export type Action =
   /** FMS-Auftrag H: Fahren Sie Wache an */
   | { a: 'sendHome'; unitId: string }
   | { a: 'closeIncident'; incidentId: string }
+  /** Abgeschlossenen Einsatz wieder eröffnen, z. B. zur Nachalarmierung */
+  | { a: 'reopenIncident'; incidentId: string }
   | { a: 'speakPermit'; unitId: string }
   | { a: 'assignHospital'; unitId: string; hospitalId: string }
   | { a: 'radio'; unitId: string; text: string }
