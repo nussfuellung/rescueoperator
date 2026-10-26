@@ -46,7 +46,9 @@ jobs:
           curl -sSfL -o ggml-base-q5_1.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin
           vendor/whisper/${{ matrix.plat }}/whisper-server -m ggml-base-q5_1.bin -l de --host 127.0.0.1 --port 8089 > server.log 2>&1 &
           for i in $(seq 1 120); do curl -sf http://127.0.0.1:8089/ > /dev/null && break; sleep 1; done
-          TEXT=$(curl -sSf http://127.0.0.1:8089/inference -F file=@tests/fixtures/funkspruch.wav -F response_format=text -F language=de)
+          # Wie im Spiel: Temperatur 0 und Vorgabetext (ohne Umlaute, Windows-Bash reicht sie nicht sicher weiter); ohne beides weicht base je nach CPU-Variante stark ab (z. B. „71/4/4/1.“ statt „Status 4“)
+          TEXT=$(curl -sSf http://127.0.0.1:8089/inference -F file=@tests/fixtures/funkspruch.wav -F response_format=text -F language=de -F temperature=0 \
+            -F 'prompt=Funkverkehr und Notrufe der Integrierten Leitstelle. Status 3, Status 4. Rotkreuz 71/1.')
           echo "Erkannt: $TEXT"
           kill %1 || true
           head -20 server.log
