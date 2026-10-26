@@ -2456,8 +2456,8 @@ export class Game {
       u.callsign,
       this.scn.ilsName,
       this.pick([
-        `Verstanden, ${inc.address}. Übergabe${ort} läuft noch, sind in etwa ${min} ${min === 1 ? 'Minute' : 'Minuten'} unterwegs, kommen.`,
-        `Alarmierung verstanden. Wir übergeben noch${ort}, Abfahrt in etwa ${min} ${min === 1 ? 'Minute' : 'Minuten'}, kommen.`,
+        `Verstanden, ${inc.address}. Übergabe${ort} läuft noch, sind in etwa ${min} ${min === 1 ? 'Minute' : 'Minuten'} unterwegs.`,
+        `Alarmierung verstanden. Wir übergeben noch${ort}, Abfahrt in etwa ${min} ${min === 1 ? 'Minute' : 'Minuten'}.`,
       ]),
       'voice',
     );
@@ -2508,7 +2508,7 @@ export class Game {
     u.desinfektion = {};
     this.releaseUnit(u.id, false, false);
     u.hint = 'Infektionstransport: Wache zur Desinfektion anfahren, Fahrzeug bleibt bis dahin in Status 6.';
-    if (!u.crewPlayerId) this.requestSpeak(u, 'info', 'Patient übergeben, Infektionstransport. Fahren zur Desinfektion auf die Wache, Status 6, kommen.');
+    if (!u.crewPlayerId) this.requestSpeak(u, 'info', 'Patient übergeben, Infektionstransport. Fahren zur Desinfektion auf die Wache, Status 6.');
   }
 
   private checkClose(inc: IncidentState) {
@@ -2948,7 +2948,7 @@ export class Game {
         u.desinfektion = undefined;
         u.hint = undefined;
         this.setStatus(u, 2);
-        if (!u.crewPlayerId) this.requestSpeak(u, 'info', 'Desinfektion abgeschlossen, Fahrzeug wieder einsatzbereit auf der Wache, kommen.');
+        if (!u.crewPlayerId) this.requestSpeak(u, 'info', 'Desinfektion abgeschlossen, Fahrzeug wieder einsatzbereit auf der Wache.');
       }
       if (u.task === 'atHospital' && !u.crewPlayerId && u.timer !== undefined && this.time >= u.timer) {
         u.timer = undefined;
