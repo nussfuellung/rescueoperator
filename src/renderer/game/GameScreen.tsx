@@ -4,7 +4,7 @@ import { RoadGraph } from '../../../shared/geo';
 import type { PublicState, Role, Scenario, UnitState, Vec } from '../../../shared/types';
 import { conn, useNet } from '../net';
 import { MapView, type Hit } from '../MapView';
-import { alarmTone, beep, isMuted, ring, setMuted } from '../sound';
+import { alarmTone, beep, isMuted, prioTone, ring, setMuted } from '../sound';
 import { EswlMeldungen } from './EswlMeldungen';
 import { IvenaMeldungen } from './IvenaMeldungen';
 import { CallPanel, IncidentFormPanel } from './CallPanel';
@@ -19,6 +19,7 @@ import { piperInfo, radioSpeech, say, stopSpeaking } from '../audio/tts';
 import { attachPttKeys, speechInput } from '../audio/stt';
 import { useGeraetSprache } from './geraetSprache';
 import { buildVocab } from '../../../shared/speechfix';
+import { whisperPrompt } from '../../../shared/whisper';
 import { radioName } from '../../../shared/catalog';
 import { MicStatus } from '../audio/SpeechUi';
 import { DeviceModal } from './DeviceModal';
@@ -113,9 +114,14 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
     const streets = new Set<string>();
     for (const r of scn.roads) if (r.name && r.type !== 'autobahn') streets.add(r.name);
     for (const a of scn.addresses ?? []) streets.add(a.street);
-    speechInput.setVocabulary(buildVocab([...places, ...streets, ...scn.hospitals.map((h) => h.name)], [...places]), [
-      ...new Set(scn.vehicleTypes.map((t) => t.funkNr)),
-    ]);
+    // Beispiele für Funkrufnamen, je Fahrzeugtyp einer
+    const rufnamen = new Map<string, string>();
+    for (const st of scn.stations) for (const v of st.vehicles) if (!rufnamen.has(v.type)) rufnamen.set(v.type, radioName(v.callsign));
+    speechInput.setVocabulary(
+      buildVocab([...places, ...streets, ...scn.hospitals.map((h) => h.name)], [...places]),
+      [...new Set(scn.vehicleTypes.map((t) => t.funkNr))],
+      whisperPrompt(scn.ilsName, [...rufnamen.values()], [...places]),
+    );
     return () => speechInput.setVocabulary(undefined);
   }, [scn]);
   useReadAloud(state, net.playerId, scn.ilsName, { radio: tonAmPc || !remote.includes('radio'), caller: tonAmPc || !remote.includes('calls') });
@@ -319,10 +325,10 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
         <button
           onClick={() => setShowIvena(true)}
           title="IVENA: Patientenzuweisung nach PZC und An-/Abmeldestatus der Kliniken"
-          className={state.units.some((u) => u.task === 'awaitHospital' && !u.hospitalId && u.pzc) ? 'attention' : ''}
+          className={state.units.some((u) => (u.task === 'awaitHospital' && !u.hospitalId && u.pzc) || (u.voranmeldung && u.voranmeldung.t === undefined)) ? 'attention' : ''}
         >
           🏥 IVENA{(() => {
-            const n = state.units.filter((u) => u.task === 'awaitHospital' && !u.hospitalId && u.pzc).length;
+            const n = state.units.filter((u) => (u.task === 'awaitHospital' && !u.hospitalId && u.pzc) || (u.voranmeldung && u.voranmeldung.t === undefined)).length;
             return n ? ` (${n})` : '';
           })()}
         </button>
@@ -637,10 +643,11 @@ export function useSounds(state?: PublicState, only: { calls?: boolean; radio?: 
     if (!state) return;
     for (const u of state.units) {
       if (u.speak && !u.speak.answered) {
-        const k = `${u.id}:${u.speak.since}`;
+        // Wird ein Sprechwunsch zu Status 0 hochgestuft, gibt es den dringenden Ton nachträglich
+        const k = `${u.id}:${u.speak.since}:${u.speak.prio ? 0 : 5}`;
         if (!seenSpeak.current.has(k)) {
           seenSpeak.current.add(k);
-          if (onlyRef.current.radio) beep();
+          if (onlyRef.current.radio) (u.speak.prio ? prioTone : beep)();
         }
       }
     }

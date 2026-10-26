@@ -88,7 +88,7 @@ describe('Lagemeldungen nach dem Stand an der Einsatzstelle', () => {
     const { game, inc, alarm } = einsatz('rd_cpr');
     intern(game).incTruth.get(inc.id)!.verlauf = reaVerlauf('rosc');
     alarm('RTW', 'NEF');
-    run(game, 90 * 60_000, () => game.units.some((u) => u.speak && /Herzkatheterlabor und Schockraum/.test(u.speak.text)) || /Herzkatheterlabor und Schockraum/.test(funk(game)) || game.calls.some((c) => c.kind === 'rtw'));
+    run(game, 90 * 60_000, () => game.units.some((u) => u.speak && /Herzkatheterlabor/.test(u.speak.text)) || /Herzkatheterlabor/.test(funk(game)) || game.calls.some((c) => c.kind === 'rtw'));
     expect(inc.lage).toMatch(/ROSC nach \d+ Minuten/);
     expect(intern(game).incTruth.get(inc.id)!.patients.length).toBe(1);
   });

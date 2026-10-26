@@ -1,9 +1,9 @@
 // Splashscreen beim Start: prüft GitHub-Releases auf eine neue Version und installiert sie, wo das ohne Apple-Signatur geht.
 // Windows (Setup.exe-Installation) und Linux (AppImage) aktualisieren sich selbst, sonst zeigt der Splash nur die Download-Seite an.
 import { app, BrowserWindow, shell } from 'electron';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { autoUpdater, type UpdateInfo } from 'electron-updater';
+import { AppImageUpdater, autoUpdater, PacmanUpdater, type AppUpdater, type UpdateInfo } from 'electron-updater';
 import pkg from '../package.json';
 
 const PRUEF_TIMEOUT = 8000;
@@ -35,14 +35,37 @@ const b=document.getElementById('bar');if(s.progress==null){b.classList.add('bus
 b.style.display=s.buttons?'none':'';btns.style.display=s.buttons?'flex':'none'}</script>
 </body></html>`;
 
+/** Als pacman-Paket installiert (CachyOS/Arch)? electron-builder legt dafür resources/package-type an */
+function pacmanInstallation() {
+  if (process.platform !== 'linux' || process.env.APPIMAGE) return false;
+  try {
+    return readFileSync(join(process.resourcesPath, 'package-type'), 'utf8').trim() === 'pacman';
+  } catch {
+    return false;
+  }
+}
+
 /** Kann sich diese Installation selbst ersetzen? */
 function selbstUpdateMoeglich() {
   if (process.platform === 'win32') {
     // Nur eine Installation per Setup.exe hat den Uninstaller neben der exe, eine entpackte ZIP nicht
     return existsSync(join(dirname(process.execPath), `Uninstall ${app.getName()}.exe`));
   }
-  if (process.platform === 'linux') return !!process.env.APPIMAGE;
+  if (process.platform === 'linux') {
+    // pacman -U braucht Root: pkexec fragt über den Passwortdialog des Desktops
+    return !!process.env.APPIMAGE || (pacmanInstallation() && existsSync('/usr/bin/pkexec'));
+  }
   return false; // macOS verlangt für Selbst-Updates eine Apple-Signatur
+}
+
+/**
+ * AppImage und pacman-Paket entstehen aus demselben Build-Verzeichnis, package-type kann also im AppImage landen.
+ * Darum nach der tatsächlichen Installationsart wählen statt dem Standard-Updater die Erkennung zu überlassen.
+ */
+function waehleUpdater(): AppUpdater {
+  if (process.env.APPIMAGE) return new AppImageUpdater();
+  if (pacmanInstallation()) return new PacmanUpdater();
+  return autoUpdater;
 }
 
 /**
@@ -81,17 +104,18 @@ export async function updateSplash(): Promise<void> {
     return fertig(app.isPackaged ? 700 : 0);
   }
 
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = false;
-  autoUpdater.logger = null;
-  if (testUrl) autoUpdater.setFeedURL({ provider: 'generic', url: testUrl });
-  else autoUpdater.setFeedURL({ provider: 'github', owner: publish!.owner!, repo: publish!.repo! });
-  if (testUrl) autoUpdater.forceDevUpdateConfig = true;
+  const updater = waehleUpdater();
+  updater.autoDownload = false;
+  updater.autoInstallOnAppQuit = false;
+  updater.logger = null;
+  if (testUrl) updater.setFeedURL({ provider: 'generic', url: testUrl });
+  else updater.setFeedURL({ provider: 'github', owner: publish!.owner!, repo: publish!.repo! });
+  if (testUrl) updater.forceDevUpdateConfig = true;
 
   let info: UpdateInfo | undefined;
   try {
     const res = await Promise.race([
-      autoUpdater.checkForUpdates(),
+      updater.checkForUpdates(),
       new Promise<null>((r) => setTimeout(() => r(null), PRUEF_TIMEOUT)),
     ]);
     if (res?.isUpdateAvailable) info = res.updateInfo;
@@ -122,16 +146,26 @@ export async function updateSplash(): Promise<void> {
   }
 
   set({ text: `Lade Version ${info.version}…`, progress: 0 });
-  autoUpdater.on('download-progress', (p) => {
+  updater.on('download-progress', (p) => {
     set({ text: `Lade Version ${info!.version}…`, sub: `${Math.round(p.transferred / 1e6)} von ${Math.round(p.total / 1e6)} MB`, progress: p.percent });
   });
   try {
-    await autoUpdater.downloadUpdate();
+    await updater.downloadUpdate();
   } catch (e) {
     set({ text: 'Update konnte nicht geladen werden.', sub: String((e as Error).message ?? e).slice(0, 120), progress: 100 });
     return fertig(3000);
   }
-  set({ text: 'Installiere Update, das Spiel startet gleich neu…', progress: 100 });
-  setTimeout(() => autoUpdater.quitAndInstall(true, true), 800);
-  return new Promise<void>(() => undefined);
+  if (pacmanInstallation()) {
+    set({ text: 'Installiere Update…', sub: 'Bitte mit deinem Passwort bestätigen, danach startet das Spiel neu.', progress: 100 });
+  } else {
+    set({ text: 'Installiere Update, das Spiel startet gleich neu…', progress: 100 });
+  }
+  return new Promise<void>((resolve) => {
+    // Bricht man den Passwortdialog ab, schlägt pacman fehl: dann mit der alten Version weiterspielen
+    updater.once('error', () => {
+      set({ text: 'Update nicht installiert.', sub: 'Das Spiel startet mit der bisherigen Version.', progress: 100 });
+      void fertig(3000).then(resolve);
+    });
+    setTimeout(() => updater.quitAndInstall(true, true), 800);
+  });
 }

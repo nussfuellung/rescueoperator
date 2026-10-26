@@ -54,7 +54,7 @@ export function UnitBoard({ ctx }: { ctx: GameCtx }) {
   const tile = (u: UnitState) => (
     <button
       key={u.id}
-      className={`tile ${u.status === 5 ? 'speak' : ''} ${u.id === ctx.selectedUnit ? 'selected' : ''} ${u.crewPlayerId ? 'manned' : ''} ${u.cover ? 'covering' : ''}`}
+      className={`tile ${u.status === 5 ? 'speak' : u.status === 0 ? 'speak prio' : ''} ${u.id === ctx.selectedUnit ? 'selected' : ''} ${u.crewPlayerId ? 'manned' : ''} ${u.cover ? 'covering' : ''}`}
       style={{ background: FMS_COLOR[u.status] }}
       title={`${u.callsign} – ${FMS_TEXT[u.status]}${u.cover ? ` – Gebietsabsicherung ${u.cover.name}` : ''}${u.desinfektion ? ' – Desinfektion nach Infektionstransport' : ''}${u.crewPlayerId ? ' (Spieler)' : ''}${u.fremd ? ` – ${u.fremd.ils}, ${u.fremd.wache}` : ''}`}
       onContextMenu={(e) => {

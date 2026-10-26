@@ -1,5 +1,5 @@
 // Funkverkehr: Sprechwunsch-Warteschlange und Funkprotokoll.
-import { HospitalSelect } from './Ivena';
+import { HospitalSelect, VoranmeldenButton, offeneVoranmeldungen } from './Ivena';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { formatClock, formatDuration, radioName } from '../../../shared/catalog';
 import { conn } from '../net';
@@ -7,8 +7,12 @@ import type { GameCtx } from './GameScreen';
 
 export function RadioPanel({ ctx }: { ctx: GameCtx }) {
   const { state, scn } = ctx;
-  const queue = state.units.filter((u) => u.speak && !u.speak.answered).sort((a, b) => a.speak!.since - b.speak!.since);
+  // Status 0 (priorisierter Sprechwunsch) geht vor, sonst der älteste zuerst
+  const queue = state.units
+    .filter((u) => u.speak && !u.speak.answered)
+    .sort((a, b) => Number(!!b.speak!.prio) - Number(!!a.speak!.prio) || a.speak!.since - b.speak!.since);
   const waitingHospital = state.units.filter((u) => u.task === 'awaitHospital' && !u.hospitalId && u.pzc && !(u.speak && !u.speak.answered));
+  const voran = offeneVoranmeldungen(state);
   const log = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   // Neue Funksprüche, während der Nutzer bewusst nach oben gescrollt hat
@@ -99,13 +103,13 @@ export function RadioPanel({ ctx }: { ctx: GameCtx }) {
           })}
         </div>
       )}
-      {(queue.length > 0 || waitingHospital.length > 0) && (
+      {(queue.length > 0 || waitingHospital.length > 0 || voran.length > 0) && (
         <div className="speak-queue">
           {queue.map((u) => (
-            <div key={u.id} className="speak-row">
+            <div key={u.id} className={`speak-row ${u.speak!.prio ? 'prio' : ''}`}>
               <span className="blink-dot" />
               <b>{radioName(u.callsign)}</b>
-              <span className="muted small">Status 5 seit {formatDuration(state.time - u.speak!.since)}</span>
+              <span className="muted small">{u.speak!.prio ? 'Status 0 – dringend' : 'Status 5'} seit {formatDuration(state.time - u.speak!.since)}</span>
               <button
                 className="primary small-btn"
                 onClick={() => {
@@ -123,6 +127,13 @@ export function RadioPanel({ ctx }: { ctx: GameCtx }) {
               <HospitalSelect ctx={ctx} u={u} />
             </div>
           ))}
+          {voran.map((u) => (
+            <div key={u.id} className="speak-row hospital">
+              <b>{radioName(u.callsign)}</b>
+              <span className="muted small">{scn.hospitals.find((h) => h.id === u.voranmeldung!.hospitalId)?.name}</span>
+              <VoranmeldenButton ctx={ctx} u={u} />
+            </div>
+          ))}
         </div>
       )}
       <div
@@ -135,7 +146,7 @@ export function RadioPanel({ ctx }: { ctx: GameCtx }) {
         }}
       >
         {lines.map((m) => (
-          <div key={m.id} className={`radio-line ${m.kind} ${m.from === scn.ilsName ? 'out' : 'in'}`}>
+          <div key={m.id} className={`radio-line ${m.kind} ${m.from === scn.ilsName ? 'out' : 'in'} ${m.kind === 'fms' && /^Status 0\b/.test(m.text) ? 'prio' : ''}`}>
             <span className="muted">{formatClock(state.clockStart, m.t)}</span>{' '}
             {m.group && <span className="tmo-tag">{groupName.get(m.group) ?? m.group}</span>}
             {m.kind === 'system' && <span className="tmo-tag melder" title="Alarmierung über Funkmeldeempfänger, nicht über Sprechfunk">Melder</span>}{' '}
