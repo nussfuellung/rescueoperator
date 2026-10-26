@@ -57,7 +57,7 @@ describe('Status 8 im Einsatzvorschlag', () => {
     game.handle(p.id, { a: 'alarm', incidentId: neu.id, unitIds: [u.id] });
     for (let t = 0; t < 10_000; t += 1000) game.tick(1000);
     const msg = game.radio.find((m) => m.from === u.callsign && m.kind === 'voice');
-    expect(msg?.text).toMatch(/Übergabe.*in etwa 4 Minuten/);
+    expect(msg?.text).toMatch(/(Übergabe|übergeben).*in etwa 4 Minuten/);
   });
 
   it('Infektionstransport: nicht im Vorschlag, danach Status 6 zur Desinfektion und wieder Status 2', () => {
@@ -80,6 +80,25 @@ describe('Status 8 im Einsatzvorschlag', () => {
     for (let t = 0; t < 3_700_000 && u.desinfektion; t += 1000) game.tick(1000);
     expect(u.desinfektion).toBeUndefined();
     expect(u.baseStatus).toBe(2);
+  });
+
+  it('lässt sich per Sprechfunk aus Status 8 alarmieren und meldet die Restzeit', () => {
+    const { game, p, u, alt, neu } = setup();
+    const r = game.radioReply(u, `${u.callsign} von Leitstelle, übernehmen Sie den Einsatz ${neu.address}`, p);
+    expect(r).toMatch(/(Übergabe|übergeben).*in etwa 4 Minuten/);
+    expect(u.incidentId).toBe(neu.id);
+    expect(u.hasPatient).toBe(false);
+    expect(alt.unitIds).not.toContain(u.id);
+    // Keine zweite Rückmeldung hinterher
+    for (let t = 0; t < 10_000; t += 1000) game.tick(1000);
+    expect(game.radio.filter((m) => m.from === u.callsign && m.kind === 'voice').length).toBe(0);
+  });
+
+  it('lehnt die Funkalarmierung bei Infektionstransport ab', () => {
+    const { game, p, u, neu } = setup();
+    u.infektion = true;
+    expect(game.radioReply(u, `${u.callsign} von Leitstelle, übernehmen Sie den Einsatz ${neu.address}`, p)).toMatch(/Desinfektion/);
+    expect(u.incidentId).not.toBe(neu.id);
   });
 });
 

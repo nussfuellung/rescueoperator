@@ -1478,7 +1478,7 @@ export class Game {
     return computeProposal(this.scn, this.graph, this.units, inc, aaoMitSchlagwort(sw.aao, inc.schlagwort), this.time);
   }
 
-  private alarm(player: { name: string }, incidentId: string, unitIds: string[]): string | void {
+  private alarm(player: { name: string }, incidentId: string, unitIds: string[], s8Funk = true): string | void {
     const inc = this.incident(incidentId);
     if (!inc) return 'Einsatz nicht gefunden';
     if (inc.status === 'abgeschlossen') return 'Einsatz ist abgeschlossen';
@@ -1517,7 +1517,7 @@ export class Game {
       this.radioMsg(this.scn.ilsName, u.callsign, `Alarmierung: ${inc.schlagwort ?? inc.stichwort} – ${inc.address}${inc.sondersignal === false ? ' – ohne Sondersignal' : ''}${inc.tmo ? ` – Einsatzgruppe ${this.tmoName(inc.tmo)}` : ''}`, 'system');
       if (inc.tmo) u.tmo = inc.tmo;
       // Aus Status 8 meldet die Besatzung, wann sie nach der Übergabe losfahren kann
-      if (s8 && !u.crewPlayerId) this.after(this.rand(3000, 6000), () => this.s8Rueckmeldung(u, inc, rest, klinik));
+      if (s8 && s8Funk && !u.crewPlayerId) this.after(this.rand(3000, 6000), () => this.s8Rueckmeldung(u, inc, rest, klinik));
     }
     if (!alarmed.length) return 'Keine verfügbaren Fahrzeuge ausgewählt';
     this.log(inc, `Alarmiert (${player.name}): ${alarmed.join(', ')}`);
@@ -2028,10 +2028,15 @@ export class Game {
     const inc = findeEinsatz(t, offen);
     if (!inc) return 'Welcher Einsatz, bitte Einsatzort wiederholen.';
     const ziel = `${inc.stichwort} ${inc.address}`;
-    if (u.hasPatient) return `Negativ, wir haben einen Patienten an Bord und können ${ziel} nicht übernehmen.`;
-    if (u.fremd) return `Negativ, wir sind Fremdfahrzeug der ${u.fremd.ils}, bitte über die ESWL anfordern.`;
-    if (u.status === 6 || u.baseStatus === 6) return 'Negativ, wir sind außer Dienst.';
+    // Status 8: Die Übergabe wird für den neuen Einsatz abgeschlossen, der Patient zählt nicht mehr als an Bord
     const s8 = inUebergabe(u);
+    if (u.task === 'atHospital' && u.infektion) return `Negativ, Infektionstransport, wir müssen nach der Übergabe zur Desinfektion und können ${ziel} nicht übernehmen.`;
+    if (u.hasPatient && !s8) return `Negativ, wir haben einen Patienten an Bord und können ${ziel} nicht übernehmen.`;
+    if (u.fremd) return `Negativ, wir sind Fremdfahrzeug der ${u.fremd.ils}, bitte über die ESWL anfordern.`;
+    if (u.desinfektion) return 'Negativ, Fahrzeug wird nach Infektionstransport desinfiziert.';
+    if (u.status === 6 || u.baseStatus === 6) return 'Negativ, wir sind außer Dienst.';
+    const s8Rest = s8 ? uebergabeRest(u, this.time) : 0;
+    const s8Klinik = s8 ? this.scn.hospitals.find((h) => h.id === u.hospitalId)?.name : undefined;
     const alt = u.incidentId && !s8 ? this.incident(u.incidentId) : undefined;
     if (alt) {
       // Umdisponieren: aus dem bisherigen Einsatz lösen, dann neu alarmieren
@@ -2044,9 +2049,10 @@ export class Game {
       u.speak = undefined;
       u.status = u.baseStatus;
     }
-    const err = this.alarm(von, inc.id, [u.id]);
+    const err = this.alarm(von, inc.id, [u.id], false);
     if (err) return `Negativ, ${err}.`;
     this.log(inc, `${shortCallsign(u.callsign)} per Sprechfunk alarmiert`);
+    if (s8) return this.s8RueckmeldungText(inc, s8Rest, s8Klinik);
     const air = this.typeOf(u)?.air;
     return alt
       ? this.pick([`Verstanden, brechen ab und übernehmen ${ziel}.`, `Verstanden, drehen ab zu ${ziel}.`])
@@ -2949,17 +2955,16 @@ export class Game {
   /** Funkrückmeldung nach Alarmierung aus Status 8: Übergabe läuft noch, Abfahrt in etwa … Minuten */
   private s8Rueckmeldung(u: UnitState, inc: IncidentState, rest: number, klinik?: string) {
     if (u.incidentId !== inc.id || u.task !== 'alarmed') return;
+    this.radioMsg(u.callsign, this.scn.ilsName, this.s8RueckmeldungText(inc, rest, klinik), 'voice');
+  }
+
+  private s8RueckmeldungText(inc: IncidentState, rest: number, klinik?: string) {
     const min = Math.max(1, Math.round(rest / 60));
     const ort = klinik ? ` im ${klinik}` : '';
-    this.radioMsg(
-      u.callsign,
-      this.scn.ilsName,
-      this.pick([
-        `Verstanden, ${inc.address}. Übergabe${ort} läuft noch, sind in etwa ${min} ${min === 1 ? 'Minute' : 'Minuten'} unterwegs.`,
-        `Alarmierung verstanden. Wir übergeben noch${ort}, Abfahrt in etwa ${min} ${min === 1 ? 'Minute' : 'Minuten'}.`,
-      ]),
-      'voice',
-    );
+    return this.pick([
+      `Verstanden, ${inc.address}. Übergabe${ort} läuft noch, sind in etwa ${min} ${min === 1 ? 'Minute' : 'Minuten'} unterwegs.`,
+      `Alarmierung verstanden. Wir übergeben noch${ort}, Abfahrt in etwa ${min} ${min === 1 ? 'Minute' : 'Minuten'}.`,
+    ]);
   }
 
   /**
