@@ -21,6 +21,9 @@ export function runBot(scn: Scenario, hours: number, seed = 7): Game {
           }
           if (c.kind === '112') game.handle(bot.id, { a: 'endCall', callId: c.id });
         }
+        // Erneuter Anruf zu einem bestehenden Einsatz: anhören und auflegen
+        else if (c.state === 'active' && c.takerId === bot.id && c.kind === '112' && c.incidentId && game.time - (c.answeredAt ?? 0) > 20_000)
+          game.handle(bot.id, { a: 'endCall', callId: c.id });
       }
       for (const inc of game.incidents) {
         if (inc.status === 'abgeschlossen' || step % 20) continue;
