@@ -469,7 +469,7 @@ export function useReadAloud(state: PublicState | undefined, me: string | undefi
       c.transcript.forEach((l, i) => {
         if (i < seen || l.from !== 'caller' || !s.readCaller || !only.caller) return;
         const text = l.text.replace(/\([^)]*\)/g, '').trim();
-        if (text) say(text, 'caller', false, c.id);
+        if (text) say(text, 'caller', false, c.id, c.stimme);
       });
       lastCaller.current.set(c.id, c.transcript.length);
     }

@@ -36,6 +36,9 @@ import { aufnahmepflicht, klinikKm, voranmeldungFuer } from '../shared/ivena';
 import {
   BMA_TEMPLATE,
   FIRST_NAMES,
+  anruferAusText,
+  geschlechtVon,
+  vornameFuer,
   KVB_ERKLAERUNG,
   KVB_QUITTUNG,
   KVB_REAKTION,
@@ -161,6 +164,8 @@ interface Truth {
   panik?: number;
   /** Anrufer kann sich zum angelegten Einsatz erneut melden ('immer' erzwingt es, z. B. in Tests) */
   erneut?: 'zufall' | 'immer';
+  /** Geschlecht des Anrufers (Stimme der Sprachausgabe), wird beim ersten Annehmen festgelegt */
+  stimme?: 'm' | 'w';
   /** Zustand hat sich laut erneutem Anruf verschlechtert: Text für die Lage */
   verschlechtert?: string;
   /** Rückruf zu einer bestellten Terminfahrt (gehört zu main): Absage oder neue Abholzeit */
@@ -1182,11 +1187,14 @@ export class Game {
       // Kollegen der Polizei melden sich mit Funkrufname, Lage und Einsatzort in einem Zug
       call.transcript.push({ from: 'calltaker', text: `Integrierte Leitstelle ${this.scn.ilsName.replace(/^(ILS|Leitstelle)\s*/, '')}, grüß Gott.`, t: this.time });
       truth.whereSaid = true;
-      this.callerSays(call, `${this.fill(this.pick(truth.tpl.opening), truth, call.phone)} ${truth.spokenWhere}`);
+      const opening = this.pick(truth.tpl.opening);
+      this.anruferStimme(call, truth, opening);
+      this.callerSays(call, `${this.fill(opening, truth, call.phone)} ${truth.spokenWhere}`);
       return;
     }
     const erneut = this.erneut.get(call.id);
     if (erneut !== undefined) {
+      this.anruferStimme(call, truth, '');
       const inc = this.incident(erneut.inc);
       call.transcript.push({ from: 'calltaker', text: 'Notruf Feuerwehr und Rettungsdienst. Wo genau ist der Notfallort?', t: this.time });
       call.transcript.push({ from: 'system', text: `Rufnummer bekannt: erneuter Anruf zu Einsatz ${inc?.nr ?? ''} (${inc?.address ?? truth.address}).`, t: this.time });
@@ -1206,7 +1214,9 @@ export class Game {
     });
     call.asked.push('wo');
     const panisch = (truth.panik ?? 0) > 0;
-    this.callerSays(call, (panisch ? this.pick(PANIK_OPENING) : '') + this.fill(this.pick(truth.tpl.opening), truth));
+    const opening = this.pick(truth.tpl.opening);
+    this.anruferStimme(call, truth, opening);
+    this.callerSays(call, (panisch ? this.pick(PANIK_OPENING) : '') + this.fill(opening, truth));
     // Panische Anrufer nennen den Ort nicht von selbst
     if (!truth.fake && !panisch && this.rng() < 0.7) {
       this.after(4000, () => {
@@ -1215,6 +1225,20 @@ export class Game {
         this.callerSays(call, truth.spokenWhere, 1500);
       });
     }
+  }
+
+  /**
+   * Geschlecht des Anrufers festlegen (für die Stimme der Sprachausgabe) und den Vornamen passend machen:
+   * "Mein Mann ..." sagt eine Frau, wer selbst betroffen ist, hat das Geschlecht des Patienten, sonst zählt der Vorname.
+   */
+  private anruferStimme(call: CallState, truth: Truth, opening: string) {
+    const [vorname, ...rest] = truth.name.split(' ');
+    const sex = truth.stimme ?? anruferAusText(opening) ?? (truth.facts?.role === 'selbst' ? truth.facts.sex : geschlechtVon(vorname));
+    if (!sex) return;
+    truth.stimme = sex;
+    call.stimme = sex;
+    truth.name = [vornameFuer(vorname, sex), ...rest].join(' ');
+    if (truth.facts) truth.facts.name = truth.name;
   }
 
   private callerSays(call: CallState, text: string, delay = 1800) {

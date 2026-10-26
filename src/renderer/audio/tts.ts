@@ -11,6 +11,8 @@ interface Item {
   voice: Voice;
   /** Sprecher (Funkrufname oder Anruf), damit jeder seine eigene Stimme behält */
   speaker?: string;
+  /** Geschlecht des Sprechers: Piper wählt dann nur passende Stimmen */
+  geschlecht?: 'm' | 'w';
   /** Vorab angeforderte Piper-Ausgabe */
   wav?: Promise<ArrayBuffer | null>;
 }
@@ -64,7 +66,9 @@ function hash(s: string) {
 }
 
 function pickStimme(item: Item): string {
-  const all = piper?.value?.stimmen ?? [];
+  const alle = piper?.value?.stimmen ?? [];
+  const passend = item.geschlecht ? alle.filter((v) => v.geschlecht === item.geschlecht) : [];
+  const all = passend.length ? passend : alle;
   if (!all.length) return '';
   const key = item.speaker ?? item.voice;
   return all[hash(key) % all.length].id;
@@ -269,14 +273,14 @@ export function lastTtsResult() {
   return lastResult;
 }
 
-export function say(text: string, voice: Voice = 'radio', force = false, speaker?: string) {
+export function say(text: string, voice: Voice = 'radio', force = false, speaker?: string, geschlecht?: 'm' | 'w') {
   const s = getSettings();
   if (!force && (!s.ttsEnabled || isMuted())) return;
   const clean = sprechText(text.replace(/\s+/g, ' ').trim());
   if (!clean) return;
   // Bei Rückstau alte Funksprüche verwerfen, damit die Ausgabe aktuell bleibt
   if (queue.length > 4) queue.splice(0, queue.length - 4);
-  const item: Item = { text: clean, voice, speaker };
+  const item: Item = { text: clean, voice, speaker, geschlecht };
   void piperInfo();
   // Piper-Ausgabe schon anfordern, während noch etwas anderes gesprochen wird
   if (piperReady() && getSettings().ttsEngine !== 'browser' && getSettings().ttsEngine !== 'system') item.wav = fetchPiper(item);
