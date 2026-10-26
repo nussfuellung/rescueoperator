@@ -145,7 +145,7 @@ export type Action =
   | { a: 'eswl'; incidentId: string; nachbarId: string; type: string }
   | { a: 'releaseUnit'; unitId: string }
   /** Gebietsabsicherung: Fahrzeuge an eine Wache oder einen Punkt auf der Karte verlegen */
-  | { a: 'cover'; unitIds: string[]; stationId?: string; x?: number; y?: number; name?: string }
+  | { a: 'cover'; unitIds: string[]; stationId?: string; raumId?: string; x?: number; y?: number; name?: string }
   /** FMS-Auftrag H: Fahren Sie Wache an */
   | { a: 'sendHome'; unitId: string }
   | { a: 'closeIncident'; incidentId: string }

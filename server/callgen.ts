@@ -1332,6 +1332,50 @@ export const ADDRESS_NOT_YET_SAID = [
   'Ich hab Ihnen noch keine Adresse gesagt. {wo}',
 ];
 
+/** Panischer Anrufer: antwortet erst brauchbar, wenn der Calltaker ihn beruhigt hat */
+export const PANIK_OPENING = ['(schreit) ', '(weint) ', '(völlig aufgelöst) ', '(hektisch, überschlägt sich) '];
+export const PANIK = [
+  'Bitte, kommen Sie schnell! Schnell! Ich weiß nicht, was ich machen soll!',
+  '(weint) Oh Gott, oh Gott... bitte... bitte helfen Sie!',
+  'Machen Sie doch was! Warum fragen Sie so viel?!',
+  '(schreit) Ich kann jetzt nicht... schicken Sie einfach jemanden!',
+  'Ich... er... (schluchzt) ...es ging alles so schnell!',
+  '(atmet hektisch) Ich weiß nicht! Ich weiß es nicht!',
+];
+/** Antwort, die trotz Panik durchkommt (vorangestellt) */
+export const PANIK_PREFIX = ['(schluchzt) ', '(stockend) ', '(schreit fast) '];
+export const PANIK_BERUHIGT_HALB = ['(atmet hektisch) Ja... ja, ich versuch es... aber bitte schnell!', '(weint leiser) Okay... ich versuch es.'];
+export const PANIK_BERUHIGT = ['(atmet tief durch) Okay... okay. Ich hör Ihnen zu.', '(etwas ruhiger) Ja. Entschuldigung. Was soll ich tun?', '(ruhiger) Gut... ich bin da. Fragen Sie.'];
+
+/** Anrufer meldet sich erneut zu einem bereits angelegten Einsatz */
+export const ERNEUT_NACHFRAGE = [
+  'Ich hab vorhin schon angerufen! Wo bleiben Sie denn? Es ist noch keiner da!',
+  'Hallo, ich hab vor ein paar Minuten den Notruf gewählt. Kommt da noch jemand?',
+  'Ja, ich nochmal. Wie lange dauert das denn noch? Es ist immer noch niemand hier!',
+];
+export const ERNEUT_NIEMAND = [
+  'Ich hab vor einer Ewigkeit angerufen und es kommt einfach niemand! Haben Sie überhaupt jemanden geschickt?',
+  'Hallo?! Ich warte jetzt schon so lange, hier ist kein Martinshorn, gar nichts!',
+];
+/** Verschlechterung: Text des Anrufers, Antwort auf Zustandsfragen, Lagezusatz */
+export const ERNEUT_VERSCHLECHTERUNG = [
+  {
+    text: 'Ich hab gerade schon angerufen! Jetzt reagiert {er} kaum noch, {er} macht die Augen nicht mehr richtig auf!',
+    zustand: '{Er} reagiert nur noch, wenn ich {ihn} kräftig rüttle. Atmen tut {er} aber.',
+    lage: 'Patient zunehmend eingetrübt, nur noch auf Schmerzreiz erweckbar.',
+  },
+  {
+    text: 'Ich nochmal! Es wird schlimmer, {er} kriegt jetzt ganz schlecht Luft und wird ganz blau an den Lippen!',
+    zustand: '{Er} japst richtig nach Luft und kann nicht mehr reden.',
+    lage: 'Akute Verschlechterung mit Atemnot und Zyanose.',
+  },
+  {
+    text: 'Hallo, ich hab vorhin angerufen. {Er} ist jetzt ganz grau im Gesicht und schwitzt total, die Schmerzen werden immer schlimmer!',
+    zustand: 'Kaltschweißig, ganz grau, und {er} hält sich die Brust.',
+    lage: 'Zustandsverschlechterung, kaltschweißig, zunehmende Schmerzen.',
+  },
+];
+
 /** Weitervermittlung an den ärztlichen Bereitschaftsdienst (116117): Gesprächsbausteine nach Anruferrolle */
 export const KVB_ERKLAERUNG = {
   selbst: [

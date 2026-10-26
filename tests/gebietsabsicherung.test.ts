@@ -85,4 +85,20 @@ describe('Gebietsabsicherung', () => {
     expect(u.cover?.name).toBeTruthy();
     expect(u.cover?.stationId).toBeUndefined();
   });
+
+  it('verlegt in einen Bereitstellungsraum aus dem Editor', () => {
+    const scn = quiet();
+    const town = scn.towns[2];
+    scn.bereitstellungsraeume = [{ id: 'br1', name: 'Parkplatz Testhausen', x: town.x, y: town.y, org: 'RD' }];
+    const game = new Game(scn, { seed: 3 });
+    const p = game.addPlayer('D', 'dispatcher');
+    game.handle(p.id, { a: 'start' });
+    const u = game.units.find((x) => x.status === 2)!;
+    expect(game.handle(p.id, { a: 'cover', unitIds: [u.id], raumId: 'nix' })).toMatch(/nicht gefunden/);
+    expect(game.handle(p.id, { a: 'cover', unitIds: [u.id], raumId: 'br1' })).toBeUndefined();
+    expect(u.cover).toMatchObject({ name: 'Parkplatz Testhausen', raumId: 'br1' });
+    for (let t = 0; t < 3_600_000 && u.task !== 'covering'; t += 1000) game.tick(1000);
+    expect(u.task).toBe('covering');
+    expect(u.baseStatus).toBe(1);
+  });
 });

@@ -165,7 +165,7 @@ export function EditorScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
-type Tool = 'select' | 'road' | 'town' | 'feuerwache' | 'rettungswache' | 'hospital' | 'object' | 'delete';
+type Tool = 'select' | 'road' | 'town' | 'feuerwache' | 'rettungswache' | 'hospital' | 'object' | 'bereitstellung' | 'delete';
 type Tab = 'props' | 'liste' | 'fleet' | 'eswl' | 'aao' | 'types' | 'settings' | 'check';
 
 const TOOLS: { id: Tool; label: string; hint: string }[] = [
@@ -176,6 +176,7 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: 'rettungswache', label: 'RW Rettungswache', hint: 'Klicken legt eine Rettungswache an' },
   { id: 'hospital', label: 'H Krankenhaus', hint: 'Klicken legt ein Krankenhaus an' },
   { id: 'object', label: '◆ Objekt', hint: 'Klicken legt ein Objekt an (optional mit Brandmeldeanlage)' },
+  { id: 'bereitstellung', label: 'BR Bereitstellungsraum', hint: 'Klicken legt einen Bereitstellungsraum für die Gebietsabsicherung an, z. B. Autobahnparkplatz oder Gerätehaus' },
   { id: 'delete', label: '✕ Löschen', hint: 'Klicken löscht das Element unter dem Mauszeiger' },
 ];
 
@@ -333,6 +334,14 @@ function Editor({ initial, onClose, notes = [] }: { initial: Scenario; onClose: 
         changed();
         return;
       }
+      case 'bereitstellung': {
+        const b = { id: newId('br'), name: `Bereitstellungsraum ${townName(p)}`, x: Math.round(p.x), y: Math.round(p.y) };
+        (scn.bereitstellungsraeume ??= []).push(b);
+        setSel({ kind: 'bereitstellung', id: b.id });
+        setTab('props');
+        changed();
+        return;
+      }
       case 'delete':
         if (hit) {
           deleteHit(hit);
@@ -363,6 +372,9 @@ function Editor({ initial, onClose, notes = [] }: { initial: Scenario; onClose: 
       case 'object':
         scn.objects = scn.objects.filter((s) => s.id !== hit.id);
         break;
+      case 'bereitstellung':
+        scn.bereitstellungsraeume = scn.bereitstellungsraeume?.filter((s) => s.id !== hit.id);
+        break;
     }
     // verwaiste Knoten entfernen
     const used = new Set(scn.roads.flatMap((r) => [r.a, r.b]));
@@ -380,6 +392,8 @@ function Editor({ initial, onClose, notes = [] }: { initial: Scenario; onClose: 
             ? scn.hospitals.find((n) => n.id === hit.id)
             : hit.kind === 'object'
               ? scn.objects.find((n) => n.id === hit.id)
+              : hit.kind === 'bereitstellung'
+                ? scn.bereitstellungsraeume?.find((n) => n.id === hit.id)
               : hit.kind === 'town'
                 ? scn.towns.find((n) => n.id === hit.id)
                 : undefined;
@@ -512,12 +526,12 @@ function Editor({ initial, onClose, notes = [] }: { initial: Scenario; onClose: 
               tool === 'road'
                 ? ['node', 'road']
                 : tool === 'select' || tool === 'delete'
-                  ? ['station', 'hospital', 'object', 'node', 'town', 'road']
+                  ? ['station', 'hospital', 'object', 'bereitstellung', 'node', 'town', 'road']
                   : []
             }
             onClick={onClick}
             onContext={() => setPending(null)}
-            canDrag={(h) => tool === 'select' && ['node', 'station', 'hospital', 'object', 'town'].includes(h.kind)}
+            canDrag={(h) => tool === 'select' && ['node', 'station', 'hospital', 'object', 'bereitstellung', 'town'].includes(h.kind)}
             onDrag={onDrag}
             onDragEnd={(h) => {
               if (h.kind === 'node' || h.kind === 'town') changed(true);
@@ -605,6 +619,7 @@ function Props({ scn, sel, changed, callsignFor, onDelete, onTab }: PropsArgs) {
           </li>
         </ol>
         <p className="muted">{scn.objects.length} Objekte, davon {scn.objects.filter((o) => o.bma).length} mit Brandmeldeanlage.</p>
+        <p className="muted">{scn.bereitstellungsraeume?.length ?? 0} Bereitstellungsräume für die Gebietsabsicherung.</p>
       </div>
     );
   }
@@ -799,6 +814,29 @@ function Props({ scn, sel, changed, callsignFor, onDelete, onTab }: PropsArgs) {
       </div>
     );
   }
+  if (sel.kind === 'bereitstellung') {
+    const b = scn.bereitstellungsraeume?.find((x) => x.id === sel.id);
+    if (!b) return null;
+    return (
+      <div className="form">
+        <h3>Bereitstellungsraum</h3>
+        <p className="muted small">Fester Standort für die Gebietsabsicherung. Er erscheint im Spiel in der Auswahl „Gebietsabsicherung“ über den passenden Wachen.</p>
+        <label>
+          Name
+          <input value={b.name} onChange={(e) => { b.name = e.target.value; changed(); }} />
+        </label>
+        <label>
+          Für
+          <select value={b.org ?? ''} onChange={(e) => { b.org = (e.target.value || undefined) as 'RD' | 'FW' | undefined; changed(); }}>
+            <option value="">alle Fahrzeuge</option>
+            <option value="RD">Rettungsdienst</option>
+            <option value="FW">Feuerwehr</option>
+          </select>
+        </label>
+        {del}
+      </div>
+    );
+  }
   if (sel.kind === 'object') {
     const o = scn.objects.find((x) => x.id === sel.id);
     if (!o) return null;
@@ -909,7 +947,7 @@ function DienstEditor({ v, changed }: { v: { dienst?: Dienstzeit[] }; changed: (
 /** Wachen, Fahrzeuge, Kliniken, Objekte und Orte durchsuchen und auf der Karte zeigen */
 function ListTab({ scn, onPick }: { scn: Scenario; onPick: (h: Hit, p: Vec) => void }) {
   const [q, setQ] = useState('');
-  const [art, setArt] = useState<'alle' | 'station' | 'vehicle' | 'hospital' | 'object' | 'town'>('alle');
+  const [art, setArt] = useState<'alle' | 'station' | 'vehicle' | 'hospital' | 'object' | 'bereitstellung' | 'town'>('alle');
   const s = q.trim().toLowerCase();
   type Row = { key: string; hit: Hit; p: Vec; text: string; sub: string; art: typeof art };
   const rows: Row[] = [];
@@ -926,6 +964,9 @@ function ListTab({ scn, onPick }: { scn: Scenario; onPick: (h: Hit, p: Vec) => v
     for (const h of scn.hospitals) if (match(`${h.name} ${h.specialties.join(' ')}`)) rows.push({ key: h.id, hit: { kind: 'hospital', id: h.id }, p: h, text: h.name, sub: h.specialties.join(', '), art: 'hospital' });
   if (art === 'alle' || art === 'object')
     for (const o of scn.objects) if (match(o.name)) rows.push({ key: o.id, hit: { kind: 'object', id: o.id }, p: o, text: o.name, sub: o.bma ? 'mit BMA' : o.kind, art: 'object' });
+  if (art === 'alle' || art === 'bereitstellung')
+    for (const b of scn.bereitstellungsraeume ?? [])
+      if (match(b.name)) rows.push({ key: b.id, hit: { kind: 'bereitstellung', id: b.id }, p: b, text: b.name, sub: `Bereitstellungsraum${b.org ? ` (${b.org})` : ''}`, art: 'bereitstellung' });
   if (art === 'alle' || art === 'town')
     for (const t of scn.towns) if (match(t.name)) rows.push({ key: t.id, hit: { kind: 'town', id: t.id }, p: t, text: t.name, sub: 'Ort', art: 'town' });
   const shown = rows.slice(0, 200);
@@ -938,6 +979,7 @@ function ListTab({ scn, onPick }: { scn: Scenario; onPick: (h: Hit, p: Vec) => v
         <option value="vehicle">Fahrzeuge</option>
         <option value="hospital">Kliniken</option>
         <option value="object">Objekte</option>
+        <option value="bereitstellung">Bereitstellungsräume</option>
         <option value="town">Orte</option>
       </select>
       <div className="trefferliste">

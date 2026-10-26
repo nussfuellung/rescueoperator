@@ -2709,6 +2709,15 @@ button.gross {
   color: var(--warn-text, inherit);
   white-space: nowrap;
 }
+.cover-head {
+  margin-top: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.cover-station .tag.br {
+  background: #1f4f8a;
+  color: #fff;
+}
 
 /* IVENA: Voranmeldung von Tracerdiagnosen */
 .ivena-voran {
