@@ -287,6 +287,17 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
             </button>
           )
         )}
+        {inc.kit ? (
+          <span className="polizei-tag kit-tag" title="Kriseninterventionsteam verständigt">
+            KIT {inc.kit === 'vor Ort' ? 'vor Ort' : 'verständigt'}
+          </span>
+        ) : (
+          inc.status !== 'abgeschlossen' && (
+            <button className="small-btn" onClick={() => conn.send({ a: 'requestKit', incidentId: inc.id })} title="Kriseninterventionsteam (KIT) für Angehörige verständigen">
+              🤝 KIT
+            </button>
+          )
+        )}
         <select
           className="tmo-select"
           title="Einsatz-Rufgruppe (TMO)"

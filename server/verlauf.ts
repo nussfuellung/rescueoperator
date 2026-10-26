@@ -50,6 +50,10 @@ export interface Verlauf {
   /** Feuerwehr erhöht das Stichwort */
   erhoehung?: string;
   entwicklung?: Entwicklung;
+  /** Reanimation läuft bei Eintreffen; Ausgang (ROSC oder Abbruch) erst, wenn der Notarzt vor Ort ist */
+  rea?: 'rosc' | 'tot';
+  /** Verstorbene Person: Polizei zur Leichensache und KIT für die Angehörigen */
+  leichensache?: boolean;
   /** Feststellung abhängig davon, ob ein Notarzt vor Ort ist (ersetzt lage bei der Lagemeldung) */
   notarztLage?: Record<NotarztStand, string>;
 }
@@ -444,6 +448,45 @@ function abc(v: Verlauf, input: VerlaufInput, rng: Rng) {
 }
 
 // ---------- Rettungsdienst ----------
+/**
+ * Reanimation: Bei Eintreffen läuft die Reanimation, über ROSC oder Abbruch entscheidet erst der Notarzt.
+ * Den Ausgang meldet die Einsatzstelle, wenn der Notarzt eine Weile vor Ort ist (reaAusgang).
+ */
+function reanimation(v: Verlauf, input: VerlaufInput, rng: Rng, nachfordern: (e: Record<string, number>) => boolean) {
+  // Den Abbruch einer Reanimation und die Todesfeststellung kann nur ein Arzt vornehmen
+  const notarzt = !!v.needs.NEF || nachfordern({ NEF: 1 });
+  weighted(rng, [
+    { w: 55, apply: (x) => (x.rea = 'rosc') },
+    { w: 35, apply: (x) => (x.rea = 'tot') },
+    {
+      w: 10,
+      apply: (x) => {
+        const tot = 'Bei Eintreffen sichere Todeszeichen, keine Reanimation mehr eingeleitet, Patient verstorben.';
+        const nachsorge = 'Leichensache, Polizei und KIT erforderlich.';
+        x.lage = `${tot} ${notarzt ? 'Notarzt zur Todesfeststellung erforderlich' : 'Todesfeststellung durch den ärztlichen Bereitschaftsdienst erforderlich'}, ${nachsorge}`;
+        x.notarztLage = { vorOrt: `${tot} Tod durch den Notarzt festgestellt, ${nachsorge}`, unterwegs: x.lage, ohne: x.lage };
+        x.keinTransport = true;
+        x.leichensache = true;
+        x.workFactor = 0.6;
+      },
+    },
+  ]).apply(v);
+  if (!v.rea) return;
+  const lage = input.lage;
+  v.notarztLage = {
+    vorOrt: `${lage} Notarzt vor Ort, erweiterte Maßnahmen laufen.`,
+    unterwegs: `${lage} Reanimation wird fortgeführt, Notarzt dringend erwartet.`,
+    ohne: `${lage} Reanimation wird fortgeführt, Notarzt dringend erforderlich.`,
+  };
+}
+
+/** Ausgang der Reanimation nach so vielen Minuten; notarzt: ob ein Notarzt die Reanimation geleitet hat */
+export function reaAusgang(rea: 'rosc' | 'tot', minuten: number, notarzt = true): string {
+  if (rea === 'rosc')
+    return `ROSC nach ${minuten} Minuten Reanimation, Patient intubiert und beatmet, Transport unter Notarztbegleitung ins Herzkatheterlabor, Voranmeldung Schockraum erbeten.`;
+  return `Reanimation nach ${minuten} Minuten ohne ROSC ${notarzt ? 'durch den Notarzt' : 'nach Rücksprache mit dem Telenotarzt'} abgebrochen, Patient verstorben. Leichensache, Polizei und KIT erforderlich.`;
+}
+
 function rd(v: Verlauf, input: VerlaufInput, rng: Rng, nachfordern: (e: Record<string, number>) => boolean) {
   const sw = input.stichwort;
   const id = input.tplId;
@@ -452,25 +495,8 @@ function rd(v: Verlauf, input: VerlaufInput, rng: Rng, nachfordern: (e: Record<s
   if (id.startsWith('kvb') || sw === 'RD 3') return;
   const ausgang: Ausgang[] = [{ w: 70, apply: () => {} }];
   if (/cpr/.test(id)) {
-    ausgang.push({
-      w: 45,
-      apply: (x) => {
-        // Den Abbruch einer Reanimation und die Todesfeststellung kann nur ein Arzt vornehmen
-        const notarzt = !!x.needs.NEF || nachfordern({ NEF: 1 });
-        const nachsorge = 'Polizei zur Leichensache und KIT verständigen.';
-        const ohneArzt = `Bei Eintreffen sichere Todeszeichen, Reanimation nicht fortgeführt, Patient verstorben. ${
-          notarzt ? 'Notarzt zur Todesfeststellung erforderlich' : 'Todesfeststellung durch den ärztlichen Bereitschaftsdienst erforderlich'
-        }, ${nachsorge}`;
-        x.lage = ohneArzt;
-        x.notarztLage = {
-          vorOrt: `Reanimation nach 30 Minuten ohne ROSC durch den Notarzt abgebrochen, Patient verstorben, ${nachsorge}`,
-          unterwegs: ohneArzt,
-          ohne: ohneArzt,
-        };
-        x.keinTransport = true;
-        x.workFactor = 1.1;
-      },
-    });
+    reanimation(v, input, rng, nachfordern);
+    return;
   }
   if (sw === 'RD 2' && input.needs.NEF && !/cpr|stroke|chest|breath/.test(id)) {
     ausgang.push({
