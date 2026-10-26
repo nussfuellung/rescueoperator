@@ -6,7 +6,7 @@ import { localToMercator, mercatorToLocal } from '../../shared/osmimport';
 import { getSettings } from './settings';
 import type { CallState, IncidentState, RoadType, Scenario, UnitState, Vec } from '../../shared/types';
 
-export type HitKind = 'unit' | 'incident' | 'station' | 'hospital' | 'object' | 'town' | 'node' | 'road';
+export type HitKind = 'unit' | 'incident' | 'station' | 'hospital' | 'object' | 'bereitstellung' | 'town' | 'node' | 'road';
 export interface Hit {
   kind: HitKind;
   id: string;
@@ -207,6 +207,7 @@ export function MapView(props: Props) {
       if (allow('station') && buildings) for (const s of scn.stations) if (near(s)) return { kind: 'station', id: s.id };
       if (allow('hospital') && buildings) for (const h of scn.hospitals) if (near(h)) return { kind: 'hospital', id: h.id };
       if (allow('object') && buildings) for (const o of scn.objects) if (near(o, 9)) return { kind: 'object', id: o.id };
+      if (allow('bereitstellung') && buildings) for (const b of scn.bereitstellungsraeume ?? []) if (near(b, 10)) return { kind: 'bereitstellung', id: b.id };
       if (allow('node') && p.editor?.showNodes && view.current.scale > 0.1) for (const n of scn.nodes) if (near(n, 7)) return { kind: 'node', id: n.id };
       if (allow('town')) for (const t of scn.towns) if (near(t, 14)) return { kind: 'town', id: t.id };
       if (allow('road')) {
@@ -464,6 +465,23 @@ export function MapView(props: Props) {
           if (v.scale > 0.35) label(ctx, o.name, x, y + 14, '#3c096c');
         }
 
+        // Bereitstellungsräume (Gebietsabsicherung)
+        for (const b of scn.bereitstellungsraeume ?? []) {
+          const [x, y] = toScreen(b);
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = '#1f4f8a';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x, y, 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#1f4f8a';
+          ctx.font = 'bold 8px sans-serif';
+          ctx.fillText('BR', x, y + 1);
+          if (isSel('bereitstellung', b.id)) ring(ctx, x, y, 13);
+          if (v.scale > 0.2) label(ctx, b.name, x, y + 16, '#1f4f8a');
+        }
+
         // Kliniken
         for (const hsp of scn.hospitals) {
           const [x, y] = toScreen(hsp);
@@ -496,7 +514,7 @@ export function MapView(props: Props) {
       // Hintergrund, Straßen, Straßennamen und Wachen liegen in einer zwischengespeicherten Ebene. Beim Verschieben und
       // Zoomen wird diese Ebene nur verschoben bzw. skaliert und erst neu gezeichnet, wenn die Bewegung kurz ruht.
       const settings0 = getSettings();
-      const otherKey = [w, h, dpr, segVersion.current, labelsRef.current.length, settings0.mapTiles, settings0.tileUrl, p.editor?.selected?.id, scn.stations.length, scn.hospitals.length, scn.objects.length, !!p.filter?.hideBuildings].join('|');
+      const otherKey = [w, h, dpr, segVersion.current, labelsRef.current.length, settings0.mapTiles, settings0.tileUrl, p.editor?.selected?.id, scn.stations.length, scn.hospitals.length, scn.objects.length, scn.bereitstellungsraeume?.length ?? 0, !!p.filter?.hideBuildings].join('|');
       const viewKey = `${v.cx}|${v.cy}|${v.scale}`;
       if (viewKey !== lastView.current.key) lastView.current = { key: viewKey, t: now };
       const moving = now - lastView.current.t < 160;
