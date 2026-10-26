@@ -6,7 +6,7 @@ import type { AddressHit, ObjectHit } from '../../../shared/geo';
 import { computeProposal, freeUnitTimes } from '../../../shared/dispatch';
 import { aaoMitSchlagwort, findSchlagwort, formatSchlagwort, schlagwortByNr, searchSchlagworte } from '../../../shared/schlagworte';
 import { SchlagwortSelect } from './SchlagwortSelect';
-import { HospitalSelect } from './Ivena';
+import { HospitalSelect, VoranmeldenButton } from './Ivena';
 import { ZubuchenDialog } from './ZubuchenDialog';
 import { S8Tag } from './S8Tag';
 import { decodePzc, pzcText, zielFach } from '../../../shared/pzc';
@@ -162,6 +162,7 @@ export function CallPanel({ ctx }: { ctx: GameCtx }) {
                 <div className="row">
                   {u && u.task === 'awaitHospital' && !u.hospitalId && <HospitalSelect ctx={ctx} u={u} />}
                   {u?.hospitalId && <span className="small">Zielklinik: {ctx.scn.hospitals.find((h) => h.id === u.hospitalId)?.name}</span>}
+                  {u && <VoranmeldenButton ctx={ctx} u={u} />}
                   {ctx.openIvena && <button onClick={ctx.openIvena}>IVENA öffnen</button>}
                   <button className="danger" onClick={() => conn.send({ a: 'endCall', callId: c.id })}>
                     Auflegen

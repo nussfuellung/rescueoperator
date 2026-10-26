@@ -110,6 +110,8 @@ export interface Hospital {
   x: number;
   y: number;
   specialties: string[];
+  /** Klinik außerhalb der Karte: Fahrzeit vom Kartenrand bis zur Klinik in Minuten (je Richtung) */
+  ausserhalbMin?: number;
 }
 
 export interface MapObject {
@@ -309,6 +311,10 @@ export interface UnitState {
   desinfektion?: { bis?: number };
   /** Über die ESWL von einer Nachbar-ILS entsandt: gehört nicht zum eigenen Bereich und fährt danach heim */
   fremd?: { nachbarId: string; ils: string; wache: string; imBereich: boolean };
+  /** Tracerdiagnose: Voranmeldung in der Zielklinik (Schockraum, Herzkatheterlabor, Stroke Unit); t = erfolgt um */
+  voranmeldung?: { art: string; hospitalId: string; t?: number };
+  /** Verlegung: zwischen den Ärzten vereinbarte Zielklinik */
+  verlegungNach?: string;
 }
 
 export interface CallLine {
@@ -498,7 +504,9 @@ export interface IvenaAbmeldung {
 export interface IvenaState {
   /** seit: Zeitpunkt der Abmeldung (Spielzeit), bis: voraussichtliches Ende */
   abmeldungen: IvenaAbmeldung[];
-  zuweisungen: { t: number; hospitalId: string; callsign: string; pzc?: string; nr?: string; trotzAbmeldung?: boolean }[];
+  zuweisungen: { t: number; hospitalId: string; callsign: string; pzc?: string; nr?: string; trotzAbmeldung?: boolean; aufnahmepflicht?: boolean }[];
+  /** Geschätzte Übergabedauer in der Notaufnahme je Klinik in Minuten */
+  wartezeit?: Record<string, number>;
 }
 
 export type WetterArt = 'gewitter' | 'sturm' | 'starkregen' | 'glatteis' | 'schnee' | 'hitze';

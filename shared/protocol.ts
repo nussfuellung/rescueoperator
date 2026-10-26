@@ -149,6 +149,7 @@ export type Action =
   | { a: 'closeIncident'; incidentId: string }
   | { a: 'speakPermit'; unitId: string }
   | { a: 'assignHospital'; unitId: string; hospitalId: string }
+  | { a: 'voranmelden'; unitId: string }
   | { a: 'radio'; unitId: string; text: string }
   | { a: 'crewStatus'; status: number }
   | { a: 'crewRadio'; text: string }
