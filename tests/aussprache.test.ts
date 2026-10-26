@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ordinalStamm, piperText, sprechText } from '../shared/aussprache';
+import { ordinalStamm, piperText, sprechText, stilFuer } from '../shared/aussprache';
 
 describe('Aufbereitung für die Sprachausgabe', () => {
   it('schreibt Abkürzungen mit Punkt aus', () => {
@@ -75,5 +75,20 @@ describe('Aussprachehilfen für Piper', () => {
     const einmal = piperText('Lageänderung an der Unfallstelle');
     expect(einmal).toBe('Lage-änderung an der Unfall-stelle');
     expect(piperText(einmal)).toBe(einmal);
+  });
+});
+
+describe('Sprechstil der Anrufer', () => {
+  it('folgt den Regieanweisungen, solange der erste Satz eine hatte', () => {
+    expect(stilFuer('a', '(schreit) Hilfe, mein Mann!')).toBe('surprised');
+    expect(stilFuer('a', 'Ich weiß nicht!')).toBe('surprised');
+    expect(stilFuer('a', '(atmet tief durch) Okay.')).toBe('neutral');
+    expect(stilFuer('a', '(schluchzt) Er atmet.')).toBe('surprised');
+    expect(stilFuer('b', '(flüstert) Er ist noch in der Wohnung.')).toBe('whisper');
+    expect(stilFuer('c', '(lallt) Mein Kumpel wacht nicht auf.')).toBe('drunk');
+    expect(stilFuer('d', '(aufgebracht) So ein Idiot!')).toBe('angry');
+    // Ohne Regieanweisung am Anfang bleibt die normale Stimme, auch wenn später eine kommt
+    expect(stilFuer('e', 'Mein Vater ist gestürzt.')).toBeUndefined();
+    expect(stilFuer('e', '(weint) Bitte schnell.')).toBeUndefined();
   });
 });

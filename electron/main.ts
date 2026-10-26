@@ -173,11 +173,11 @@ const lokalesPiper = async () => {
   return (await piperTest) && piper.available ? piper : null;
 };
 ipcMain.handle('piper:info', async () => (await lokalesPiper())?.info() ?? null);
-ipcMain.handle('piper:synth', async (_e, text: string, stimme: string, tempo: number) => {
+ipcMain.handle('piper:synth', async (_e, text: string, stimme: string, tempo: number, stil?: string) => {
   const p = await lokalesPiper();
   if (!p || !text) return null;
   try {
-    return new Uint8Array(await p.synth(String(text), String(stimme), Math.max(0.6, Math.min(1.6, Number(tempo) || 1))));
+    return new Uint8Array(await p.synth(String(text), String(stimme), Math.max(0.6, Math.min(1.6, Number(tempo) || 1)), stil ? String(stil) : undefined));
   } catch {
     return null;
   }

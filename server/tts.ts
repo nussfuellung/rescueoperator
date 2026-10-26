@@ -11,9 +11,12 @@ export interface Stimme {
   /** m = männlich, w = weiblich */
   geschlecht: 'm' | 'w';
   model: string;
+  /** Mehrsprecher-Modell (thorsten_emotional): Sprechstil -> Sprecher-Nummer */
+  stile?: Record<string, number>;
 }
 
 const NAMEN: Record<string, [string, 'm' | 'w']> = {
+  thorsten_emotional: ['Thorsten (emotional)', 'm'],
   thorsten: ['Thorsten', 'm'],
   karlsson: ['Karlsson', 'm'],
   kerstin: ['Kerstin', 'w'],
@@ -46,6 +49,16 @@ function qualitaet(model: string) {
   if (base.includes('-high.')) return 3;
   if (base.includes('-medium.')) return 2;
   return 1;
+}
+
+/** Sprechstile eines Mehrsprecher-Modells aus seiner .onnx.json */
+function stileAus(json: string): { stile?: Record<string, number> } {
+  try {
+    const cfg = JSON.parse(readFileSync(json, 'utf8')) as { num_speakers?: number; speaker_id_map?: Record<string, number> };
+    return (cfg.num_speakers ?? 1) > 1 && cfg.speaker_id_map ? { stile: cfg.speaker_id_map } : {};
+  } catch {
+    return {};
+  }
 }
 
 /** Höchstens so viele Stimmen bleiben gleichzeitig geladen (je Stimme etwa 100 MB Speicher) */
@@ -105,15 +118,15 @@ export class Sprecher {
     }
   }
 
-  /** Spricht einen Satz in die Datei out */
-  sprich(text: string, out: string): Promise<void> {
+  /** Spricht einen Satz in die Datei out; sprecher wählt bei Mehrsprecher-Modellen die Stimme */
+  sprich(text: string, out: string, sprecher?: number): Promise<void> {
     if (!this.alive) return Promise.reject(new Error('Piper läuft nicht'));
     clearTimeout(this.ruhe);
     return new Promise((resolve, reject) => {
       // Hängt Piper, wird der Prozess beendet; der nächste Satz startet einen neuen
       const timer = setTimeout(() => this.stop(), 20000);
       this.offen.push({ resolve, reject, timer });
-      this.p.stdin!.write(`${ascii(JSON.stringify({ text, output_file: out }))}\n`);
+      this.p.stdin!.write(`${ascii(JSON.stringify({ text, output_file: out, ...(sprecher !== undefined ? { speaker_id: sprecher } : {}) }))}\n`);
     });
   }
 
@@ -153,14 +166,15 @@ export class Piper {
       for (const f of readdirSync(sdir, { recursive: true }) as string[]) {
         if (!f.endsWith('.onnx') || !existsSync(join(sdir, `${f}.json`))) continue;
         const base = f.split(/[\\/]/).pop()!.replace(/\.onnx$/, '');
-        const key = Object.keys(NAMEN).find((k) => base.includes(k)) ?? base;
+        // Längste Namen zuerst, damit thorsten_emotional nicht als thorsten zählt
+        const key = Object.keys(NAMEN).sort((a, b) => b.length - a.length).find((k) => base.includes(k)) ?? base;
         const [name, geschlecht] = NAMEN[key] ?? [base, 'm'];
         if (statSync(join(sdir, f)).size < 1e6) continue;
         // Liegt eine Stimme in mehreren Qualitätsstufen vor (z. B. altes thorsten-low neben medium), gilt die beste
         const alt = this.stimmen.findIndex((s) => s.id === key);
         if (alt >= 0 && qualitaet(this.stimmen[alt].model) >= qualitaet(f)) continue;
         if (alt >= 0) this.stimmen.splice(alt, 1);
-        this.stimmen.push({ id: key, name, geschlecht, model: join(sdir, f) });
+        this.stimmen.push({ id: key, name, geschlecht, model: join(sdir, f), ...stileAus(join(sdir, `${f}.json`)) });
       }
       this.stimmen.sort((a, b) => a.id.localeCompare(b.id));
     }
@@ -171,15 +185,19 @@ export class Piper {
   }
 
   info() {
-    return { available: this.available, stimmen: this.stimmen.map(({ id, name, geschlecht }) => ({ id, name, geschlecht })) };
+    return {
+      available: this.available,
+      stimmen: this.stimmen.map(({ id, name, geschlecht, stile }) => ({ id, name, geschlecht, ...(stile ? { stile: Object.keys(stile) } : {}) })),
+    };
   }
 
-  /** Text mit einer Stimme sprechen; Tempo > 1 spricht schneller */
-  async synth(text: string, stimme: string, tempo = 1): Promise<Buffer> {
+  /** Text mit einer Stimme sprechen; Tempo > 1 spricht schneller, stil wählt bei thorsten_emotional den Sprechstil */
+  async synth(text: string, stimme: string, tempo = 1, stil?: string): Promise<Buffer> {
     const v = this.stimmen.find((s) => s.id === stimme) ?? this.stimmen[0];
     if (!this.exe || !v) throw new Error('Piper nicht verfügbar');
     const clean = piperText(text.replace(/\s+/g, ' ').trim()).slice(0, 600);
-    const key = `${v.id}|${tempo}|${clean}`;
+    const sprecher = v.stile ? (v.stile[stil ?? ''] ?? v.stile.neutral ?? 0) : undefined;
+    const key = `${v.id}|${tempo}|${sprecher ?? ''}|${clean}`;
     const hit = this.cache.get(key);
     if (hit) return hit;
     // Höchstens zwei Sätze gleichzeitig
@@ -188,7 +206,7 @@ export class Piper {
     try {
       // Über eine Datei statt stdout: unter Windows würde die Konsole Binärdaten verändern
       const out = join(tmpdir(), `lst-tts-${process.pid}-${++this.seq}.wav`);
-      await this.sprecher(v, tempo).sprich(clean, out);
+      await this.sprecher(v, tempo).sprich(clean, out, sprecher);
       let wav: Buffer;
       try {
         wav = existsSync(out) ? readFileSync(out) : Buffer.alloc(0);

@@ -627,7 +627,7 @@ export class Game {
 
   /** Wie oft ein Anrufer beruhigt werden muss (0 = gefasst); Angehörige bei schweren Notfällen öfter panisch */
   private rollPanik(truth: Truth): number {
-    if (truth.fake || truth.streife || truth.termin !== undefined || truth.stichwort.startsWith('RD KTP')) return 0;
+    if (truth.fake || truth.streife || truth.termin !== undefined || truth.stichwort.startsWith('RD KTP') || truth.tpl.stimmung) return 0;
     const role = truth.facts?.role;
     if (role === 'personal') return 0;
     const schwer = truth.tpl.tcpr || truth.stichwort === 'RD 2' || truth.stichwort.startsWith('B 3') || truth.stichwort.startsWith('B 4');
@@ -1218,6 +1218,9 @@ export class Game {
   }
 
   private callerSays(call: CallState, text: string, delay = 1800) {
+    // Gefühlslage der Vorlage als Regieanweisung, sofern der Satz nicht schon eine hat
+    const stimmung = this.callTruth.get(call.id)?.tpl.stimmung;
+    if (stimmung && !text.startsWith('(')) text = `(${stimmung}) ${text}`;
     call.typing = true;
     this.after(delay, () => {
       if (call.state !== 'active') return;

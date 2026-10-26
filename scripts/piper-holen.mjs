@@ -13,9 +13,13 @@ const platforms = [
 ];
 // macOS: Die offiziellen Mac-Pakete taugen nicht (nur Intel, ohne Bibliotheken). Piper für den Mac baut scripts/piper-mac-bauen.sh.
 // Thorsten und Kerstin: CC0; Karlsson und Eva: M-AILABS-Datensatz
-// Thorsten in Qualität medium (gleich groß wie low, klingt klarer); die anderen deutschen Stimmen gibt es nur in low
+// Thorsten in Qualität medium (gleich groß wie low, klingt klarer); die anderen deutschen Stimmen gibt es nur in low.
+// thorsten_emotional (CC0) spricht in mehreren Stilen, z. B. aufgeregt für panische Anrufer.
 const voices = ['kerstin-low', 'karlsson-low', 'eva_k-x-low'];
-const hfVoices = [['thorsten', 'medium']];
+const hfVoices = [
+  ['thorsten', 'medium'],
+  ['thorsten_emotional', 'medium'],
+];
 // Ältere Stände luden Thorsten in low; die Datei würde sonst weiter mitverpackt
 rmSync(join('vendor', 'stimmen', 'thorsten-low'), { recursive: true, force: true });
 

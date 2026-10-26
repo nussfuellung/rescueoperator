@@ -27,7 +27,7 @@ interface Bridge {
   ttsStop?(): Promise<void>;
   /** Piper-Stimmen dieses Rechners (für Online-Sitzungen) */
   piperInfo?(): Promise<{ available: boolean; stimmen: { id: string; name: string; geschlecht: 'm' | 'w' }[] } | null>;
-  piperSynth?(text: string, stimme: string, tempo: number): Promise<Uint8Array | null>;
+  piperSynth?(text: string, stimme: string, tempo: number, stil?: string): Promise<Uint8Array | null>;
   sttInfo?(): Promise<ModelInfo>;
   sttDownload?(): Promise<ModelInfo>;
   sttImport?(): Promise<ModelInfo>;

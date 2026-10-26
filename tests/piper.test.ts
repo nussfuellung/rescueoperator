@@ -33,10 +33,12 @@ done
     ['thorsten-low', 'de-thorsten-low.onnx'],
     ['thorsten-medium', 'de_DE-thorsten-medium.onnx'],
     ['kerstin-low', 'de-kerstin-low.onnx'],
+    ['thorsten_emotional-medium', 'de_DE-thorsten_emotional-medium.onnx'],
   ]) {
     mkdirSync(join(dir, 'stimmen', sub), { recursive: true });
     writeFileSync(join(dir, 'stimmen', sub, file), Buffer.alloc(1.1e6));
-    writeFileSync(join(dir, 'stimmen', sub, `${file}.json`), '{}');
+    const cfg = sub.startsWith('thorsten_emotional') ? { num_speakers: 3, speaker_id_map: { angry: 0, neutral: 1, surprised: 2 } } : {};
+    writeFileSync(join(dir, 'stimmen', sub, `${file}.json`), JSON.stringify(cfg));
   }
 
   it('nimmt von einer Stimme die beste Qualität', () => {
@@ -44,7 +46,9 @@ done
     expect(p.stimmen.map((s) => [s.id, s.model.split(/[\\/]/).pop()])).toEqual([
       ['kerstin', 'de-kerstin-low.onnx'],
       ['thorsten', 'de_DE-thorsten-medium.onnx'],
+      ['thorsten_emotional', 'de_DE-thorsten_emotional-medium.onnx'],
     ]);
+    expect(p.info().stimmen.find((s) => s.id === 'thorsten_emotional')?.stile).toEqual(['angry', 'neutral', 'surprised']);
   });
 
   it('lässt Piper laufen und schickt jeden Satz als ASCII-JSON-Zeile', async () => {
@@ -59,6 +63,20 @@ done
       const zeilen = readFileSync(`${log}.${pids[0]}`, 'utf8');
       expect(zeilen).toContain('Gr\\u00fc\\u00dfe aus W\\u00fcrzburg');
       expect(/[^\x00-\x7f]/.test(zeilen)).toBe(false);
+      expect(zeilen).not.toContain('speaker_id');
+    } finally {
+      p.stop();
+    }
+  });
+
+  it('wählt bei thorsten_emotional den Sprecher nach Stil, ohne Stil neutral', async () => {
+    const p = new Piper([dir]);
+    try {
+      await p.synth('Schnell!', 'thorsten_emotional', 1, 'surprised');
+      await p.synth('Gut.', 'thorsten_emotional', 1);
+      const pid = readFileSync(log, 'utf8').trim().split('\n').pop();
+      const zeilen = readFileSync(`${log}.${pid}`, 'utf8').trim().split('\n');
+      expect(zeilen.map((z) => JSON.parse(z).speaker_id)).toEqual([2, 1]);
     } finally {
       p.stop();
     }

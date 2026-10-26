@@ -171,3 +171,36 @@ export function piperText(text: string): string {
     return NICHT_TRENNEN.some((n) => w.startsWith(n)) ? teil : `-${teil}`;
   });
 }
+
+// ---------- Gefühlslage der Anrufer für thorsten_emotional ----------
+
+/** Gefühlslage je Anrufer: wer panisch anfängt, behält bis zum Gesprächsende die emotionale Stimme */
+const stilJeSprecher = new Map<string, string>();
+const PANISCH = /schreit|weint|schluchzt|stockend|hektisch|aufgelöst|panisch/i;
+const BERUHIGT = /ruhiger|tief durch/i;
+/** Regieanweisung -> Stil von thorsten_emotional */
+const STILE: [RegExp, string][] = [
+  [/flüstert/i, 'whisper'],
+  [/lallt|betrunken/i, 'drunk'],
+  [/aufgebracht|wütend|brüllt|schimpft/i, 'angry'],
+  [PANISCH, 'surprised'],
+];
+const stilAus = (regie: string) => STILE.find(([re]) => re.test(regie))?.[1];
+
+/** Sprechstil aus den Regieanweisungen eines Anrufersatzes ("(schreit) …", "(atmet tief durch) …") */
+export function stilFuer(speaker: string, roh: string): string | undefined {
+  const regie = (roh.match(/\([^)]*\)/g) ?? []).join(' ');
+  const bisher = stilJeSprecher.get(speaker);
+  // Nur wer schon im ersten Satz panisch ist, wechselt die Stimme; später bliebe sie sonst nicht dieselbe
+  if (bisher === undefined) {
+    stilJeSprecher.set(speaker, stilAus(regie) ?? '');
+    return stilJeSprecher.get(speaker) || undefined;
+  }
+  if (!bisher) return undefined;
+  if (BERUHIGT.test(regie)) stilJeSprecher.set(speaker, 'neutral');
+  else {
+    const neu = stilAus(regie);
+    if (neu) stilJeSprecher.set(speaker, neu);
+  }
+  return stilJeSprecher.get(speaker);
+}

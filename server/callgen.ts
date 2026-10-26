@@ -5,6 +5,7 @@ import { FACH_VORLAGEN } from './vorlagen-fach';
 import { VERLEGUNG_VORLAGEN } from './vorlagen-verlegung';
 import { TERMIN_VORLAGEN } from './vorlagen-termin';
 import { POLIZEI_VORLAGEN } from './vorlagen-polizei';
+import { STIMMUNG_VORLAGEN } from './vorlagen-stimmung';
 
 /** klinik: Abholung in einem Krankenhaus (Verlegung, Entlassung) */
 export type LocationKind = 'wohnung' | 'strasse' | 'ausserorts' | 'objekt' | 'autobahn' | 'klinik' | 'keine';
@@ -44,6 +45,8 @@ export interface IncidentTemplate {
   sex?: 'm' | 'w';
   /** Notfallverlegung: Abholung in einer Klinik ohne den Fachbereich des Patienten, Ziel ist die nächste geeignete Klinik */
   verlegung?: boolean;
+  /** Hörbare Gefühlslage des Anrufers, steht als Regieanweisung vor jedem seiner Sätze (für die Sprachausgabe) */
+  stimmung?: 'flüstert' | 'lallt' | 'aufgebracht';
   /** Terminfahrt über die 19222: gewünschte Abholzeit so viele Minuten nach dem Anruf (von, bis) */
   termin?: [number, number];
 }
@@ -1094,6 +1097,7 @@ export const TEMPLATES: IncidentTemplate[] = [
   ...VERLEGUNG_VORLAGEN,
   ...TERMIN_VORLAGEN,
   ...POLIZEI_VORLAGEN,
+  ...STIMMUNG_VORLAGEN,
 ];
 
 /** Meldebilder, mit denen die KVB (116117) einen Einsatz an die ILS übergibt */

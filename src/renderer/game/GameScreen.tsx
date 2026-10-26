@@ -15,7 +15,7 @@ import { CrewView } from './CrewView';
 import { PANEL_TITLES, Popout, type PanelId } from '../Popout';
 import { SettingsModal, useSttAutoload } from '../SettingsModal';
 import { getSettings, updateSettings, useSettings } from '../settings';
-import { piperInfo, radioSpeech, say, stopSpeaking } from '../audio/tts';
+import { piperInfo, radioSpeech, say, stilFuer, stopSpeaking } from '../audio/tts';
 import { attachPttKeys, speechInput } from '../audio/stt';
 import { useGeraetSprache } from './geraetSprache';
 import { buildVocab } from '../../../shared/speechfix';
@@ -469,7 +469,7 @@ export function useReadAloud(state: PublicState | undefined, me: string | undefi
       c.transcript.forEach((l, i) => {
         if (i < seen || l.from !== 'caller' || !s.readCaller || !only.caller) return;
         const text = l.text.replace(/\([^)]*\)/g, '').trim();
-        if (text) say(text, 'caller', false, c.id);
+        if (text) say(text, 'caller', false, c.id, stilFuer(c.id, l.text));
       });
       lastCaller.current.set(c.id, c.transcript.length);
     }

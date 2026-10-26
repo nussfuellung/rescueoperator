@@ -11,6 +11,8 @@ interface Item {
   voice: Voice;
   /** Sprecher (Funkrufname oder Anruf), damit jeder seine eigene Stimme behält */
   speaker?: string;
+  /** Sprechstil für thorsten_emotional (z. B. "surprised" bei panischen Anrufern) */
+  stil?: string;
   /** Vorab angeforderte Piper-Ausgabe */
   wav?: Promise<ArrayBuffer | null>;
 }
@@ -18,7 +20,7 @@ interface Item {
 // ---------- Piper (neuronale Stimmen, erzeugt vom Spielserver) ----------
 interface PiperInfo {
   available: boolean;
-  stimmen: { id: string; name: string; geschlecht: 'm' | 'w' }[];
+  stimmen: { id: string; name: string; geschlecht: 'm' | 'w'; stile?: string[] }[];
 }
 let piper: { base: string; info: Promise<PiperInfo | null>; value?: PiperInfo | null } | null = null;
 
@@ -65,21 +67,27 @@ function hash(s: string) {
 
 function pickStimme(item: Item): string {
   const all = piper?.value?.stimmen ?? [];
-  if (!all.length) return '';
+  // Sprecher mit Gefühlslage bekommen das Mehrsprecher-Modell, alle anderen eine der normalen Stimmen
+  const emotional = all.find((s) => s.stile?.length);
+  if (item.stil && emotional) return emotional.id;
+  const pool = all.filter((s) => !s.stile?.length);
+  if (!pool.length) return all[0]?.id ?? '';
   const key = item.speaker ?? item.voice;
-  return all[hash(key) % all.length].id;
+  return pool[hash(key) % pool.length].id;
 }
+
+export { stilFuer } from '../../../shared/aussprache';
 
 function fetchPiper(item: Item): Promise<ArrayBuffer | null> {
   const base = piperBase();
   if (!base) return Promise.resolve(null);
   if (base === LOKAL) {
     return window
-      .lst!.piperSynth!(item.text, pickStimme(item), item.voice === 'radio' ? 1.1 : 1)
+      .lst!.piperSynth!(item.text, pickStimme(item), item.voice === 'radio' ? 1.1 : 1, item.stil)
       .then((u) => (u ? (u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength) as ArrayBuffer) : null))
       .catch(() => null);
   }
-  const q = new URLSearchParams({ text: item.text, stimme: pickStimme(item), tempo: item.voice === 'radio' ? '1.1' : '1' });
+  const q = new URLSearchParams({ text: item.text, stimme: pickStimme(item), tempo: item.voice === 'radio' ? '1.1' : '1', ...(item.stil ? { stil: item.stil } : {}) });
   return fetch(`${base}/tts?${q}`)
     .then((r) => (r.ok ? r.arrayBuffer() : null))
     .catch(() => null);
@@ -269,14 +277,14 @@ export function lastTtsResult() {
   return lastResult;
 }
 
-export function say(text: string, voice: Voice = 'radio', force = false, speaker?: string) {
+export function say(text: string, voice: Voice = 'radio', force = false, speaker?: string, stil?: string) {
   const s = getSettings();
   if (!force && (!s.ttsEnabled || isMuted())) return;
   const clean = sprechText(text.replace(/\s+/g, ' ').trim());
   if (!clean) return;
   // Bei Rückstau alte Funksprüche verwerfen, damit die Ausgabe aktuell bleibt
   if (queue.length > 4) queue.splice(0, queue.length - 4);
-  const item: Item = { text: clean, voice, speaker };
+  const item: Item = { text: clean, voice, speaker, ...(stil ? { stil } : {}) };
   void piperInfo();
   // Piper-Ausgabe schon anfordern, während noch etwas anderes gesprochen wird
   if (piperReady() && getSettings().ttsEngine !== 'browser' && getSettings().ttsEngine !== 'system') item.wav = fetchPiper(item);
