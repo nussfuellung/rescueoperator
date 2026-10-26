@@ -31,7 +31,7 @@ import { ensureTmo } from '../shared/fleet';
 import { findeKlinik, findeRufgruppe, istFrage, istQuittung, zerlegeFunkspruch } from '../shared/funkspruch';
 import { inDienst } from '../shared/lstsim';
 import { HAEUFIGKEIT_STUNDEN, dateForSeason, seasonOf, tageszeitFaktor, type Haeufigkeit, type Season } from '../shared/jahreszeit';
-import { pzcFachbereich, pzcFuer, pzcSprech, zielFach } from '../shared/pzc';
+import { infektionstransport, pzcFachbereich, pzcFuer, pzcSprech, zielFach } from '../shared/pzc';
 import {
   BMA_TEMPLATE,
   FIRST_NAMES,
@@ -145,6 +145,10 @@ interface Truth {
   leichenschau?: number;
   /** Gefahrenlage: Rettungsdienst wartet im Bereitstellungsraum auf die Freigabe durch die Polizei */
   bereitstellung?: boolean;
+  /** Rückruf zu einer bestellten Terminfahrt (gehört zu main): Absage oder neue Abholzeit */
+  bezug?: { art: 'absage' | 'verschieben'; neu?: number };
+  /** Terminfahrt wurde vom Anrufer abgesagt bzw. verschoben; umgesetzt = Disponent hat es eingetragen */
+  aenderung?: { art: 'absage' | 'verschieben'; neu?: number; umgesetzt?: boolean };
 }
 
 const MISSED_AFTER_MS = 90_000;
@@ -162,6 +166,8 @@ const UNWETTER_MIN_MS = 15 * 60_000;
 const TERMIN_VORLAUF_MS = 30 * 60_000;
 /** Terminfahrt gilt als pünktlich bis so lange nach der Abholzeit */
 const TERMIN_TOLERANZ_MS = 10 * 60_000;
+/** Anteil der Terminfahrten, die der Anrufer später absagt oder verschiebt */
+const TERMIN_AENDERUNG_ANTEIL = 0.25;
 
 export interface GameEvents {
   speech?: (text: string) => void;
@@ -889,6 +895,11 @@ export class Game {
             if (!isFinite(action.termin) || action.termin < this.time - TERMIN_VORLAUF_MS || action.termin > this.time + 24 * 3600_000) return 'Ungültige Abholzeit';
             if (action.termin !== inc.termin) this.log(inc, `Termin geändert: Abholung ${this.uhrzeit(action.termin)} Uhr`);
             inc.termin = action.termin;
+            const ae = this.incTruth.get(inc.id)?.aenderung;
+            if (ae?.art === 'verschieben' && !ae.umgesetzt && Math.abs(action.termin - ae.neu!) <= 5 * 60_000) {
+              ae.umgesetzt = true;
+              this.addScore(10, `${inc.nr}: Neue Abholzeit ${this.uhrzeit(ae.neu!)} Uhr eingetragen`);
+            }
           }
           inc.terminMeldung = undefined;
         }
@@ -1134,6 +1145,8 @@ export class Game {
     // Weitervermittlung an die KVB läuft noch: ist bereits bewertet
     if (call.toKvb) return;
     const truth = this.callTruth.get(call.id)!;
+    // Absage oder Verschiebung einer Terminfahrt: gewertet wird, ob der Disponent sie umsetzt
+    if (truth.bezug) return;
     if (!call.incidentId) {
       const lage = truth.main ?? truth;
       if (truth.main || this.calls.some((c) => c !== call && this.callTruth.get(c.id)?.main === truth)) {
@@ -1249,6 +1262,12 @@ export class Game {
       inc.polizei = 'vor Ort';
       this.log(inc, `Polizei bereits vor Ort (Streife ${lageTruth.streife})`);
     } else if (a.polizei) this.requestPolice(player, inc.id);
+    // Manche Terminfahrten werden später abgesagt oder verschoben, auch wenn der KTW schon unterwegs ist
+    const t = this.incTruth.get(inc.id);
+    if (t?.termin !== undefined && !t.generic && this.rng() < TERMIN_AENDERUNG_ANTEIL) {
+      const bis = Math.max(6 * 60_000, t.termin - this.time);
+      this.after(this.rand(5 * 60_000, bis), () => this.terminAenderung(inc.id));
+    }
     if (a.alarmUnitIds?.length) this.alarm(player, inc.id, a.alarmUnitIds);
     else if (a.alarmAao) this.alarm(player, inc.id, this.proposal(inc.id).map((p) => p.unitId));
   }
@@ -1293,6 +1312,7 @@ export class Game {
       // Status 8: Die Besatzung schließt die Übergabe ab und fährt dann von der Klinik los
       const s8 = inUebergabe(u);
       const rest = s8 ? uebergabeRest(u, this.time) : 0;
+      const klinik = s8 ? this.scn.hospitals.find((h) => h.id === u.hospitalId)?.name : undefined;
       if (s8) this.uebergabeBeenden(u, inc);
       if (u.incidentId && u.incidentId !== inc.id) continue;
       if (u.fremd) continue;
@@ -1318,6 +1338,8 @@ export class Game {
       alarmed.push(shortCallsign(u.callsign));
       this.radioMsg(this.scn.ilsName, u.callsign, `Alarmierung: ${inc.schlagwort ?? inc.stichwort} – ${inc.address}${inc.sondersignal === false ? ' – ohne Sondersignal' : ''}${inc.tmo ? ` – Einsatzgruppe ${this.tmoName(inc.tmo)}` : ''}`, 'system');
       if (inc.tmo) u.tmo = inc.tmo;
+      // Aus Status 8 meldet die Besatzung, wann sie nach der Übergabe losfahren kann
+      if (s8 && !u.crewPlayerId) this.after(this.rand(3000, 6000), () => this.s8Rueckmeldung(u, inc, rest, klinik));
     }
     if (!alarmed.length) return 'Keine verfügbaren Fahrzeuge ausgewählt';
     this.log(inc, `Alarmiert (${player.name}): ${alarmed.join(', ')}`);
@@ -1898,7 +1920,7 @@ export class Game {
     const st = this.station(u);
     u.cover = undefined;
     u.task = 'returning';
-    this.setStatus(u, 1);
+    this.setStatus(u, u.desinfektion ? 6 : 1);
     this.startRoute(u, st, false);
   }
 
@@ -1999,6 +2021,7 @@ export class Game {
   private crewStatus(player: Player, s: FmsStatus): string | void {
     const u = player.unitId ? this.unit(player.unitId) : undefined;
     if (!u) return 'Kein Fahrzeug besetzt';
+    if (u.desinfektion && (s === 1 || s === 2)) return 'Fahrzeug muss erst desinfiziert werden';
     switch (s) {
       case 3:
         if (u.task !== 'alarmed') return 'Kein offener Einsatzauftrag';
@@ -2153,7 +2176,10 @@ export class Game {
       inc.firstArrival = this.time;
       inc.status = 'laufend';
       const spaet = this.time - inc.termin;
-      if (spaet <= TERMIN_TOLERANZ_MS) this.addScore(15, `${inc.nr}: Terminfahrt pünktlich zur Abholung ${this.uhrzeit(inc.termin)} Uhr`);
+      const ae = truth.aenderung;
+      if (ae?.art === 'absage') this.addScore(-10, `${inc.nr}: Leerfahrt, die Terminfahrt war abgesagt`);
+      else if (ae?.art === 'verschieben' && !ae.umgesetzt) this.addScore(-5, `${inc.nr}: Verschiebung auf ${this.uhrzeit(ae.neu!)} Uhr nicht eingetragen`);
+      else if (spaet <= TERMIN_TOLERANZ_MS) this.addScore(15, `${inc.nr}: Terminfahrt pünktlich zur Abholung ${this.uhrzeit(inc.termin)} Uhr`);
       else this.addScore(-5, `${inc.nr}: Terminfahrt ${Math.round(spaet / 60000)} min nach der Abholzeit eingetroffen`);
     }
     // Bestellter Patient ist erst zur Abholzeit fertig
@@ -2544,14 +2570,15 @@ export class Game {
       p.unitId = carrier.id;
       carrier.hasPatient = true;
       carrier.task = 'awaitHospital';
+      if (infektionstransport(p.pzc)) carrier.infektion = true;
       // PZC mit Arztbegleitung: ein Notarzt von der Einsatzstelle fährt mit
       if (p.pzc.endsWith('1')) {
         const doc = onScene().find((d) => this.istNotarzt(d) && !d.begleitet && !d.crewPlayerId && !truth.released?.has(d.id));
         if (doc) doc.begleitet = carrier.id;
       }
-      const text = /\bROSC\b/.test(p.desc)
+      const text = /ROSC/.test(p.desc)
         ? `Patient nach Reanimation mit ROSC transportbereit, PZC ${p.pzc}, erbitten Zielklinik mit Herzkatheterlabor und Schockraum.`
-        : `Patient transportbereit, PZC ${p.pzc}, erbitten Zielklinik.`;
+        : `Patient transportbereit, PZC ${p.pzc}${carrier.infektion ? ', Infektionstransport' : ''}, erbitten Zielklinik.`;
       // Der PZC wird erst sichtbar, wenn die Besatzung ihn per Funk oder Telefon durchgibt (Spielerbesatzungen kennen ihn selbst)
       if (carrier.crewPlayerId) {
         carrier.pzc = p.pzc;
@@ -2600,6 +2627,22 @@ export class Game {
     return inc ? this.incTruth.get(inc.id)?.patients.find((p) => p.unitId === u.id && !p.done) : undefined;
   }
 
+  /** Funkrückmeldung nach Alarmierung aus Status 8: Übergabe läuft noch, Abfahrt in etwa … Minuten */
+  private s8Rueckmeldung(u: UnitState, inc: IncidentState, rest: number, klinik?: string) {
+    if (u.incidentId !== inc.id || u.task !== 'alarmed') return;
+    const min = Math.max(1, Math.round(rest / 60));
+    const ort = klinik ? ` im ${klinik}` : '';
+    this.radioMsg(
+      u.callsign,
+      this.scn.ilsName,
+      this.pick([
+        `Verstanden, ${inc.address}. Übergabe${ort} läuft noch, sind in etwa ${min} ${min === 1 ? 'Minute' : 'Minuten'} unterwegs, kommen.`,
+        `Alarmierung verstanden. Wir übergeben noch${ort}, Abfahrt in etwa ${min} ${min === 1 ? 'Minute' : 'Minuten'}, kommen.`,
+      ]),
+      'voice',
+    );
+  }
+
   /**
    * Alarmierung aus Status 8: Die Übergabe in der Klinik wird abgeschlossen, das Fahrzeug verlässt den alten
    * Einsatz ohne Freimeldung und Rückfahrt, weil es gleich zum neuen Einsatz ausrückt.
@@ -2636,7 +2679,16 @@ export class Game {
     });
     u.hasPatient = false;
     u.pzc = undefined;
-    this.releaseUnit(u.id, false);
+    if (!u.infektion) {
+      this.releaseUnit(u.id, false);
+      return;
+    }
+    // Nach einem Infektionstransport fährt das Fahrzeug außer Dienst zur Desinfektion auf die Wache
+    u.infektion = undefined;
+    u.desinfektion = {};
+    this.releaseUnit(u.id, false, false);
+    u.hint = 'Infektionstransport: Wache zur Desinfektion anfahren, Fahrzeug bleibt bis dahin in Status 6.';
+    if (!u.crewPlayerId) this.requestSpeak(u, 'info', 'Patient übergeben, Infektionstransport. Fahren zur Desinfektion auf die Wache, Status 6, kommen.');
   }
 
   private checkClose(inc: IncidentState) {
@@ -2651,13 +2703,93 @@ export class Game {
   private closeIncident(inc: IncidentState, manual: boolean) {
     inc.status = 'abgeschlossen';
     inc.closedAt = this.time;
-    this.log(inc, manual ? 'Einsatz manuell abgeschlossen' : 'Einsatz beendet');
+    this.log(inc, !manual ? 'Einsatz beendet' : inc.termin !== undefined && !inc.firstArrival ? 'Terminfahrt storniert' : 'Einsatz manuell abgeschlossen');
     this.score.incidentsClosed++;
     const truth = this.incTruth.get(inc.id);
     if (truth?.workDone) this.addScore(10, `${inc.nr}: Einsatz erfolgreich abgearbeitet`);
     if (truth?.leichensache && !inc.kit) this.addScore(-3, `${inc.nr}: KIT für die Angehörigen nicht verständigt`);
     if (truth && this.polizeiNoetig(truth) && !truth.fake && !inc.polizei) this.addScore(-5, `${inc.nr}: Polizei nicht verständigt`);
+    else if (manual && truth?.aenderung?.art === 'absage' && !inc.firstArrival) this.addScore(10, `${inc.nr}: Abgesagte Terminfahrt storniert`);
     else if (manual && truth && truth.stichwort && truth.tpl !== BMA_TEMPLATE) this.addScore(-15, `${inc.nr}: Einsatz vorzeitig geschlossen`);
+  }
+
+  /**
+   * Der Besteller ruft wegen einer Terminfahrt zurück: Absage oder neue Abholzeit.
+   * Die Änderung gilt sofort (der Patient ist dann nicht da bzw. erst später fertig), eintragen muss sie der Disponent.
+   */
+  terminAenderung(incidentId: string, art?: 'absage' | 'verschieben'): CallState | null {
+    const inc = this.incident(incidentId);
+    const orig = inc && this.incTruth.get(inc.id);
+    if (!inc || !orig || orig.generic || orig.aenderung || orig.termin === undefined || inc.status === 'abgeschlossen' || inc.firstArrival) return null;
+    art ??= this.rng() < 0.5 ? 'absage' : 'verschieben';
+    const alt = this.uhrzeit(orig.termin);
+    const neu = art === 'verschieben' ? (Math.ceil((this.clockStart + (orig.termin + this.rand(30, 120) * 60_000) / 60000) / 15) * 15 - this.clockStart) * 60000 : undefined;
+    const m = (orig.facts?.sex ?? 'm') === 'm';
+    const wen = `${m ? 'Herrn' : 'Frau'} {nachname}`;
+    const hallo = orig.objekt ? `Grüß Gott, hier nochmal ${orig.objekt}.` : 'Grüß Gott, ich hab vorhin bei Ihnen angerufen.';
+    const grund =
+      art === 'absage'
+        ? this.pick(
+            orig.objekt
+              ? ['Der Termin ist ausgefallen, das Gerät ist kaputt.', '{Er} hat heute Nacht hohes Fieber bekommen, der Arzt will {ihn} erst mal hierbehalten.', 'Die Klinik hat abgesagt, wir bekommen einen neuen Termin.']
+              : ['Der Termin ist ausgefallen, die Praxis hat gerade angerufen.', 'Mein Sohn fährt {ihn} jetzt doch selber.', '{Er} fühlt sich heute nicht gut, wir haben den Termin abgesagt.'],
+          )
+        : this.pick(['Die Klinik hat angerufen, der Termin ist später.', 'Der Arzt ist noch bei der Visite, vorher geht es nicht.', 'Die haben den Termin nach hinten geschoben.']);
+    const was =
+      art === 'absage'
+        ? `Wir hatten für ${alt} Uhr einen Krankentransport für ${wen} bestellt. Der muss leider abgesagt werden. ${grund}`
+        : `Wir hatten für ${alt} Uhr einen Krankentransport für ${wen} bestellt. Können Sie den bitte auf ${this.uhrzeit(neu!)} Uhr verschieben? ${grund}`;
+    const tpl: IncidentTemplate = {
+      id: `ktp_termin_${art}`,
+      role: orig.facts?.role ?? orig.tpl.role,
+      sex: orig.facts?.sex,
+      stichwort: orig.tpl.stichwort,
+      weight: 0,
+      where: orig.tpl.where,
+      opening: [`${hallo} ${was}`],
+      answers: {
+        was: [was],
+        termin: art === 'absage' ? ['Gar nicht mehr, der Transport fällt aus.', 'Der fällt ganz weg, bitte stornieren.'] : [`Neue Abholzeit ${this.uhrzeit(neu!)} Uhr bitte.`],
+        ziel: ['Wie bestellt, ins {ziel}.'],
+        wieviele: [`Es geht um ${wen}, {alter} Jahre.`],
+        zustand: art === 'absage' ? [grund] : ['Unverändert, {er} ist stabil.'],
+        gefahr: ['Nein.'],
+      },
+      lage: '',
+      workMin: [1, 1],
+    };
+    const call = this.ring({
+      tpl,
+      stichwort: tpl.stichwort,
+      pos: orig.pos,
+      address: orig.address,
+      spokenWhere: orig.spokenWhere,
+      objekt: orig.objekt,
+      needs: {},
+      patients: [],
+      lage: '',
+      workMs: 0,
+      name: orig.name,
+      alter: orig.alter,
+      facts: orig.facts,
+      fake: false,
+      termin: orig.termin,
+      ziel: orig.ziel,
+      main: orig,
+      bezug: { art, neu },
+    });
+    // Ab jetzt gilt die Änderung: abgesagt heißt Leerfahrt, verschoben heißt, der Patient ist erst später fertig
+    orig.aenderung = { art, neu };
+    if (art === 'absage') {
+      orig.patients = [];
+      orig.termin = undefined;
+      orig.lage = 'Transport abgesagt, Patient wird nicht transportiert. Leerfahrt.';
+      orig.workMs = 2 * 60_000;
+    } else {
+      orig.termin = neu;
+      orig.wartet = false;
+    }
+    return call;
   }
 
   /** Terminfahrten: Erinnerung 30 Minuten vor der Abholzeit und bei Fälligkeit, solange noch nicht disponiert */
@@ -2757,7 +2889,7 @@ export class Game {
       if (on && other && other !== u) on = false;
       if (on && !other) active.set(u.callsign, u);
       // Im Einsatz kann sich niemand abmelden: das passiert erst nach der Rückkehr auf die Wache
-      if (u.task !== 'station' || u.incidentId || u.crewPlayerId) continue;
+      if (u.task !== 'station' || u.incidentId || u.crewPlayerId || u.desinfektion) continue;
       const st = u.status === 5 ? u.baseStatus : u.status;
       if (!on && st === 2) {
         u.status = 6;
@@ -2983,10 +3115,21 @@ export class Game {
             const st = this.station(u);
             u.x = st.x;
             u.y = st.y;
-            this.setStatus(u, 2);
-            u.hint = undefined;
+            if (u.desinfektion) {
+              u.desinfektion.bis = this.time + this.rand(30, 60) * 60_000;
+              u.hint = 'Fahrzeug wird desinfiziert, danach wieder Status 2.';
+            } else {
+              this.setStatus(u, 2);
+              u.hint = undefined;
+            }
           }
         }
+      }
+      if (u.desinfektion?.bis !== undefined && this.time >= u.desinfektion.bis) {
+        u.desinfektion = undefined;
+        u.hint = undefined;
+        this.setStatus(u, 2);
+        if (!u.crewPlayerId) this.requestSpeak(u, 'info', 'Desinfektion abgeschlossen, Fahrzeug wieder einsatzbereit auf der Wache, kommen.');
       }
       if (u.task === 'atHospital' && !u.crewPlayerId && u.timer !== undefined && this.time >= u.timer) {
         u.timer = undefined;
