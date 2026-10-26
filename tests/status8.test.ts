@@ -51,4 +51,35 @@ describe('Status 8 im Einsatzvorschlag', () => {
     expect(u.status).toBe(3);
     expect(game.time - t0).toBeGreaterThan(3 * 60_000);
   });
+
+  it('Besatzung meldet nach Alarmierung aus Status 8 per Funk, wann sie losfährt', () => {
+    const { game, p, u, neu } = setup();
+    game.handle(p.id, { a: 'alarm', incidentId: neu.id, unitIds: [u.id] });
+    for (let t = 0; t < 10_000; t += 1000) game.tick(1000);
+    const msg = game.radio.find((m) => m.from === u.callsign && m.kind === 'voice');
+    expect(msg?.text).toMatch(/Übergabe.*in etwa 4 Minuten/);
+  });
+
+  it('Infektionstransport: nicht im Vorschlag, danach Status 6 zur Desinfektion und wieder Status 2', () => {
+    const { game, p, u, neu } = setup();
+    u.infektion = true;
+    expect(game.proposal(neu.id).some((x) => x.unitId === u.id)).toBe(false);
+    expect(game.handle(p.id, { a: 'alarm', incidentId: neu.id, unitIds: [u.id] })).toBeDefined();
+    // Übergabe endet regulär
+    for (let t = 0; t < 300_000 && u.task === 'atHospital'; t += 1000) game.tick(1000);
+    expect(u.task).toBe('returning');
+    expect(u.baseStatus).toBe(6);
+    expect(u.desinfektion).toBeDefined();
+    expect(u.speak?.text).toMatch(/Desinfektion/);
+    game.handle(p.id, { a: 'speakPermit', unitId: u.id });
+    for (let t = 0; t < 3_600_000 && u.task === 'returning'; t += 1000) game.tick(1000);
+    expect(u.task).toBe('station');
+    expect(u.status).toBe(6);
+    const bis = u.desinfektion!.bis!;
+    expect(bis - game.time).toBeGreaterThanOrEqual(30 * 60_000 - 1000);
+    for (let t = 0; t < 3_700_000 && u.desinfektion; t += 1000) game.tick(1000);
+    expect(u.desinfektion).toBeUndefined();
+    expect(u.baseStatus).toBe(2);
+  });
 });
+
