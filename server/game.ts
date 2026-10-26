@@ -150,6 +150,8 @@ const GSL_MIN_MS = 45 * 60_000;
 const UNWETTER_MIN_MS = 15 * 60_000;
 /** Erinnerung an eine Terminfahrt so lange vor der Abholzeit */
 const TERMIN_VORLAUF_MS = 30 * 60_000;
+/** Archiv abgeschlossener Einsätze: so viele bleiben zum Nachschlagen und Wiedereröffnen erhalten */
+const ARCHIV_MAX = 300;
 /** Terminfahrt gilt als pünktlich bis so lange nach der Abholzeit */
 const TERMIN_TOLERANZ_MS = 10 * 60_000;
 
@@ -172,6 +174,8 @@ export class Game {
   players: Player[] = [];
   calls: CallState[] = [];
   incidents: IncidentState[] = [];
+  /** Abgeschlossene Einsätze, die aus der Einsatzliste gefallen sind */
+  archiv: IncidentState[] = [];
   units: UnitState[] = [];
   radio: RadioMessage[] = [];
   score: PublicState['score'] = {
@@ -889,6 +893,8 @@ export class Game {
         this.closeIncident(inc, true);
         return;
       }
+      case 'reopenIncident':
+        return this.reopenIncident(action.incidentId);
       case 'speakPermit':
         return this.speakPermit(action.unitId);
       case 'assignHospital':
@@ -2473,10 +2479,27 @@ export class Game {
     inc.closedAt = this.time;
     this.log(inc, manual ? 'Einsatz manuell abgeschlossen' : 'Einsatz beendet');
     this.score.incidentsClosed++;
+    // Punkte gibt es nur beim ersten Abschluss, sonst ließe sich Wiedereröffnen ausnutzen
+    if (inc.wiedereroeffnet) return;
     const truth = this.incTruth.get(inc.id);
     if (truth?.workDone) this.addScore(10, `${inc.nr}: Einsatz erfolgreich abgearbeitet`);
     if (truth?.tpl.polizei && !truth.fake && !inc.polizei) this.addScore(-5, `${inc.nr}: Polizei nicht verständigt`);
     else if (manual && truth && truth.stichwort && truth.tpl !== BMA_TEMPLATE) this.addScore(-15, `${inc.nr}: Einsatz vorzeitig geschlossen`);
+  }
+
+  /** Abgeschlossenen Einsatz wieder in die Einsatzliste holen (auch aus dem Archiv) */
+  private reopenIncident(id: string) {
+    const archived = this.archiv.findIndex((i) => i.id === id);
+    if (archived >= 0) this.incidents.push(...this.archiv.splice(archived, 1));
+    const inc = this.incident(id);
+    if (!inc) return 'Einsatz nicht gefunden';
+    if (inc.status !== 'abgeschlossen') return `Einsatz ${inc.nr} ist nicht abgeschlossen`;
+    inc.status = 'offen';
+    inc.closedAt = undefined;
+    inc.wiedereroeffnet = (inc.wiedereroeffnet ?? 0) + 1;
+    inc.wiedereroeffnetAt = this.time;
+    this.score.incidentsClosed = Math.max(0, this.score.incidentsClosed - 1);
+    this.log(inc, 'Einsatz wieder eröffnet');
   }
 
   /** Terminfahrten: Erinnerung 30 Minuten vor der Abholzeit und bei Fälligkeit, solange noch nicht disponiert */
@@ -2843,8 +2866,13 @@ export class Game {
         if (u) this.revealAndReport(inc, truth, u);
       }
     }
-    // abgeschlossene Einsätze nach 10 min aus der Liste entfernen
-    this.incidents = this.incidents.filter((i) => i.status !== 'abgeschlossen' || this.time - (i.closedAt ?? 0) < 600_000);
+    // abgeschlossene Einsätze nach 10 min aus der Liste ins Archiv verschieben
+    const alt = (i: IncidentState) => i.status === 'abgeschlossen' && this.time - (i.closedAt ?? 0) >= 600_000;
+    if (this.incidents.some(alt)) {
+      this.archiv.push(...this.incidents.filter(alt));
+      this.incidents = this.incidents.filter((i) => !alt(i));
+      if (this.archiv.length > ARCHIV_MAX) this.archiv.splice(0, this.archiv.length - ARCHIV_MAX);
+    }
   }
 
   publicState(): PublicState {
@@ -2860,6 +2888,7 @@ export class Game {
       players: this.players,
       calls: this.calls,
       incidents: this.incidents,
+      archiv: this.archiv.map(({ id, nr, stichwort, label, schlagwort, address, x, y, createdAt, closedAt }) => ({ id, nr, stichwort, label, schlagwort, address, x, y, createdAt, closedAt })),
       // Route nicht vollständig übertragen, nur das Ziel
       units: this.units.map((u) => ({ ...u, route: u.route ? [u.route[u.route.length - 1]] : undefined })),
       radio: this.radio.slice(-120),

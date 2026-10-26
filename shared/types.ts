@@ -401,6 +401,9 @@ export interface IncidentState {
   firstArrival?: number;
   alarmedAt?: number;
   closedAt?: number;
+  /** Wie oft der Einsatz nach dem Abschluss wieder eröffnet wurde */
+  wiedereroeffnet?: number;
+  wiedereroeffnetAt?: number;
   /** Zusatz zum Einsatzort, z. B. Stockwerk, Hinterhaus */
   zusatz?: string;
   objekt?: string;
@@ -461,6 +464,19 @@ export interface ScoreBoard {
   events: { t: number; text: string; points: number }[];
 }
 
+export interface ArchivEintrag {
+  id: string;
+  nr: string;
+  stichwort: string;
+  label: string;
+  schlagwort?: string;
+  address: string;
+  x: number;
+  y: number;
+  createdAt: number;
+  closedAt?: number;
+}
+
 export interface PublicState {
   running: boolean;
   started: boolean;
@@ -476,6 +492,8 @@ export interface PublicState {
   players: Player[];
   calls: CallState[];
   incidents: IncidentState[];
+  /** Abgeschlossene Einsätze, die schon aus der Einsatzliste gefallen sind (nur Eckdaten, neueste zuletzt) */
+  archiv?: ArchivEintrag[];
   units: UnitState[];
   radio: RadioMessage[];
   score: ScoreBoard;
