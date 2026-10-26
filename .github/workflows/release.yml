@@ -14,8 +14,11 @@ jobs:
   piper-mac:
     uses: ./.github/workflows/piper-mac.yml
 
+  whisper:
+    uses: ./.github/workflows/whisper.yml
+
   build:
-    needs: piper-mac
+    needs: [piper-mac, whisper]
     strategy:
       fail-fast: false
       matrix:
@@ -62,12 +65,30 @@ jobs:
             chmod +x vendor/piper/mac-$a/piper/piper
           done
           ls -R vendor/piper | head -20
+      - name: Whisper übernehmen
+        uses: actions/download-artifact@v4
+        with:
+          pattern: whisper-*
+          path: vendor/whisper-dl
+      - name: Whisper einsortieren
+        shell: bash
+        run: |
+          mkdir -p vendor/whisper
+          for d in vendor/whisper-dl/whisper-*; do mv "$d" "vendor/whisper/${d##*/whisper-}"; done
+          # Artefakte verlieren das Ausführungsrecht
+          chmod +x vendor/whisper/*/whisper-server* || true
+          ls vendor/whisper
       - name: bsdtar für das pacman-Paket
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libarchive-tools
       - run: ${{ matrix.build }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Spracherkennung im Linux-Paket prüfen
+        if: runner.os == 'Linux'
+        run: |
+          curl -sSfL -o ggml-base-q5_1.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin
+          xvfb-run -a node scripts/whisper-probe.mjs release/linux-unpacked/rescue-operator tests/fixtures/funkspruch.wav ggml-base-q5_1.bin
       - uses: actions/upload-artifact@v4
         with:
           name: paket-${{ matrix.os }}
@@ -91,6 +112,8 @@ jobs:
           test -x /usr/bin/rescue-operator
           grep -x 'Categories=Game;Simulation;' /usr/share/applications/rescue-operator.desktop
           if ldd /opt/rescue.Operator/rescue-operator | grep 'not found'; then exit 1; fi
+          # Spracherkennung liegt bei und findet ihre Bibliotheken
+          if ldd /opt/rescue.Operator/resources/whisper/linux-x64/whisper-server | grep 'not found'; then exit 1; fi
       - name: Selbst-Update über pacman
         # Bietet dieselbe Paketdatei als Version 99.0.0 an. Der Job läuft als root, pkexec fragt also nicht nach dem Passwort.
         run: |

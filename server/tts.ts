@@ -21,10 +21,10 @@ const NAMEN: Record<string, [string, 'm' | 'w']> = {
   pavoque: ['Pavoque', 'm'],
 };
 
-const PLATFORM = `${process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux'}-${process.arch}`;
+export const PLATFORM = `${process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux'}-${process.arch}`;
 
 /** Sucht einen Ordner ab den Startpunkten aufwärts (Entwicklung, entpacktes Programm, macOS-App) */
-function findUp(starts: string[], rel: string, depth = 6): string | undefined {
+export function findUp(starts: string[], rel: string, depth = 6): string | undefined {
   for (const s of starts) {
     let d = s;
     for (let i = 0; i <= depth; i++) {

@@ -11,6 +11,8 @@ import { Piper } from '../server/tts';
 import { speakSystem, stopSystemSpeech, systemTtsAvailable } from './tts';
 import { updateSplash } from './updater';
 import { downloadModel, handleModelProtocol, installModelFromBytes, modelInfo, registerModelScheme, removeModel } from './stt';
+import { downloadWhisper, prepareWhisper, removeWhisper, stopWhisper, transcribeWhisper, whisperInfo } from './whisper';
+import type { WhisperModell } from '../shared/whisper';
 
 registerModelScheme();
 
@@ -198,6 +200,12 @@ ipcMain.handle('stt:import', async () => {
   return installModelFromBytes(new Uint8Array(readFileSync(res.filePaths[0])), res.filePaths[0]);
 });
 
+ipcMain.handle('whisper:info', () => whisperInfo());
+ipcMain.handle('whisper:download', (e, m: WhisperModell) => downloadWhisper(e.sender, m));
+ipcMain.handle('whisper:remove', (_e, m: WhisperModell) => removeWhisper(m));
+ipcMain.handle('whisper:prepare', (_e, m: WhisperModell) => prepareWhisper(m));
+ipcMain.handle('whisper:transcribe', (_e, pcm: Float32Array, m: WhisperModell, prompt: string) => transcribeWhisper(pcm, m, String(prompt ?? '')));
+
 // Kartendaten von OpenStreetMap (Overpass, Nominatim) mit korrekter Kennung abrufen
 ipcMain.handle('net:fetchText', async (_e, url: string, body?: string) => {
   const host = new URL(url).hostname;
@@ -233,8 +241,10 @@ app.whenReady().then(async () => {
   createWindow();
   starting = false;
 });
+app.on('will-quit', () => stopWhisper());
 app.on('window-all-closed', async () => {
   if (starting) return;
+  stopWhisper();
   await host?.stop();
   app.quit();
 });

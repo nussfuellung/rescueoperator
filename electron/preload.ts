@@ -19,6 +19,11 @@ contextBridge.exposeInMainWorld('lst', {
   sttDownload: () => ipcRenderer.invoke('stt:download'),
   sttImport: () => ipcRenderer.invoke('stt:import'),
   sttRemove: () => ipcRenderer.invoke('stt:remove'),
+  whisperInfo: () => ipcRenderer.invoke('whisper:info'),
+  whisperDownload: (m: string) => ipcRenderer.invoke('whisper:download', m),
+  whisperRemove: (m: string) => ipcRenderer.invoke('whisper:remove', m),
+  whisperPrepare: (m: string) => ipcRenderer.invoke('whisper:prepare', m),
+  whisperTranscribe: (pcm: Float32Array, m: string, prompt: string) => ipcRenderer.invoke('whisper:transcribe', pcm, m, prompt),
   onSttProgress: (fn: (p: { got: number; total: number; converting?: boolean }) => void) => {
     const h = (_e: unknown, p: { got: number; total: number; converting?: boolean }) => fn(p);
     ipcRenderer.on('stt:progress', h);

@@ -1,8 +1,11 @@
 // Lokale Einstellungen pro Arbeitsplatz (Ton, Sprache, Fenster, Karte, Farbschema).
 import { useSyncExternalStore } from 'react';
+import type { WhisperModell } from '../../shared/whisper';
 
 export type TtsEngine = 'auto' | 'piper' | 'browser' | 'system';
 export type Theme = 'dark' | 'light' | 'system';
+/** auto = Whisper, wenn in der Desktop-App ein Modell installiert ist, sonst Vosk */
+export type SttEngine = 'auto' | 'whisper' | 'vosk';
 
 export interface Settings {
   ttsEnabled: boolean;
@@ -12,6 +15,8 @@ export interface Settings {
   ringtone: boolean;
   sttEnabled: boolean;
   sttMode: 'continuous' | 'ptt';
+  sttEngine: SttEngine;
+  whisperModell: WhisperModell;
   pttKey: string;
   /** gewähltes Mikrofon, leer = Standardgerät */
   micDeviceId: string;
@@ -36,6 +41,8 @@ const DEFAULTS: Settings = {
   ringtone: true,
   sttEnabled: false,
   sttMode: 'ptt',
+  sttEngine: 'auto',
+  whisperModell: 'small',
   pttKey: 'F4',
   micDeviceId: '',
   mapTiles: true,

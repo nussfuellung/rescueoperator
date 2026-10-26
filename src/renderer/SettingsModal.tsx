@@ -1,8 +1,9 @@
 // Einstellungen: Darstellung, Sprachausgabe, Spracheingabe und Kartenhintergrund.
 import { useEffect, useState } from 'react';
 import { zipToModelTarGz } from '../../shared/modelpack';
-import { isDesktop, type ModelInfo } from './api';
-import { DEFAULT_TILE_URL, updateSettings, useSettings, type Theme, type TtsEngine } from './settings';
+import { isDesktop, type ModelInfo, type WhisperInfo } from './api';
+import { DEFAULT_TILE_URL, getSettings, updateSettings, useSettings, type SttEngine, type Theme, type TtsEngine } from './settings';
+import { WHISPER_MODELLE, type WhisperModell } from '../../shared/whisper';
 import { lastTtsResult, say, ttsInfo } from './audio/tts';
 import { speechInput, useSpeechInput, useSpeechTarget } from './audio/stt';
 import { MicButton } from './audio/SpeechUi';
@@ -18,6 +19,18 @@ export async function currentModelUrl(): Promise<string | null> {
   return browserModelUrl;
 }
 
+/** Startet die passende Erkennung: Whisper, wenn gewünscht und ein Modell installiert ist, sonst Vosk */
+export async function startStt() {
+  const s = getSettings();
+  const w = await window.lst?.whisperInfo?.().catch(() => null);
+  if (s.sttEngine !== 'vosk' && w?.available && w.installed.length) {
+    return speechInput.loadWhisper(w.installed.includes(s.whisperModell) ? s.whisperModell : w.installed[0]);
+  }
+  if (s.sttEngine === 'whisper') return;
+  const url = await currentModelUrl();
+  if (url) await speechInput.load(url);
+}
+
 /** Lädt die Spracherkennung, wenn sie eingeschaltet und ein Modell vorhanden ist */
 export function useSttAutoload() {
   const s = useSettings();
@@ -26,10 +39,8 @@ export function useSttAutoload() {
       if (speechInput.snap.status !== 'aus') speechInput.unload();
       return;
     }
-    void currentModelUrl().then((url) => {
-      if (url) void speechInput.load(url);
-    });
-  }, [s.sttEnabled]);
+    void startStt();
+  }, [s.sttEnabled, s.sttEngine, s.whisperModell]);
 }
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
@@ -38,6 +49,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [info, setInfo] = useState(ttsInfo());
   const [ttsResult, setTtsResult] = useState<string | null>(null);
   const [model, setModel] = useState<ModelInfo | null>(null);
+  const [whisper, setWhisper] = useState<WhisperInfo | null>(null);
   const [progress, setProgress] = useState<string>('');
   const [err, setErr] = useState('');
   const [heard, setHeard] = useState<string[]>([]);
@@ -53,6 +65,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const t = setInterval(() => setInfo(ttsInfo()), 1000);
     window.lst?.sttInfo?.().then(setModel);
+    window.lst?.whisperInfo?.().then(setWhisper);
     const off = window.lst?.onSttProgress?.((p) =>
       setProgress(p.converting ? 'Entpacke Modell…' : `${Math.round(p.got / 1e6)} von ${Math.round(p.total / 1e6) || '?'} MB geladen`),
     );
@@ -64,6 +77,21 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
   // Während die Einstellungen offen sind, landet erkannter Text hier
   useSpeechTarget('settings-test', 100, (text) => setHeard((h) => [text, ...h].slice(0, 5)), true);
+
+  const downloadWhisper = async (m: WhisperModell) => {
+    setErr('');
+    setProgress('Starte Download…');
+    try {
+      setWhisper(await window.lst!.whisperDownload!(m));
+      setProgress('');
+      updateSettings({ sttEnabled: true, whisperModell: m, sttEngine: s.sttEngine === 'vosk' ? 'auto' : s.sttEngine });
+      speechInput.unload();
+      await startStt();
+    } catch (e) {
+      setProgress('');
+      setErr(`Download fehlgeschlagen: ${String((e as Error).message ?? e)}`);
+    }
+  };
 
   const loadModel = async (url: string | null) => {
     if (!url) return;
@@ -135,13 +163,41 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
         <h3>Spracheingabe (Mikrofon)</h3>
         <p className="small muted">
-          Die Erkennung läuft offline auf diesem PC mit einem deutschen Vosk-Modell (ca. 45 MB, einmaliger Download). Im Notrufgespräch
-          wird das Gesagte als Frage an den Anrufer übernommen, im Funk als Funkspruch.
+          Die Erkennung läuft offline auf diesem PC. Im Notrufgespräch wird das Gesagte als Frage an den Anrufer übernommen, im Funk als
+          Funkspruch. Whisper erkennt deutlich genauer und kennt die Orte der Karte, wertet aber erst nach dem Sprechen aus. Vosk ist klein und
+          zeigt schon beim Sprechen Text.
         </p>
+        {whisper?.available && (
+          <>
+            <label>
+              Erkennung
+              <select value={s.sttEngine} onChange={(e) => updateSettings({ sttEngine: e.target.value as SttEngine })}>
+                <option value="auto">Whisper, wenn ein Modell geladen ist, sonst Vosk</option>
+                <option value="whisper">Nur Whisper</option>
+                <option value="vosk">Nur Vosk</option>
+              </select>
+            </label>
+            <div className="row">
+              <label className="grow">
+                Whisper-Modell
+                <select value={s.whisperModell} onChange={(e) => updateSettings({ whisperModell: e.target.value as WhisperModell })}>
+                  {(Object.keys(WHISPER_MODELLE) as WhisperModell[]).map((m) => (
+                    <option key={m} value={m}>
+                      {WHISPER_MODELLE[m].name} (ca. {WHISPER_MODELLE[m].mb} MB){whisper.installed.includes(m) ? ' – installiert' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button onClick={() => downloadWhisper(s.whisperModell)}>
+                {whisper.installed.includes(s.whisperModell) ? 'Neu herunterladen' : 'Whisper-Modell herunterladen'}
+              </button>
+            </div>
+          </>
+        )}
         {isDesktop ? (
           <div className="row">
             <span className={model?.installed ? 'ok' : 'muted'}>
-              {model?.installed ? `Modell installiert (${Math.round((model.size ?? 0) / 1e6)} MB)` : 'Kein Modell installiert'}
+              {model?.installed ? `Vosk-Modell installiert (${Math.round((model.size ?? 0) / 1e6)} MB)` : 'Kein Vosk-Modell installiert'}
             </span>
             <button
               onClick={async () => {
@@ -158,7 +214,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 }
               }}
             >
-              {model?.installed ? 'Neu herunterladen' : 'Deutsches Modell herunterladen'}
+              {model?.installed ? 'Vosk neu herunterladen' : 'Vosk-Modell herunterladen'}
             </button>
             <button
               onClick={async () => {
@@ -209,7 +265,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             checked={s.sttEnabled}
             onChange={async (e) => {
               updateSettings({ sttEnabled: e.target.checked });
-              if (e.target.checked) await loadModel(await currentModelUrl());
+              if (e.target.checked) await startStt();
             }}
           />
           Spracheingabe einschalten
