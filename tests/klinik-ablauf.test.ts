@@ -137,6 +137,39 @@ describe('Voranmeldung und Aufnahmepflicht', () => {
   });
 });
 
+describe('Weiterverlegung nach Aufnahmepflicht', () => {
+  it('zwangsbelegte Klinik ruft nach der Erstversorgung an und fordert eine Notfallverlegung', () => {
+    const scn = wuerzburg();
+    const game = new Game(scn, { seed: 21 });
+    const { p, u, pat } = bisZurZielklinik(game, scn, 'rd_stroke');
+    expect(pat.pzc).toMatch(/^421\d\d1$/);
+    // Patient liegt in Lohr, die Stroke Unit dort ist abgemeldet, die nächste freie ist weit weg
+    const lohr = scn.hospitals.find((h) => h.id === 'h_kms_lohr')!;
+    u.x = lohr.x + 300;
+    u.y = lohr.y;
+    const g = game as unknown as Intern;
+    g.ivena.abmeldungen = [{ hospitalId: lohr.id, fach: 'Stroke Unit', grund: 'Stroke Unit voll belegt', seit: game.time, bis: game.time + 10 * 3600_000 }];
+    game.handle(p.id, { a: 'assignHospital', unitId: u.id, hospitalId: lohr.id });
+    expect(game.score.events[0].text).toContain('Aufnahmepflicht');
+    expect(game.publicState().ivena?.zuweisungen.at(-1)?.aufnahmepflicht).toBe(true);
+    const vorher = game.calls.length;
+    let anruf: CallState | undefined;
+    for (let t = 0; t < 4 * 3600_000 && !anruf; t += 5000) {
+      game.tick(5000);
+      g.ivena.abmeldungen = g.ivena.abmeldungen.filter((a) => a.hospitalId === lohr.id);
+      anruf = game.calls.slice(vorher).find((c) => c.kind === '112' && g.callTruth.get(c.id)?.objekt === lohr.name);
+    }
+    expect(anruf).toBeDefined();
+    const truth = g.callTruth.get(anruf!.id)!;
+    expect(truth.zielId).toBeDefined();
+    expect(truth.zielId).not.toBe(lohr.id);
+    expect(scn.hospitals.find((h) => h.id === truth.zielId)!.specialties).toContain('Stroke Unit');
+    game.handle(p.id, { a: 'answerCall', callId: anruf!.id });
+    for (let t = 0; t < 15_000; t += 500) game.tick(500);
+    expect(anruf!.transcript.some((l) => l.from === 'caller' && /trotz Abmeldung|abgemeldet/.test(l.text))).toBe(true);
+  });
+});
+
 describe('Übergabedauer', () => {
   it('IVENA schätzt die Wartezeit je Klinik, größere und stärker belegte Häuser brauchen länger', () => {
     const scn = wuerzburg();

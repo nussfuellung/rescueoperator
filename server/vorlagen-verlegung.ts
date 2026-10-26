@@ -123,3 +123,31 @@ export const VERLEGUNG_VORLAGEN: IncidentTemplate[] = [
     sex: 'm',
   },
 ];
+
+/**
+ * Weiterverlegung nach Aufnahmepflicht: Die zwangsbelegte Klinik ruft nach der Erstversorgung an.
+ * Patient, Alter und Begründung setzt der Simulator aus der ursprünglichen Zuweisung ein; nicht im Zufallspool.
+ */
+export const WEITERVERLEGUNG: IncidentTemplate = {
+  id: 'vl_weiterverlegung',
+  role: 'personal',
+  stichwort: 'RD 2',
+  schlagwort: '#R9203',
+  weight: 0,
+  where: 'klinik',
+  verlegung: true,
+  opening: [
+    'Grüß Gott, hier {objekt}, Notaufnahme, Doktor {nachnameP}. Sie haben uns vorhin trotz Abmeldung einen Patienten gebracht, der muss jetzt weiter. Wir brauchen eine Notfallverlegung mit Notarzt.',
+    '{objekt}, Notaufnahme. Wir sind abgemeldet und haben den Notfallpatienten von vorhin nur erstversorgt. Ich brauche eine arztbegleitete Weiterverlegung.',
+  ],
+  answers: {
+    ziel: ['Ins {ziel}, das Arzt-zu-Arzt-Gespräch ist gelaufen, die haben Platz.'],
+    zustand: ['Erstversorgt und stabilisiert, aber er braucht weiterhin ärztliche Begleitung.'],
+    transportart: ['Liegend, am Monitor, mit Notarzt.'],
+    wieviele: ['Ein Patient, {alter} Jahre.'],
+    zugang: ['Liegendanfahrt der Notaufnahme, Schockraum.'],
+    gefahr: ['Nein.'],
+  },
+  lage: 'Weiterverlegung nach Erstversorgung, Patient im Schockraum der Notaufnahme übernommen.',
+  workMin: [10, 15],
+};
