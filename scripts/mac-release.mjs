@@ -23,7 +23,7 @@ for (const [chip, from, label] of [
   const res = join(dir, 'rescue.Operator.app', 'Contents', 'Resources');
   const arch = chip === 'apple-chip' ? 'arm64' : 'x64';
   const piper = join(res, 'piper', `mac-${arch}`, 'piper', 'piper');
-  const stimme = join(res, 'stimmen', 'thorsten-low', 'de-thorsten-low.onnx');
+  const stimme = join(res, 'stimmen', 'thorsten-medium', 'de_DE-thorsten-medium.onnx');
   const whisper = join(res, 'whisper', `mac-${arch}`, 'whisper-server');
   for (const f of [piper, stimme, whisper]) if (!existsSync(f)) throw new Error(`${f} fehlt in der Mac-App`);
   if (arch === process.arch) {
