@@ -1,7 +1,7 @@
 {
   "name": "rescue-operator",
   "productName": "rescue.Operator",
-  "version": "0.12.3",
+  "version": "0.13.0",
   "description": "rescue.Operator – Multiplayer-Leitstellensimulator nach Vorbild der bayerischen Integrierten Leitstellen",
   "main": "dist/electron/main.js",
   "private": true,
