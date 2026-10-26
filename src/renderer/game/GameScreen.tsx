@@ -19,6 +19,7 @@ import { piperInfo, radioSpeech, say, stopSpeaking } from '../audio/tts';
 import { attachPttKeys, speechInput } from '../audio/stt';
 import { useGeraetSprache } from './geraetSprache';
 import { buildVocab } from '../../../shared/speechfix';
+import { whisperPrompt } from '../../../shared/whisper';
 import { radioName } from '../../../shared/catalog';
 import { MicStatus } from '../audio/SpeechUi';
 import { DeviceModal } from './DeviceModal';
@@ -113,9 +114,14 @@ export function GameScreen(props: { hostInfo: { port: number; addresses: string[
     const streets = new Set<string>();
     for (const r of scn.roads) if (r.name && r.type !== 'autobahn') streets.add(r.name);
     for (const a of scn.addresses ?? []) streets.add(a.street);
-    speechInput.setVocabulary(buildVocab([...places, ...streets, ...scn.hospitals.map((h) => h.name)], [...places]), [
-      ...new Set(scn.vehicleTypes.map((t) => t.funkNr)),
-    ]);
+    // Beispiele für Funkrufnamen, je Fahrzeugtyp einer
+    const rufnamen = new Map<string, string>();
+    for (const st of scn.stations) for (const v of st.vehicles) if (!rufnamen.has(v.type)) rufnamen.set(v.type, radioName(v.callsign));
+    speechInput.setVocabulary(
+      buildVocab([...places, ...streets, ...scn.hospitals.map((h) => h.name)], [...places]),
+      [...new Set(scn.vehicleTypes.map((t) => t.funkNr))],
+      whisperPrompt(scn.ilsName, [...rufnamen.values()], [...places]),
+    );
     return () => speechInput.setVocabulary(undefined);
   }, [scn]);
   useReadAloud(state, net.playerId, scn.ilsName, { radio: tonAmPc || !remote.includes('radio'), caller: tonAmPc || !remote.includes('calls') });

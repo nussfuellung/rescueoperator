@@ -1,0 +1,75 @@
+# Baut whisper-server (Spracherkennung) für alle Plattformen und prüft, ob er einen Funkspruch versteht.
+# Wird vom Release-Workflow aufgerufen; das Ergebnis wird zwischengespeichert, solange sich das Bauskript nicht ändert.
+# Unter Linux vergleicht er außerdem die Whisper-Modelle mit Vosk (Tabelle in der Zusammenfassung des Laufs).
+name: Whisper
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/whisper-bauen.sh
+      - scripts/sprache-vergleich.mjs
+      - .github/workflows/whisper.yml
+
+jobs:
+  whisper:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 22.04: ältere glibc, damit das AppImage auch auf älteren Systemen läuft
+          - os: ubuntu-22.04
+            plat: linux-x64
+          - os: windows-latest
+            plat: win-x64
+          - os: macos-latest
+            plat: mac-arm64
+          - os: macos-15-intel
+            plat: mac-x64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: vendor/whisper/${{ matrix.plat }}
+          key: whisper-${{ matrix.plat }}-${{ hashFiles('scripts/whisper-bauen.sh') }}
+      - name: whisper-server bauen
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash scripts/whisper-bauen.sh ${{ matrix.plat }}
+      - name: Probe hören
+        run: |
+          curl -sSfL -o ggml-base-q5_1.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin
+          vendor/whisper/${{ matrix.plat }}/whisper-server -m ggml-base-q5_1.bin -l de --host 127.0.0.1 --port 8089 > server.log 2>&1 &
+          for i in $(seq 1 120); do curl -sf http://127.0.0.1:8089/ > /dev/null && break; sleep 1; done
+          TEXT=$(curl -sSf http://127.0.0.1:8089/inference -F file=@tests/fixtures/funkspruch.wav -F response_format=text -F language=de)
+          echo "Erkannt: $TEXT"
+          kill %1 || true
+          head -20 server.log
+          echo "$TEXT" | grep -qi 'rzburg'
+          echo "$TEXT" | grep -qi 'status'
+      - uses: actions/setup-node@v4
+        if: matrix.plat == 'linux-x64'
+        with:
+          node-version: 22
+      - name: Vergleich mit Vosk
+        if: matrix.plat == 'linux-x64'
+        run: |
+          pip install -q vosk
+          curl -sSfL -o vosk.zip https://alphacephei.com/vosk/models/vosk-model-small-de-0.15.zip && unzip -q vosk.zip
+          mkdir modelle && mv ggml-base-q5_1.bin modelle/
+          for m in ggml-small-q5_1.bin ggml-large-v3-turbo-q5_0.bin; do
+            curl -sSfL -o modelle/$m https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$m
+          done
+          curl -sSfL https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz | tar xz
+          curl -sSfL https://github.com/rhasspy/piper/releases/download/v0.0.2/voice-de-thorsten-low.tar.gz | tar xz
+          node --experimental-strip-types --no-warnings scripts/sprache-vergleich.mjs vendor/whisper/linux-x64/whisper-server modelle piper/piper de-thorsten-low.onnx vosk-model-small-de-0.15
+      - uses: actions/upload-artifact@v4
+        with:
+          name: whisper-${{ matrix.plat }}
+          path: vendor/whisper/${{ matrix.plat }}
+          if-no-files-found: error

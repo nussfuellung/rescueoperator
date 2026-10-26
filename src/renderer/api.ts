@@ -1,6 +1,7 @@
 // Zugriff auf die Leitstellen-Bibliothek: über Electron (Dateien) oder im Browser (localStorage).
 import { generateScenario } from '../../shared/mapgen';
 import type { Scenario } from '../../shared/types';
+import type { WhisperModell } from '../../shared/whisper';
 
 export interface ScenarioInfo {
   id: string;
@@ -31,8 +32,19 @@ interface Bridge {
   sttDownload?(): Promise<ModelInfo>;
   sttImport?(): Promise<ModelInfo>;
   sttRemove?(): Promise<ModelInfo>;
+  /** Whisper: ob whisper-server mitgeliefert ist und welche Modelle installiert sind */
+  whisperInfo?(): Promise<WhisperInfo>;
+  whisperDownload?(m: WhisperModell): Promise<WhisperInfo>;
+  whisperRemove?(m: WhisperModell): Promise<WhisperInfo>;
+  whisperPrepare?(m: WhisperModell): Promise<boolean>;
+  whisperTranscribe?(pcm: Float32Array, m: WhisperModell, prompt: string): Promise<string>;
   onSttProgress?(fn: (p: { got: number; total: number; converting?: boolean }) => void): () => void;
   fetchText?(url: string, body?: string): Promise<string>;
+}
+
+export interface WhisperInfo {
+  available: boolean;
+  installed: WhisperModell[];
 }
 
 export interface ModelInfo {
