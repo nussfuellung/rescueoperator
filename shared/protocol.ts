@@ -107,6 +107,8 @@ export type Action =
   | { a: 'transferKvb'; callId: string }
   /** Polizei zum Einsatz verständigen */
   | { a: 'requestPolice'; incidentId: string }
+  /** Kriseninterventionsteam (KIT) zum Einsatz verständigen */
+  | { a: 'requestKit'; incidentId: string }
   | {
       a: 'createIncident';
       callId?: string;

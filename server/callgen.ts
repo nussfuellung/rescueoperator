@@ -18,6 +18,8 @@ export interface IncidentTemplate {
   polizei?: boolean;
   /** Anruf kommt von einer Streife, die schon an der Einsatzstelle ist und den Rettungsdienst nachfordert */
   polizeiVorOrt?: boolean;
+  /** Gefahrenlage (Gewalt, Waffe, Suizidalität): Rettungsdienst wartet im Bereitstellungsraum, bis die Polizei freigibt */
+  eigengefaehrdung?: boolean;
   /** Fall für den ärztlichen Bereitschaftsdienst (116117): an die KVB weiterverbinden */
   kvb?: boolean;
   weight: number;
@@ -640,6 +642,7 @@ export const TEMPLATES: IncidentTemplate[] = [
     stichwort: 'RD 2',
     schlagwort: '#R5110',
     polizei: true,
+    eigengefaehrdung: true,
     weight: 0.4,
     where: 'wohnung',
     patients: [{ specialty: 'Innere Medizin', desc: 'Psychischer Ausnahmezustand, Intoxikation mit Tabletten unklar' }],

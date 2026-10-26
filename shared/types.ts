@@ -414,6 +414,8 @@ export interface IncidentState {
   tmo?: string;
   /** Polizei verständigt */
   polizei?: 'angefordert' | 'vor Ort';
+  /** Kriseninterventionsteam (PSNV) für Angehörige verständigt */
+  kit?: 'angefordert' | 'vor Ort';
   /** Anforderungen bei Nachbarleitstellen über die ESWL */
   eswl?: EswlAnforderung[];
   /** Terminfahrt (geplanter Krankentransport): Abholzeit als Spielzeit */

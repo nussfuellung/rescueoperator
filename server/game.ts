@@ -71,7 +71,7 @@ import {
   type LageTemplate,
   type WetterLage,
 } from './lagen';
-import { lageZumStand, rollVerlauf, type NotarztStand, type Verlauf } from './verlauf';
+import { lageZumStand, reaAusgang, rollVerlauf, type NotarztStand, type Verlauf } from './verlauf';
 
 interface PatientTruth {
   specialty: string;
@@ -135,6 +135,16 @@ interface Truth {
   ziel?: string;
   /** Fahrzeug war vor der Abholzeit da, Wartezeit ist eingerechnet */
   wartet?: boolean;
+  /** Reanimation: seit wann der Notarzt vor Ort ist, wie lange bis zum Ausgang, ob der Ausgang gemeldet ist */
+  reaSeit?: number;
+  reaDauer?: number;
+  reaErgebnis?: boolean;
+  /** Verstorbene Person: Rettungsdienst bleibt, bis die Polizei die Leichensache übernimmt */
+  leichensache?: boolean;
+  /** Seit wann der Notarzt bei der Leichensache vor Ort ist (Todesfeststellung) */
+  leichenschau?: number;
+  /** Gefahrenlage: Rettungsdienst wartet im Bereitstellungsraum auf die Freigabe durch die Polizei */
+  bereitstellung?: boolean;
 }
 
 const MISSED_AFTER_MS = 90_000;
@@ -756,12 +766,58 @@ export class Game {
     inc.polizei = 'angefordert';
     this.log(inc, `Polizei verständigt (${player.name})`);
     const truth = this.incTruth.get(inc.id);
-    if (truth?.tpl.polizei) this.addScore(5, `${inc.nr}: Polizei verständigt`);
+    if (truth && this.polizeiNoetig(truth)) this.addScore(5, `${inc.nr}: Polizei verständigt`);
     this.after(this.rand(4, 12) * 60_000, () => {
       if (inc.status === 'abgeschlossen') return;
       inc.polizei = 'vor Ort';
       this.log(inc, 'Polizei vor Ort');
+      if (truth) this.polizeiEingetroffen(inc, truth);
     });
+  }
+
+  /** Polizei muss zum Einsatz: laut Einsatzart oder weil eine Person verstorben ist */
+  private polizeiNoetig(truth: Truth) {
+    return !!truth.tpl.polizei || !!truth.leichensache;
+  }
+
+  /** Polizei an der Einsatzstelle: Freigabe für den Rettungsdienst im Bereitstellungsraum */
+  private polizeiEingetroffen(inc: IncidentState, truth: Truth) {
+    if (!truth.bereitstellung) return;
+    this.after(this.rand(60, 150) * 1000, () => {
+      if (inc.status === 'abgeschlossen' || !truth.bereitstellung) return;
+      truth.bereitstellung = false;
+      this.log(inc, 'Einsatzstelle durch die Polizei freigegeben, Rettungsdienst geht zum Patienten');
+      const rd = inc.unitIds.map((id) => this.unit(id)).filter((x): x is UnitState => !!x && x.task === 'onScene');
+      for (const x of rd) if (x.crewPlayerId) x.hint = 'Freigabe durch die Polizei: Einsatzstelle ist sicher, zum Patienten vorgehen.';
+      if (rd[0]) this.revealAndReport(inc, truth, rd[0]);
+    });
+  }
+
+  /** Kriseninterventionsteam für Angehörige, Zeugen oder Einsatzkräfte verständigen */
+  private requestKit(player: Player, incidentId: string): string | void {
+    const inc = this.incident(incidentId);
+    if (!inc) return 'Einsatz nicht gefunden';
+    if (inc.kit) return 'KIT ist bereits verständigt';
+    inc.kit = 'angefordert';
+    this.log(inc, `KIT verständigt (${player.name})`);
+    const truth = this.incTruth.get(inc.id);
+    if (truth?.leichensache) this.addScore(5, `${inc.nr}: KIT für die Angehörigen verständigt`);
+    this.after(this.rand(20, 40) * 60_000, () => {
+      if (inc.status === 'abgeschlossen') return;
+      inc.kit = 'vor Ort';
+      this.log(inc, 'KIT vor Ort, übernimmt die Betreuung der Angehörigen');
+    });
+  }
+
+  /** Dispatcher nimmt ein Fahrzeug aus dem Einsatz; auf der Anfahrt quittiert die Besatzung per Funk */
+  private abbestellen(unitId: string): string | void {
+    const u = this.unit(unitId);
+    const vorher = u?.task;
+    const err = this.releaseUnit(unitId, true);
+    if (err || !u || u.crewPlayerId || (vorher !== 'alarmed' && vorher !== 'toScene')) return err;
+    this.radioMsg(this.scn.ilsName, u.callsign, 'Einsatzabbruch, Sie werden nicht mehr benötigt.', 'voice');
+    const text = u.task === 'station' ? 'Verstanden, Einsatzabbruch, bleiben auf der Wache.' : 'Verstanden, Einsatzabbruch, rücken ein.';
+    this.after(this.rand(2500, 5000), () => this.radioMsg(u.callsign, this.scn.ilsName, text, 'voice'));
   }
 
   // ---------- Aktionen ----------
@@ -806,6 +862,8 @@ export class Game {
         return this.transferKvb(player, action.callId);
       case 'requestPolice':
         return this.requestPolice(player, action.incidentId);
+      case 'requestKit':
+        return this.requestKit(player, action.incidentId);
       case 'createIncident':
         return this.createIncident(player, action);
       case 'updateIncident': {
@@ -873,7 +931,7 @@ export class Game {
       case 'eswl':
         return this.eswl(player, action);
       case 'releaseUnit':
-        return this.releaseUnit(action.unitId, true);
+        return this.abbestellen(action.unitId);
       case 'cover':
         return this.cover(player, action);
       case 'sendHome':
@@ -1651,6 +1709,35 @@ export class Game {
     if (has(/\b(?:ohne sondersignal|ohne sonderrechte|ohne sosi|ohne blaulicht|sondersignal aus|sosi aus|normale fahrt)/)) return 'Verstanden, weiter ohne Sondersignal.';
     if (has(/\b(?:mit sondersignal|mit sonderrechten|mit sosi|mit blaulicht|sondersignal ein|beeil\w*|dringend|zügig|schnellstmöglich|schnell wie möglich)/)) return 'Verstanden, fahren mit Sondersignal.';
 
+    // Rückfragen zum Stand an der Einsatzstelle: Antworten aus dem tatsächlichen Einsatzstand
+    if (frage && inc && has(/\b(?:polizei|streife|pi)\b/)) {
+      if (truth?.bereitstellung) return inc.polizei ? 'Negativ, Polizei ist noch nicht eingetroffen, wir warten im Bereitstellungsraum.' : 'Negativ, keine Polizei vor Ort, wir warten im Bereitstellungsraum. Bitte Polizei verständigen.';
+      if (!vorOrt) return inc.polizei === 'vor Ort' ? 'Polizei ist laut Einsatz bereits vor Ort, wir sind noch auf der Anfahrt.' : 'Wir sind noch nicht vor Ort.';
+      if (inc.polizei === 'vor Ort') return 'Ja, Polizei ist vor Ort.';
+      if (inc.polizei) return 'Polizei ist noch nicht eingetroffen.';
+      return truth && this.polizeiNoetig(truth) ? 'Negativ, keine Polizei vor Ort. Bitte Polizei verständigen.' : 'Negativ, keine Polizei vor Ort, wird auch nicht benötigt.';
+    }
+    if (frage && inc && has(/\b(?:kit|krisenintervention\w*|kriseninterventionsteam|psnv|seelsorge\w*|notfallseelsorge\w*)\b/)) {
+      if (inc.kit === 'vor Ort') return 'Ja, KIT ist vor Ort und betreut die Angehörigen.';
+      if (inc.kit) return 'KIT ist noch nicht eingetroffen.';
+      return truth?.leichensache ? 'Negativ, KIT ist nicht vor Ort. Bitte KIT für die Angehörigen verständigen.' : 'Negativ, KIT ist nicht vor Ort, wird auch nicht benötigt.';
+    }
+    if (frage && inc && has(/\b(?:feuerwehr|fw|hlf|lf|drehleiter|dlk)\b/) && !has(/\b(?:brauch\w*|benötig\w*|nachforder\w*)\b/)) {
+      const fw = inc.unitIds.map((id) => this.unit(id)).filter((x): x is UnitState => !!x && this.typeOf(x)?.org === 'FW');
+      const da = fw.filter((x) => x.task === 'onScene');
+      if (da.length) return `Ja, Feuerwehr ist vor Ort: ${da.map((x) => shortCallsign(x.callsign)).join(', ')}.`;
+      if (fw.length) return 'Feuerwehr ist alarmiert, aber noch nicht vor Ort.';
+      return 'Negativ, keine Feuerwehr an der Einsatzstelle.';
+    }
+    if (frage && inc && has(/\bwie ?viele (?:patient\w*|verletzt\w*|betroffen\w*|personen|erkrankt\w*)|anzahl (?:der )?(?:patient\w*|verletzt\w*|betroffen\w*)/)) {
+      if (!truth || !vorOrt) return 'Können wir erst vor Ort beurteilen.';
+      if (truth.bereitstellung) return 'Können wir noch nicht sagen, wir warten im Bereitstellungsraum auf die Polizei.';
+      if (!truth.erkundet) return 'Erkundung läuft noch, Lagemeldung folgt.';
+      const n = truth.patients.length;
+      if (!n) return truth.leichensache ? 'Eine Person, verstorben, kein Patient zu transportieren.' : 'Kein Patient zu versorgen.';
+      const weg = truth.patients.filter((p) => p.done || (p.unitId && this.unit(p.unitId)?.task !== 'onScene' && this.unit(p.unitId)?.task !== 'awaitHospital')).length;
+      return `${n === 1 ? 'Ein Patient' : `${n} Patienten`}${weg ? `, davon ${weg} bereits im Transport oder übergeben` : ''}.`;
+    }
     // Fragen, auch ohne Fragezeichen
     if (has(/\b(?:wo (?:seid|sind|befinde\w*|steh\w*|halte\w*|fahr\w*|genau|gerade|aktuell|jetzt)|wo seid ihr|standort|position|aktuell(?:er)? ort|welche(?:r|n)? (?:straße|ort|höhe)|auf welcher höhe)/)) {
       const tail = etaMin && unterwegs ? `, Eintreffen in etwa ${etaMin} Minuten` : '';
@@ -1675,8 +1762,10 @@ export class Game {
     if (has(/\b(?:nachforder\w*|weitere (?:kräfte|fahrzeuge|einheiten|unterstützung|rettungsmittel)|mehr (?:kräfte|leute|fahrzeuge)|brauch\w* (?:ihr|sie|du) (?:noch )?(?:\w+ )?(?:kräfte|fahrzeuge|unterstützung|verstärkung|was|etwas|einen|ein|eine|weitere|mehr|noch)|benötig\w* (?:ihr|sie) (?:noch )?|unterstützung|verstärkung|reicht das|reichen die kräfte|kräfte ausreichend|zusätzlich)/)) {
       if (!truth || !vorOrt) return 'Können wir erst vor Ort beurteilen.';
       if (!truth.erkundet) return 'Erkundung läuft noch, können wir noch nicht beurteilen.';
-      const missing = Object.entries(truth.needs).filter(([type, n]) => inc!.unitIds.filter((id) => this.unit(id)?.type === type).length < n);
-      return missing.length ? `Ja, wir benötigen noch ${missing.map(([type, n]) => `${n} ${type}`).join(' und ')}.` : 'Nein, die Kräfte reichen aus.';
+      const missing = this.missingNeeds(inc!, truth, false);
+      if (this.polizeiNoetig(truth) && !inc!.polizei) missing.push('Polizei');
+      if (truth.leichensache && !inc!.kit) missing.push('KIT');
+      return missing.length ? `Ja, wir benötigen noch ${missing.join(' und ')}.` : 'Nein, die Kräfte reichen aus.';
     }
     if (has(/\b(?:notarzt|notärztin|na|arzt|ärztin|nef|rth|hubschrauber)\b/)) {
       if (this.istNotarzt(u)) return 'Ja, Notarzt ist an Bord.';
@@ -2109,6 +2198,21 @@ export class Game {
       return;
     }
     if (truth.wrongPlaceUntil && this.time < truth.wrongPlaceUntil) return;
+    // Gefahrenlage: Rettungsdienst bleibt im Bereitstellungsraum, bis die Polizei die Einsatzstelle freigibt
+    if (truth.tpl.eigengefaehrdung && !truth.reported && (inc.polizei !== 'vor Ort' || truth.bereitstellung) && this.typeOf(u)?.org === 'RD') {
+      const erster = !truth.bereitstellung;
+      truth.bereitstellung = true;
+      this.log(inc, `${shortCallsign(u.callsign)} im Bereitstellungsraum, wartet auf Freigabe durch die Polizei`);
+      const msg = `Im Bereitstellungsraum eingetroffen, wir warten auf die Freigabe durch die Polizei.${inc.polizei ? '' : ' Bitte Polizei verständigen.'}`;
+      if (u.crewPlayerId) u.hint = `Gefahrenlage: ${msg}`;
+      else if (erster) {
+        truth.lastRequest = this.time;
+        this.after(this.rand(10, 25) * 1000, () => {
+          if (u.incidentId === inc.id && truth.bereitstellung) this.requestSpeak(u, inc.polizei ? 'info' : 'nachforderung', msg);
+        });
+      }
+      return;
+    }
     this.revealAndReport(inc, truth, u);
   }
 
@@ -2179,6 +2283,7 @@ export class Game {
     truth.needs = v.needs;
     truth.workMs *= v.workFactor;
     if (v.keinTransport) truth.patients = [];
+    if (v.leichensache) truth.leichensache = true;
     for (const p of v.patients ?? []) this.addPatient(truth, p);
     // Notarzt nachgefordert: Patientenzuweisungscode mit Arztbegleitung
     if (v.needs.NEF && !hadNef)
@@ -2213,7 +2318,8 @@ export class Game {
     this.after(delay, () => {
       if (u.incidentId !== inc.id) return;
       const missing = this.missingNeeds(inc, truth, false);
-      const pol = truth.tpl.polizei && !inc.polizei;
+      const pol = this.polizeiNoetig(truth) && !inc.polizei;
+      const kit = truth.leichensache && !inc.kit;
       const ueber = this.surplus(inc, truth);
       const enRoute = ueber.filter((x) => x.task === 'alarmed' || x.task === 'toScene');
       const sagtSchon = /nicht erforderlich|abbestellt/.test(truth.lage);
@@ -2226,8 +2332,8 @@ export class Game {
               : ` ${enRoute.map((x) => shortCallsign(x.callsign)).join(', ')} kann abbestellt werden.`
             : pol || sagtSchon || truth.nachgefordert
               ? ''
-              : ' Weitere Kräfte nicht erforderlich.') + (pol ? ' Bitte Polizei verständigen.' : '');
-      this.requestSpeak(u, missing.length || pol ? 'nachforderung' : 'lage', `Lagemeldung: ${truth.lage}${req}`);
+              : ' Weitere Kräfte nicht erforderlich.') + this.bitteVerstaendigen(pol, kit);
+      this.requestSpeak(u, missing.length || pol || kit ? 'nachforderung' : 'lage', `Lagemeldung: ${truth.lage}${req}`);
       truth.lastRequest = this.time;
       // Nicht mehr benötigte Kräfte an der Einsatzstelle melden sich frei
       for (const x of ueber) {
@@ -2244,6 +2350,72 @@ export class Game {
           if (v) this.requestSpeak(v, 'nachforderung', 'Die Polizei ist noch nicht vor Ort. Bitte Polizei verständigen.');
         });
     });
+  }
+
+  private bitteVerstaendigen(pol: boolean | undefined, kit: boolean | undefined) {
+    if (pol && kit) return ' Bitte Polizei und KIT verständigen.';
+    if (pol) return ' Bitte Polizei verständigen.';
+    return kit ? ' Bitte KIT verständigen.' : '';
+  }
+
+  /**
+   * Reanimation läuft, bis der Notarzt eine Weile vor Ort ist; dann meldet die Einsatzstelle ROSC oder Abbruch.
+   * true, solange die Reanimation noch läuft (der Einsatz kommt dann nicht voran).
+   */
+  private reanimationLaeuft(inc: IncidentState, truth: Truth, onScene: UnitState[]): boolean {
+    const rea = truth.verlauf?.rea;
+    if (!rea || truth.reaErgebnis) return false;
+    const notarzt = !truth.needs.NEF ? undefined : onScene.some((x) => this.typeOf(x)?.fills.includes('NEF'));
+    if (notarzt === false) return true;
+    truth.reaSeit ??= this.time;
+    truth.reaDauer ??= this.rand(6, 12) * 60_000;
+    if (this.time - truth.reaSeit < truth.reaDauer) return true;
+    truth.reaErgebnis = true;
+    const minuten = Math.max(20, Math.round((this.time - (truth.callStart ?? inc.createdAt)) / 60000));
+    const text = reaAusgang(rea, minuten, notarzt !== undefined);
+    truth.lage = text;
+    inc.lage = text;
+    this.log(inc, `Lageänderung: ${text}`);
+    const rest = truth.progress ?? 0;
+    if (rea === 'tot') {
+      truth.patients = [];
+      truth.leichensache = true;
+      truth.leichenschau = this.time;
+      truth.workMs = rest + this.rand(10, 20) * 60_000;
+    } else truth.workMs = rest + this.rand(5, 10) * 60_000;
+    truth.lastRequest = this.time;
+    const pol = rea === 'tot' && !inc.polizei;
+    const kit = rea === 'tot' && !inc.kit;
+    const u = this.onSceneAi(inc);
+    if (u) this.requestSpeak(u, pol || kit ? 'nachforderung' : 'info', `Lageänderung: ${text}${this.bitteVerstaendigen(pol, kit)}`);
+    for (const x of onScene) if (x.crewPlayerId) x.hint = `Lageänderung: ${text} Bitte an die Leitstelle melden (Status 5).`;
+    return true;
+  }
+
+  /**
+   * Leichensache: Der Notarzt stellt den Tod fest und ist danach frei, der Rettungsdienst bleibt bis zum
+   * Eintreffen der Polizei. true, solange der Einsatz deshalb nicht abgeschlossen werden kann.
+   */
+  private leichensacheOffen(inc: IncidentState, truth: Truth, onScene: UnitState[]): boolean {
+    if (!truth.leichensache) return false;
+    for (const doc of onScene) {
+      if (!this.istNotarzt(doc) || doc.crewPlayerId || truth.released?.has(doc.id)) continue;
+      truth.leichenschau ??= this.time;
+      if (this.time - truth.leichenschau < 8 * 60_000) continue;
+      truth.needs[doc.type] = 0;
+      for (const k of this.typeOf(doc)?.fills ?? []) if (truth.needs[k]) truth.needs[k] = 0;
+      (truth.released ??= new Set()).add(doc.id);
+      this.log(inc, `${shortCallsign(doc.callsign)}: Todesbescheinigung ausgestellt, Notarzt frei`);
+      this.releaseUnit(doc.id, false);
+    }
+    if (inc.polizei === 'vor Ort') return false;
+    if ((truth.progress ?? 0) < truth.workMs) return false;
+    if (truth.lastRequest === undefined || this.time - truth.lastRequest > 300_000) {
+      truth.lastRequest = this.time;
+      const u = this.onSceneAi(inc);
+      if (u) this.requestSpeak(u, 'nachforderung', inc.polizei ? 'Wir warten weiterhin auf die Polizei zur Leichensache.' : 'Wir warten auf die Polizei zur Leichensache. Bitte Polizei verständigen.');
+    }
+    return true;
   }
 
   /** Ob ein Notarzt (NEF, RTH) an der Einsatzstelle ist oder zumindest alarmiert */
@@ -2324,6 +2496,11 @@ export class Game {
       return;
     }
     if (truth.wrongPlaceUntil && this.time < truth.wrongPlaceUntil) return;
+    if (truth.bereitstellung && !inc.polizei && truth.lastRequest !== undefined && this.time - truth.lastRequest > 240_000) {
+      truth.lastRequest = this.time;
+      const u = this.onSceneAi(inc);
+      if (u) this.requestSpeak(u, 'nachforderung', 'Wir stehen weiterhin im Bereitstellungsraum. Bitte Polizei verständigen, ohne Polizei können wir nicht zum Patienten.');
+    }
     if (!truth.reported || !truth.erkundet) return;
     const onScene = inc.unitIds.map((id) => this.unit(id)!).filter((u) => u && ['onScene', 'awaitHospital'].includes(u.task));
     if (!onScene.length) return;
@@ -2340,6 +2517,7 @@ export class Game {
         if (u) this.requestSpeak(u, 'nachforderung', `Wir warten weiterhin auf: ${missingAssigned.join(', ')}.`);
       }
     }
+    if (this.reanimationLaeuft(inc, truth, onScene)) return;
     if (truth.progress === undefined) {
       truth.progress = 0;
       this.log(inc, missingCount ? 'Erste Maßnahmen eingeleitet, Kräfte noch unvollständig' : 'Alle benötigten Kräfte vor Ort, Maßnahmen laufen');
@@ -2350,7 +2528,7 @@ export class Game {
     truth.progress += dt * rate;
     const e = truth.verlauf?.entwicklung;
     if (e && !truth.entwickelt && truth.progress >= e.at * truth.workMs) this.entwicklung(inc, truth);
-    if (truth.progress < truth.workMs) return;
+    if (this.leichensacheOffen(inc, truth, onScene) || truth.progress < truth.workMs) return;
     truth.workDone = true;
     this.log(inc, 'Maßnahmen abgeschlossen');
     this.assignPatients(inc, truth);
@@ -2371,7 +2549,9 @@ export class Game {
         const doc = onScene().find((d) => this.istNotarzt(d) && !d.begleitet && !d.crewPlayerId && !truth.released?.has(d.id));
         if (doc) doc.begleitet = carrier.id;
       }
-      const text = `Patient transportbereit, PZC ${p.pzc}, erbitten Zielklinik.`;
+      const text = /\bROSC\b/.test(p.desc)
+        ? `Patient nach Reanimation mit ROSC transportbereit, PZC ${p.pzc}, erbitten Zielklinik mit Herzkatheterlabor und Schockraum.`
+        : `Patient transportbereit, PZC ${p.pzc}, erbitten Zielklinik.`;
       // Der PZC wird erst sichtbar, wenn die Besatzung ihn per Funk oder Telefon durchgibt (Spielerbesatzungen kennen ihn selbst)
       if (carrier.crewPlayerId) {
         carrier.pzc = p.pzc;
@@ -2475,7 +2655,8 @@ export class Game {
     this.score.incidentsClosed++;
     const truth = this.incTruth.get(inc.id);
     if (truth?.workDone) this.addScore(10, `${inc.nr}: Einsatz erfolgreich abgearbeitet`);
-    if (truth?.tpl.polizei && !truth.fake && !inc.polizei) this.addScore(-5, `${inc.nr}: Polizei nicht verständigt`);
+    if (truth?.leichensache && !inc.kit) this.addScore(-3, `${inc.nr}: KIT für die Angehörigen nicht verständigt`);
+    if (truth && this.polizeiNoetig(truth) && !truth.fake && !inc.polizei) this.addScore(-5, `${inc.nr}: Polizei nicht verständigt`);
     else if (manual && truth && truth.stichwort && truth.tpl !== BMA_TEMPLATE) this.addScore(-15, `${inc.nr}: Einsatz vorzeitig geschlossen`);
   }
 
