@@ -63,6 +63,8 @@ describe('Aussprachehilfen für Piper', () => {
   it('lässt Wörter, die schon richtig klingen oder falsch getrennt würden', () => {
     expect(piperText('Notarzt, verunfallt, Erstversorgung, Transportschein, hingefallen')).toBe('Notarzt, verunfallt, Erstversorgung, Transportschein, hingefallen');
     expect(piperText('Status 3, Kommen')).toBe('Status 3, Kommen');
+    expect(piperText('Leitstelle, Veränderung, zerstochen')).toBe('Leitstelle, Veränderung, zerstochen');
+    expect(piperText('Ölspur auf der Fahrbahn')).toBe('Öl-spur auf der Fahrbahn');
   });
 
   it('korrigiert Betonung und Lautung einzelner Wörter', () => {

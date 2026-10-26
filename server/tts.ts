@@ -75,7 +75,7 @@ const ascii = (s: string) => s.replace(/[\u007f-\uffff]/g, (c) => `\\u${c.charCo
  */
 export class Sprecher {
   private p: ChildProcess;
-  private offen: { resolve: () => void; reject: (e: Error) => void; timer: NodeJS.Timeout }[] = [];
+  private offen: { datei: string; resolve: () => void; reject: (e: Error) => void; timer: NodeJS.Timeout }[] = [];
   private rest = '';
   private ruhe?: NodeJS.Timeout;
   alive = true;
@@ -86,8 +86,8 @@ export class Sprecher {
     this.p.stdout!.on('data', (d: string) => {
       const zeilen = (this.rest + d).split(/\r?\n/);
       this.rest = zeilen.pop()!;
-      // Je fertigem Satz eine Zeile mit dem Dateinamen, in der Reihenfolge der Eingabe
-      for (const z of zeilen) if (z.trim()) this.fertig()?.resolve();
+      // Je fertigem Satz eine Zeile mit dem Pfad; über den Dateinamen zuordnen, andere Ausgaben überspringen
+      for (const z of zeilen) this.fertig(z.trim())?.resolve();
     });
     this.p.stderr!.on('data', () => undefined);
     this.p.stdin!.on('error', () => undefined);
@@ -96,9 +96,11 @@ export class Sprecher {
     this.warte();
   }
 
-  private fertig() {
-    const f = this.offen.shift();
-    if (f) clearTimeout(f.timer);
+  private fertig(zeile: string) {
+    const i = zeile ? this.offen.findIndex((o) => zeile.endsWith(o.datei)) : -1;
+    if (i < 0) return undefined;
+    const [f] = this.offen.splice(i, 1);
+    clearTimeout(f.timer);
     if (!this.offen.length) this.warte();
     return f;
   }
@@ -125,7 +127,7 @@ export class Sprecher {
     return new Promise((resolve, reject) => {
       // Hängt Piper, wird der Prozess beendet; der nächste Satz startet einen neuen
       const timer = setTimeout(() => this.stop(), 20000);
-      this.offen.push({ resolve, reject, timer });
+      this.offen.push({ datei: out.split(/[\\/]/).pop()!, resolve, reject, timer });
       this.p.stdin!.write(`${ascii(JSON.stringify({ text, output_file: out, ...(sprecher !== undefined ? { speaker_id: sprecher } : {}) }))}\n`);
     });
   }
