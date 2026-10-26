@@ -13,6 +13,8 @@ interface Item {
   speaker?: string;
   /** Sprechstil für thorsten_emotional (z. B. "surprised" bei panischen Anrufern) */
   stil?: string;
+  /** Geschlecht des Sprechers: Piper wählt dann nur passende Stimmen */
+  geschlecht?: 'm' | 'w';
   /** Vorab angeforderte Piper-Ausgabe */
   wav?: Promise<ArrayBuffer | null>;
 }
@@ -66,11 +68,14 @@ function hash(s: string) {
 }
 
 function pickStimme(item: Item): string {
-  const all = piper?.value?.stimmen ?? [];
-  // Sprecher mit Gefühlslage bekommen das Mehrsprecher-Modell, alle anderen eine der normalen Stimmen
+  const alle = piper?.value?.stimmen ?? [];
+  const passend = item.geschlecht ? alle.filter((v) => v.geschlecht === item.geschlecht) : [];
+  const all = passend.length ? passend : alle;
+  // Sprecher mit Gefühlslage bekommen das Mehrsprecher-Modell, aber nur bei passendem Geschlecht (Thorsten ist männlich)
   const emotional = all.find((s) => s.stile?.length);
   if (item.stil && emotional) return emotional.id;
-  const pool = all.filter((s) => !s.stile?.length);
+  const normal = all.filter((s) => !s.stile?.length);
+  const pool = normal.length ? normal : alle.filter((s) => !s.stile?.length);
   if (!pool.length) return all[0]?.id ?? '';
   const key = item.speaker ?? item.voice;
   return pool[hash(key) % pool.length].id;
@@ -277,14 +282,14 @@ export function lastTtsResult() {
   return lastResult;
 }
 
-export function say(text: string, voice: Voice = 'radio', force = false, speaker?: string, stil?: string) {
+export function say(text: string, voice: Voice = 'radio', force = false, speaker?: string, geschlecht?: 'm' | 'w', stil?: string) {
   const s = getSettings();
   if (!force && (!s.ttsEnabled || isMuted())) return;
   const clean = sprechText(text.replace(/\s+/g, ' ').trim());
   if (!clean) return;
   // Bei Rückstau alte Funksprüche verwerfen, damit die Ausgabe aktuell bleibt
   if (queue.length > 4) queue.splice(0, queue.length - 4);
-  const item: Item = { text: clean, voice, speaker, ...(stil ? { stil } : {}) };
+  const item: Item = { text: clean, voice, speaker, geschlecht, ...(stil ? { stil } : {}) };
   void piperInfo();
   // Piper-Ausgabe schon anfordern, während noch etwas anderes gesprochen wird
   if (piperReady() && getSettings().ttsEngine !== 'browser' && getSettings().ttsEngine !== 'system') item.wav = fetchPiper(item);

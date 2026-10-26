@@ -65,7 +65,27 @@ export interface CallerFacts {
   vorerkrankung: string;
 }
 
+/** Vornamen abwechselnd weiblich (gerade Stelle) und männlich (ungerade Stelle) */
 export const FIRST_NAMES = ['Anna', 'Josef', 'Maria', 'Thomas', 'Sabine', 'Michael', 'Stefanie', 'Franz', 'Katharina', 'Andreas', 'Monika', 'Florian', 'Theresa', 'Sebastian', 'Lena', 'Georg'];
+/** Geschlecht des Anrufers aus seinem ersten Satz ("mein Mann" spricht eine Frau); sonst unbekannt */
+export function anruferAusText(text: string): 'm' | 'w' | undefined {
+  if (/\bmein(em)? (Ehe)?mann\b/i.test(text)) return 'w';
+  if (/\bmeine[r]? (Ehe)?frau\b/i.test(text)) return 'm';
+  return undefined;
+}
+
+/** Vorname passend zum Geschlecht: in FIRST_NAMES steht der Partnername direkt daneben */
+export function vornameFuer(vorname: string, sex: 'm' | 'w'): string {
+  const i = FIRST_NAMES.indexOf(vorname);
+  if (i < 0 || (i % 2 === 0 ? 'w' : 'm') === sex) return vorname;
+  return FIRST_NAMES[i ^ 1];
+}
+
+export function geschlechtVon(vorname: string): 'm' | 'w' | undefined {
+  const i = FIRST_NAMES.indexOf(vorname);
+  return i < 0 ? undefined : i % 2 === 0 ? 'w' : 'm';
+}
+
 export const LAST_NAMES = ['Huber', 'Maier', 'Gruber', 'Bauer', 'Wimmer', 'Schmid', 'Hofmann', 'Brunner', 'Wagner', 'Fischer', 'Eder', 'Moser', 'Lechner', 'Steiner', 'Reiter', 'Kraus'];
 
 export const TEMPLATES: IncidentTemplate[] = [

@@ -391,6 +391,8 @@ export interface CallState {
   kvb?: { text: string; x: number; y: number; address: string };
   /** An die KVB weiterverbunden */
   toKvb?: boolean;
+  /** Geschlecht des Anrufers, damit die Sprachausgabe eine passende Stimme wählt */
+  stimme?: 'm' | 'w';
   /** Anruf der Polizei: Funkrufname der Streife, die schon an der Einsatzstelle ist */
   polizei?: string;
   /** Besatzung meldet ihren Patienten telefonisch mit PZC an und erbittet eine Zielklinik */
