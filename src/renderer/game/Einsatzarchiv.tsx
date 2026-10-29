@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { formatClock } from '../../../shared/catalog';
 import type { ArchivEintrag } from '../../../shared/types';
 import { conn } from '../net';
+import { confirmHier } from '../Popout';
 import type { GameCtx } from './GameScreen';
 
 export function Einsatzarchiv({ ctx, onClose }: { ctx: GameCtx; onClose: () => void }) {
@@ -62,7 +63,7 @@ export function Einsatzarchiv({ ctx, onClose }: { ctx: GameCtx; onClose: () => v
                 title="Einsatz wieder eröffnen, z. B. zur Nachalarmierung"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (!confirm(`Einsatz ${a.nr} wieder eröffnen?`)) return;
+                  if (!confirmHier(e.currentTarget, `Einsatz ${a.nr} wieder eröffnen?`)) return;
                   conn.send({ a: 'reopenIncident', incidentId: a.id });
                   ctx.setSelectedIncident(a.id);
                   onClose();
