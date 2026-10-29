@@ -60,6 +60,16 @@ describe('Status 8 im Einsatzvorschlag', () => {
     expect(msg?.text).toMatch(/(Übergabe|übergeben).*in etwa 4 Minuten/);
   });
 
+  it('vergisst bei Alarmierung aus Status 8 das vereinbarte Verlegungsziel und die Voranmeldung', () => {
+    const { game, p, u, neu } = setup();
+    const ziel = game.scn.hospitals[0].id;
+    u.verlegungNach = ziel;
+    u.voranmeldung = { art: 'Schockraum', hospitalId: ziel };
+    game.handle(p.id, { a: 'alarm', incidentId: neu.id, unitIds: [u.id] });
+    expect(u.verlegungNach).toBeUndefined();
+    expect(u.voranmeldung).toBeUndefined();
+  });
+
   it('Infektionstransport: nicht im Vorschlag, danach Status 6 zur Desinfektion und wieder Status 2', () => {
     const { game, p, u, neu } = setup();
     u.infektion = true;
