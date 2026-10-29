@@ -2920,7 +2920,9 @@ export class Game {
         const doc = onScene().find((d) => this.istNotarzt(d) && !d.begleitet && !d.crewPlayerId && !truth.released?.has(d.id));
         if (doc) doc.begleitet = carrier.id;
       }
-      if (truth.zielId) carrier.verlegungNach = truth.zielId;
+      // Vereinbartes Ziel nur für diesen Patienten, nie ein Rest aus einem früheren Transport
+      carrier.verlegungNach = truth.zielId;
+      carrier.voranmeldung = undefined;
       const text = this.zielklinikText(carrier, p.pzc);
       // Der PZC wird erst sichtbar, wenn die Besatzung ihn per Funk oder Telefon durchgibt (Spielerbesatzungen kennen ihn selbst)
       if (carrier.crewPlayerId) {
@@ -3007,6 +3009,8 @@ export class Game {
     });
     u.hasPatient = false;
     u.pzc = undefined;
+    u.verlegungNach = undefined;
+    u.voranmeldung = undefined;
     u.hospitalId = undefined;
     u.begleitet = undefined;
     u.timer = undefined;
