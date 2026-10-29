@@ -46,6 +46,11 @@ function copyStyles(from: Document, to: Document) {
 }
 
 /** Rendert die Kinder in ein eigenes Fenster; onClose, wenn der Nutzer es schließt */
+/** Rückfrage im Fenster des Knopfs zeigen, damit sie bei ausgelagerten Bereichen nicht hinter dem Hauptfenster aufgeht */
+export function confirmHier(el: Element, text: string) {
+  return (el.ownerDocument.defaultView ?? window).confirm(text);
+}
+
 export function Popout({ id, title, onClose, children }: { id: PanelId; title: string; onClose: () => void; children: ReactNode }) {
   const [container, setContainer] = useState<HTMLElement | null>(null);
 

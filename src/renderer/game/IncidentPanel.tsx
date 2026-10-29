@@ -6,6 +6,7 @@ import { FMS_COLOR, FMS_TEXT, formatClock, formatDuration, shortCallsign } from 
 import { computeProposal, freeUnitTimes } from '../../../shared/dispatch';
 import type { IncidentState, UnitState } from '../../../shared/types';
 import { conn } from '../net';
+import { confirmHier } from '../Popout';
 import type { GameCtx } from './GameScreen';
 import { TerminListe, TerminZeile, istGeplant } from './TerminListe';
 import { S8Tag } from './S8Tag';
@@ -408,8 +409,8 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
               Alarmieren ({checked.size})
             </button>
             <button
-              onClick={() => {
-                if (confirm(`Einsatz ${inc.nr} abschließen?`)) conn.send({ a: 'closeIncident', incidentId: inc.id });
+              onClick={(e) => {
+                if (confirmHier(e.currentTarget, `Einsatz ${inc.nr} abschließen?`)) conn.send({ a: 'closeIncident', incidentId: inc.id });
               }}
             >
               Abschließen
@@ -422,8 +423,8 @@ function IncidentDetail({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) {
         <div className="row">
           <button
             title="Einsatz wieder eröffnen, z. B. zur Nachalarmierung"
-            onClick={() => {
-              if (confirm(`Einsatz ${inc.nr} wieder eröffnen?`)) conn.send({ a: 'reopenIncident', incidentId: inc.id });
+            onClick={(e) => {
+              if (confirmHier(e.currentTarget, `Einsatz ${inc.nr} wieder eröffnen?`)) conn.send({ a: 'reopenIncident', incidentId: inc.id });
             }}
           >
             Wiedereröffnen

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { formatHhmm, formatMinuten, terminAusUhrzeit } from '../../../shared/catalog';
 import type { IncidentState, PublicState } from '../../../shared/types';
 import { conn } from '../net';
+import { confirmHier } from '../Popout';
 import type { GameCtx } from './GameScreen';
 
 /** Geplant und noch ohne Fahrzeug: steht in der Terminliste statt in der Einsatzliste */
@@ -101,8 +102,8 @@ export function TerminZeile({ ctx, inc }: { ctx: GameCtx; inc: IncidentState }) 
         <button
           className="small-btn danger"
           title="Abgesagte Terminfahrt stornieren; bereits alarmierte Fahrzeuge werden frei"
-          onClick={() => {
-            if (confirm(`Terminfahrt ${inc.nr} stornieren?${inc.unitIds.length ? ' Alarmierte Fahrzeuge werden frei.' : ''}`)) conn.send({ a: 'closeIncident', incidentId: inc.id });
+          onClick={(e) => {
+            if (confirmHier(e.currentTarget, `Terminfahrt ${inc.nr} stornieren?${inc.unitIds.length ? ' Alarmierte Fahrzeuge werden frei.' : ''}`)) conn.send({ a: 'closeIncident', incidentId: inc.id });
           }}
         >
           stornieren
