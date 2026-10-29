@@ -29,3 +29,27 @@ describe('Stimme des Anrufers', () => {
     }
   });
 });
+
+describe('Pflegepersonal am Telefon', () => {
+  it('Schwester oder Pfleger passt zur Stimme, Herr/Frau zum Patienten', () => {
+    const scn = generateScenario({ seed: 4711, towns: 8 });
+    scn.settings.callsPerHour = 0;
+    scn.settings.bmaPerHour = 0;
+    for (let seed = 1; seed <= 8; seed++) {
+      const game = new Game(scn, { seed });
+      const p = game.addPlayer('CT', 'calltaker');
+      game.handle(p.id, { a: 'start' });
+      const call = game.spawnCall('rd_heim_sturz')!;
+      game.handle(p.id, { a: 'answerCall', callId: call.id });
+      for (let t = 0; t < 3000; t += 500) game.tick(500);
+      for (const q of ['wer', 'wieviele'] as const) {
+        game.handle(p.id, { a: 'ask', callId: call.id, question: q });
+        for (let t = 0; t < 4000; t += 500) game.tick(500);
+      }
+      const lines = call.transcript.filter((l) => l.from === 'caller').map((l) => l.text).join(' ');
+      if (/Schwester/.test(lines)) expect(call.stimme).toBe('w');
+      if (/Pfleger/.test(lines)) expect(call.stimme).toBe('m');
+      expect(lines).not.toMatch(/Herr /);
+    }
+  });
+});

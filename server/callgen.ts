@@ -249,7 +249,7 @@ export const TEMPLATES: IncidentTemplate[] = [
     answers: {
       was: ['Der Hausarzt hat eine Einweisung geschrieben, Verdacht auf Lungenentzündung. Liegend, bitte.'],
       zustand: ['Er ist stabil, wach, hat etwas Fieber.'],
-      wieviele: ['Ein Bewohner, Herr {name}, {alter} Jahre.'],
+      wieviele: ['Ein Bewohner, {HerrFrau} {nachname}, {alter} Jahre.'],
       gefahr: ['Nein.'],
     },
     lage: 'Krankentransport, Patient stabil, Transport nach Einweisung.',
@@ -696,7 +696,7 @@ export const TEMPLATES: IncidentTemplate[] = [
       was: ['Sie ist nachts auf dem Weg zur Toilette gestürzt und hat eine Platzwunde am Kopf.'],
       zustand: ['Sie ist wach, aber etwas verwirrter als sonst.'],
       vorerkrankung: ['Sie nimmt Blutverdünner, Marcumar.'],
-      wieviele: ['Eine Bewohnerin, Frau {name}, {alter} Jahre.'],
+      wieviele: ['Eine Bewohnerin, {HerrFrau} {nachname}, {alter} Jahre.'],
       gefahr: ['Nein, Eingang ist hinten an der Pforte.'],
     },
     lage: 'Ältere Patientin nach Sturz, Kopfplatzwunde, unter Antikoagulation, Transport zur CT-Abklärung.',
@@ -753,7 +753,7 @@ export const TEMPLATES: IncidentTemplate[] = [
     answers: {
       was: ['Sie muss heute noch ins Krankenhaus zur Aufnahme, der Hausarzt hat eine Verordnung geschrieben.'],
       zustand: ['Sie ist stabil, kann mit Hilfe ein paar Schritte gehen.'],
-      wieviele: ['Eine Patientin, Frau {name}, {alter} Jahre.'],
+      wieviele: ['Eine Patientin, {HerrFrau} {nachname}, {alter} Jahre.'],
       gefahr: ['Nein, wir sind im zweiten Stock, es gibt keinen Aufzug.'],
     },
     lage: 'Krankentransport, Patientin stabil, Tragestuhl benötigt.',
@@ -1264,12 +1264,12 @@ const BYSTANDER: Partial<Record<QuestionId, string[]>> = {
 };
 
 const STAFF: Partial<Record<QuestionId, string[]>> = {
-  alter: ['Herr {nachnameP} ist {alter}.', '{alter} Jahre, Moment, ich schau in die Akte... ja, {alter}.'],
+  alter: ['{HerrFrau} {nachname} ist {alter}.', '{alter} Jahre, Moment, ich schau in die Akte... ja, {alter}.'],
   vorerkrankung: ['Er hat Herzinsuffizienz, Diabetes und eine Demenz. Die Medikamentenliste geben wir mit.'],
   atmung: ['Er atmet etwas schnell, Sättigung 91 Prozent.'],
   bewusstsein: ['Er ist wach, aber wie immer etwas verwirrt.'],
   zugang: ['Haupteingang, dann zweiter Stock, Station B. Ich warte am Eingang.'],
-  wer: ['Schwester {vorname} vom {objekt}.', 'Pfleger {vorname}, Station B.'],
+  wer: ['{Pflege} {vorname} vom {objekt}.', '{Pflege} {vorname}, Station B.'],
 };
 
 const POLICE: Partial<Record<QuestionId, string[]>> = {

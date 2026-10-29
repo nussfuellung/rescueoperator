@@ -391,6 +391,9 @@ export class Game {
       .replace(/\{alter\}/g, t.alter <= 1 ? 'eineinhalb' : String(t.alter))
       .replace(/\{floor\}/g, f?.floor ?? 'erster Stock')
       .replace(/\{min\}/g, String(f?.minutes ?? 10))
+      // Patient: Herr/Frau nach dessen Geschlecht; Pflegekraft am Telefon: nach dem Geschlecht des Anrufers
+      .replace(/\{HerrFrau\}/g, m ? 'Herr' : 'Frau')
+      .replace(/\{Pflege\}/g, (t.stimme ?? geschlechtVon(t.name.split(' ')[0])) === 'm' ? 'Pfleger' : 'Schwester')
       .replace(/\{Er\}/g, m ? 'Er' : 'Sie')
       .replace(/\{er\}/g, m ? 'er' : 'sie')
       .replace(/\{ihn\}/g, m ? 'ihn' : 'sie')
